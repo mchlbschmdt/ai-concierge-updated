@@ -1,9 +1,11 @@
-// ✅ Dashboard.jsx with interactive features
+
+// Modern Enterprise Dashboard.jsx
 import React, { useEffect, useState } from "react";
 import { db } from "../firebase";
 import { collection, getDocs, query, orderBy } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { Users, Home, MessageSquare, AlertTriangle, Calendar, Plus } from "lucide-react";
 
 export default function Dashboard() {
   const [guests, setGuests] = useState([]);
@@ -35,54 +37,90 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-bold">AI Concierge Admin Overview</h1>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white p-4 rounded shadow">
-          <p className="text-gray-500">Total Guests</p>
-          <p className="text-xl font-bold">{guests.length}</p>
+    <section className="space-y-10 animate-fade-in">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <div className="bg-card rounded-2xl shadow-card p-6 flex flex-col gap-2 border border-gray-100 group transition-transform hover:scale-[1.02]">
+          <div className="flex items-center gap-3">
+            <Users size={32} className="text-accent group-hover:text-primary transition-colors" />
+            <h3 className="font-semibold text-lg">Total Guests</h3>
+          </div>
+          <div className="flex items-end gap-2 mt-2">
+            <span className="font-bold text-3xl font-mono">{guests.length}</span>
+            <span className="text-xs text-gray-400">Guests</span>
+          </div>
         </div>
-        <div className="bg-white p-4 rounded shadow">
-          <p className="text-gray-500">Total Properties</p>
-          <p className="text-xl font-bold">{properties.length}</p>
+        <div className="bg-card rounded-2xl shadow-card p-6 flex flex-col gap-2 border border-gray-100 group transition-transform hover:scale-[1.02]">
+          <div className="flex items-center gap-3">
+            <Home size={32} className="text-primary group-hover:text-accent transition-colors" />
+            <h3 className="font-semibold text-lg">Total Properties</h3>
+          </div>
+          <div className="flex items-end gap-2 mt-2">
+            <span className="font-bold text-3xl font-mono">{properties.length}</span>
+            <span className="text-xs text-gray-400">Properties</span>
+          </div>
         </div>
-        <div className="bg-white p-4 rounded shadow">
-          <p className="text-gray-500">Messages Received</p>
-          <p className="text-xl font-bold">{messages.length}</p>
+        <div className="bg-card rounded-2xl shadow-card p-6 flex flex-col gap-2 border border-gray-100 group transition-transform hover:scale-[1.02]">
+          <div className="flex items-center gap-3">
+            <MessageSquare size={32} className="text-accent group-hover:text-primary transition-colors" />
+            <h3 className="font-semibold text-lg">Messages</h3>
+          </div>
+          <div className="flex items-end gap-2 mt-2">
+            <span className="font-bold text-3xl font-mono">{messages.length}</span>
+            <span className="text-xs text-gray-400">Received</span>
+          </div>
         </div>
       </div>
 
-      <div>
-        <h2 className="text-xl font-semibold mt-8">🔔 Alert Messages</h2>
-        {alertMessages.length > 0 ? (
-          <ul className="list-disc list-inside mt-2">
-            {alertMessages.map((msg, i) => (
-              <li key={i}><strong>{msg.guest_name}</strong>: {msg.message}</li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-gray-500">No urgent alerts at the moment.</p>
-        )}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="bg-white rounded-2xl p-6 shadow-card border border-gray-100">
+          <h2 className="font-semibold text-xl flex gap-2 items-center text-primary mb-2">
+            <AlertTriangle className="text-accent" size={22} />
+            Alert Messages
+          </h2>
+          {alertMessages.length > 0 ? (
+            <ul className="mt-2 space-y-2">
+              {alertMessages.map((msg, i) => (
+                <li key={i} className="p-3 bg-accent/10 rounded-lg text-dark">
+                  <span className="font-bold">{msg.guest_name}</span>: {msg.message}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-gray-400">No urgent alerts at the moment.</p>
+          )}
+        </div>
+
+        <div className="bg-white rounded-2xl p-6 shadow-card border border-gray-100">
+          <h2 className="font-semibold text-xl flex gap-2 items-center text-primary mb-2">
+            <Calendar className="text-primary" size={22} />
+            Upcoming Check-Ins
+          </h2>
+          {upcomingCheckins.length > 0 ? (
+            <ul className="mt-2 space-y-2">
+              {upcomingCheckins.map((g, i) => (
+                <li key={i} className="p-3 bg-primary/10 rounded-lg flex flex-col sm:flex-row gap-2">
+                  <span className="font-semibold">{g.name}</span>
+                  <span className="text-xs text-gray-600">– {g.property_id}</span>
+                  <span className="ml-auto text-xs text-gray-400">{g.check_in_date}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-gray-400">No upcoming check-ins this week.</p>
+          )}
+        </div>
       </div>
 
-      <div>
-        <h2 className="text-xl font-semibold mt-8">📅 Upcoming Check-Ins</h2>
-        {upcomingCheckins.length > 0 ? (
-          <ul className="list-disc list-inside mt-2">
-            {upcomingCheckins.map((g, i) => (
-              <li key={i}>{g.name} - {g.property_id} - {g.check_in_date}</li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-gray-500">No upcoming check-ins this week.</p>
-        )}
+      <div className="flex flex-col sm:flex-row gap-4 mt-8">
+        <Button onClick={() => navigate("/dashboard/guests")} className="flex gap-2 items-center font-semibold bg-accent hover:bg-primary transition">
+          <Plus size={16} />
+          Add New Guest
+        </Button>
+        <Button onClick={() => navigate("/dashboard/properties")} className="flex gap-2 items-center font-semibold bg-primary hover:bg-accent transition">
+          <Plus size={16} />
+          Add New Property
+        </Button>
       </div>
-
-      <div className="flex gap-4 mt-8">
-        <Button onClick={() => navigate("/dashboard/guests")}>Add New Guest</Button>
-        <Button onClick={() => navigate("/dashboard/properties")}>Add New Property</Button>
-      </div>
-    </div>
+    </section>
   );
 }
