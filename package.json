@@ -8,6 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
+    "build:dev": "vite build --mode development",
   },
   "dependencies": {
     "@shadcn/ui": "^0.0.4",
