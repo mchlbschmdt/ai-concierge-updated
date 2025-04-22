@@ -10,6 +10,17 @@ import FaqEditor from "./pages/FaqEditor";
 import GuestManager from "./pages/GuestManager";
 import SmartInsights from "./pages/SmartInsights";
 import AddProperty from './pages/AddProperty';
+import { Toaster } from "@/components/ui/toaster";
+
+export default function Layout({ children }) {
+  return (
+    <>
+      <Toaster />
+      {/* rest of your layout */}
+    </>
+  );
+}
+
 
 export default function App() {
   return (
