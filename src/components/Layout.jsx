@@ -1,19 +1,17 @@
 
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { layoutDashboard, users, mail, home, settings, layoutList, search } from "lucide-react";
+import { LayoutDashboard, Users, Mail, Home, Settings, LayoutList, Search } from "lucide-react";
 
 const navItems = [
-  { name: "Dashboard", path: "/dashboard", icon: "layout-dashboard" },
-  { name: "Guests", path: "/dashboard/guests", icon: "users" },
-  { name: "Messages", path: "/dashboard/messages", icon: "mail" },
-  { name: "Analytics", path: "/dashboard/analytics", icon: "layout-list" },
-  { name: "FAQ Editor", path: "/dashboard/faq-editor", icon: "settings" },
-  { name: "Smart Insights", path: "/dashboard/insights", icon: "search" },
-  { name: "Property Manager", path: "/dashboard/properties-manager", icon: "home" },
+  { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
+  { name: "Guests", path: "/dashboard/guests", icon: Users },
+  { name: "Messages", path: "/dashboard/messages", icon: Mail },
+  { name: "Analytics", path: "/dashboard/analytics", icon: LayoutList },
+  { name: "FAQ Editor", path: "/dashboard/faq-editor", icon: Settings },
+  { name: "Smart Insights", path: "/dashboard/insights", icon: Search },
+  { name: "Property Manager", path: "/dashboard/properties-manager", icon: Home },
 ];
-
-import { icons } from "lucide-react";
 
 export default function Layout({ children }) {
   const location = useLocation();
@@ -31,7 +29,7 @@ export default function Layout({ children }) {
         <nav className="flex-1 px-2 py-5 space-y-3">
           {navItems.map((item) => {
             const isActive = location.pathname === item.path;
-            const Icon = icons[item.icon] || icons['home'];
+            const Icon = item.icon;
             return (
               <Link
                 key={item.path}

@@ -1,16 +1,16 @@
 
 import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
-import PropertyManager from "./pages/PropertyManager"; 
-import GuestList from "./pages/GuestList";
 import Dashboard from "./pages/Dashboard";
+import GuestList from "./pages/GuestList";
 import MessagesDashboard from "./pages/MessagesDashboard";
 import PropertyAnalytics from "./pages/PropertyAnalytics";
-import Layout from "./components/Layout";
 import FaqEditor from "./pages/FaqEditor";
 import GuestManager from "./pages/GuestManager";
+import PropertyManager from "./pages/PropertyManager";
 import SmartInsights from "./pages/SmartInsights";
 import AddProperty from './pages/AddProperty';
+import Layout from "./components/Layout";
 import { Toaster } from "@/components/ui/toaster";
 
 export default function App() {
@@ -87,7 +87,7 @@ export default function App() {
           path="/dashboard/add-property"
           element={
             <Layout>
-             <AddProperty />
+              <AddProperty />
             </Layout>
           }
         />
