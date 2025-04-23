@@ -17,9 +17,8 @@ export default function Sidebar() {
   const location = useLocation();
 
   return (
-    <div className="h-screen w-64 bg-gradient-hostly text-white flex flex-col shadow-sidebar z-20">
+    <div className="h-screen w-64 bg-nav text-white flex flex-col shadow-sidebar z-20">
       <div className="flex items-center gap-2 px-6 py-7 border-b border-white/20">
-        {/* Branding new logo */}
         <span className="text-2xl font-bold font-display text-white">🏨</span>
         <h1 className="text-lg font-bold font-display text-white tracking-tight">Hostly Ai Concierge</h1>
       </div>
@@ -33,7 +32,7 @@ export default function Sidebar() {
               to={item.path}
               className={`flex items-center gap-3 px-4 py-2 rounded-xl transition-colors font-medium ${
                 isActive
-                  ? "bg-white/15 text-white shadow"
+                  ? "bg-white/20 text-white shadow"
                   : "hover:bg-white/10 hover:text-secondary text-white/90"
               }`}
               style={{ letterSpacing: ".01em" }}

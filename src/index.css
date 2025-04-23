@@ -3,33 +3,39 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Font imports for Plus Jakarta Sans & Playfair Display (as on hostlyai.co) */
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&family=Playfair+Display:wght@700&display=swap");
+
 :root {
   font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
-  background: #F9FAFB;
-  color: #233C7B;
+  background: #dde4ff;
+  color: #16213d;
 }
 
 body {
   font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
-  background: #F9FAFB;
-  color: #233C7B;
+  background: #dde4ff;
+  color: #16213d;
   margin: 0;
   letter-spacing: -0.01em;
+  min-height: 100vh;
 }
 
 h1, h2, h3, h4, .font-display {
-  font-family: 'Plus Jakarta Sans', 'Playfair Display', serif !important;
+  font-family: 'Playfair Display', 'Plus Jakarta Sans', serif !important;
+  color: #16213d;
   letter-spacing: -0.01em;
+  font-weight: 700;
 }
 
 a {
   font-weight: 600;
-  color: #595DFF;
+  color: #1b3898;
   text-decoration: none;
   transition: color 0.18s;
 }
 a:hover {
-  color: #5AF5FF;
+  color: #22305b;
   text-decoration: underline;
 }
 
@@ -40,46 +46,45 @@ button {
   font-size: 1em;
   font-weight: 700;
   font-family: 'Plus Jakarta Sans', sans-serif;
-  background: linear-gradient(to right, #595DFF, #5AF5FF);
+  background: linear-gradient(to right, #1b3898, #8797c7);
   color: #fff;
   cursor: pointer;
   transition: background 0.18s, box-shadow 0.18s;
-  box-shadow: 0 2px 6px 0 rgba(89,93,255,0.10);
+  box-shadow: 0 2px 6px 0 rgba(27, 56, 152, 0.10);
 }
 button:hover, button:focus-visible {
-  background: linear-gradient(to right, #5AF5FF, #595DFF);
+  background: linear-gradient(to right, #22305b, #1b3898);
   outline: none;
 }
 
 input, textarea {
-  border: 1px solid #d0dbeb;
+  border: 1px solid #b4c6e4;
   border-radius: 7px;
   padding: 8px 12px;
   font-size: 1em;
   font-family: 'Plus Jakarta Sans', inherit;
   background: #f3f6fb;
-  color: #233C7B;
+  color: #16213d;
   transition: border-color 0.15s;
 }
 input:focus, textarea:focus {
-  border-color: #595DFF;
+  border-color: #1b3898;
   outline: none;
 }
 
 .bg-card {
   background: #fff;
-  box-shadow: 0 2px 16px 0 rgba(89,93,255,0.10);
+  box-shadow: 0 2px 16px 0 rgba(27, 56, 152, 0.10);
   border-radius: 1.25rem;
 }
 .shadow-card {
-  box-shadow: 0 2px 16px 0 rgba(89,93,255,0.10);
+  box-shadow: 0 2px 16px 0 rgba(27, 56, 152, 0.10);
 }
 
 .rounded-2xl {
   border-radius: 1.25rem;
 }
 
-/* Animate fade in for components */
 .animate-fade-in {
   opacity: 0;
   animation: fade-in 0.45s cubic-bezier(.32,1.06,.59,.99) forwards;
@@ -94,17 +99,15 @@ input:focus, textarea:focus {
   background: #e7eaf1;
   border-radius: 8px;
 }
-
 ::-webkit-scrollbar-thumb {
-  background: #c3d0eb;
+  background: #b4c6e4;
   border-radius: 8px;
 }
 
 .card-gradient {
-  background: linear-gradient(90deg, #595DFF 0%, #5AF5FF 100%);
+  background: linear-gradient(90deg, #1b3898 0%, #8797c7 100%);
 }
 
 @media (max-width: 720px) {
   .rounded-2xl { border-radius: 0.75rem;}
 }
-
