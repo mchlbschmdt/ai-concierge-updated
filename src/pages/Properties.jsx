@@ -13,7 +13,8 @@ export default function Properties() {
   useEffect(() => {
     fetch("http://localhost:8000/api/properties")
       .then(res => res.json())
-      .then(data => setProperties(data));
+      .then(data => setProperties(data))
+      .catch(err => console.error("Error fetching properties:", err));
   }, []);
 
   useEffect(() => {

@@ -3,13 +3,16 @@ import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import GuestList from "./pages/GuestList";
+import Guests from "./pages/Guests";
 import MessagesDashboard from "./pages/MessagesDashboard";
 import PropertyAnalytics from "./pages/PropertyAnalytics";
 import FaqEditor from "./pages/FaqEditor";
 import GuestManager from "./pages/GuestManager";
 import PropertyManager from "./pages/PropertyManager";
+import Properties from "./pages/Properties";
 import SmartInsights from "./pages/SmartInsights";
 import AddProperty from './pages/AddProperty';
+import AddGuest from './AddGuest';
 import Layout from "./components/Layout";
 import { Toaster } from "@/components/ui/toaster";
 
@@ -31,7 +34,7 @@ export default function App() {
           path="/dashboard/guests"
           element={
             <Layout>
-              <GuestList />
+              <Guests />
             </Layout>
           }
         />
@@ -68,6 +71,14 @@ export default function App() {
           }
         />
         <Route
+          path="/dashboard/add-guest"
+          element={
+            <Layout>
+              <AddGuest />
+            </Layout>
+          }
+        />
+        <Route
           path="/dashboard/properties-manager"
           element={
             <Layout>
@@ -79,7 +90,7 @@ export default function App() {
           path="/dashboard/properties"
           element={
             <Layout>
-              <PropertyManager />
+              <Properties />
             </Layout>
           }
         />

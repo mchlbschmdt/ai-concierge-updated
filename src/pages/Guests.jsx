@@ -13,7 +13,8 @@ export default function Guests() {
   useEffect(() => {
     fetch("http://localhost:8000/api/guests")
       .then(res => res.json())
-      .then(data => setGuests(data));
+      .then(data => setGuests(data))
+      .catch(err => console.error("Error fetching guests:", err));
   }, []);
 
   useEffect(() => {
