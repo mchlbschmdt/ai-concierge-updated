@@ -1,7 +1,6 @@
 
 import React from "react";
 import Sidebar from "./Sidebar";
-import Header from "./Header";
 import Footer from "./Footer";
 
 export default function Layout({ children }) {
@@ -20,7 +19,6 @@ export default function Layout({ children }) {
               Hostly Ai Concierge
             </h1>
           </div>
-          {/* Removed Enterprise Admin */}
         </header>
         <main className="p-6 flex-1 overflow-y-auto">{children}</main>
         <Footer />
