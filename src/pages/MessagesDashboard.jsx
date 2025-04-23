@@ -3,13 +3,14 @@ import React, { useEffect, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 import { Card, CardContent } from "@/components/ui/card";
-import { ChevronDown, ChevronUp, MessageSquare, Phone } from "lucide-react";
+import { ChevronDown, ChevronUp, MessageSquare, Phone, Search as SearchIcon, Filter as FilterIcon } from "lucide-react";
 
 function groupMessagesByPhone(messages) {
   const groups = {};
   messages.forEach((msg) => {
     if (!msg.phone) return;
-    if (!groups[msg.phone]) groups[msg.phone] = { guestName: msg.guest_name || msg.name, property: msg.property_name, messages: [] };
+    if (!groups[msg.phone])
+      groups[msg.phone] = { guestName: msg.guest_name || msg.name, property: msg.property_name, messages: [] };
     groups[msg.phone].messages.push(msg);
   });
   return groups;
@@ -19,6 +20,7 @@ export default function MessagesDashboard() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [openGuest, setOpenGuest] = useState(null);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     const fetchMessages = async () => {
@@ -30,12 +32,30 @@ export default function MessagesDashboard() {
     fetchMessages();
   }, []);
 
-  const grouped = groupMessagesByPhone(messages);
+  // Filtering function (search by guest name, property, or message)
+  const filteredMessages = messages.filter((msg) =>
+    (msg.guest_name || msg.name || "").toLowerCase().includes(search.toLowerCase()) ||
+    (msg.phone || "").toLowerCase().includes(search.toLowerCase()) ||
+    (msg.property_name || "").toLowerCase().includes(search.toLowerCase()) ||
+    (msg.message || "").toLowerCase().includes(search.toLowerCase())
+  );
+  const grouped = groupMessagesByPhone(filteredMessages);
 
   return (
     <div className="p-6 space-y-10 bg-white min-h-screen">
       <h1 className="text-3xl font-bold text-blue-900">📬 Guest Messages by Phone</h1>
-
+      <div className="mb-4 flex items-center gap-3">
+        <div className="relative w-full max-w-md">
+          <input
+            type="text"
+            placeholder="Search by guest, property, phone, or message…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="pl-8 pr-3 py-2 border rounded focus:outline-primary bg-white w-full"
+          />
+          <SearchIcon className="absolute left-2 top-2.5 text-gray-400" size={18} />
+        </div>
+      </div>
       {loading ? (
         <p>Loading...</p>
       ) : (
