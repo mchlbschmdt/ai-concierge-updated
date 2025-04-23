@@ -1,4 +1,3 @@
-
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Home, Users, Mail, LayoutList, Settings, Search } from "lucide-react";
@@ -19,11 +18,7 @@ export default function Sidebar() {
   return (
     <div className="h-screen w-64 bg-nav text-white flex flex-col shadow-sidebar z-20">
       <div className="flex items-center gap-2 px-6 py-7 border-b border-white/20">
-        <img 
-          src="/public/lovable-uploads/hostlyai-logo.png" 
-          alt="Hostly Ai Concierge logo" 
-          className="h-10 w-auto" 
-        />
+        <span className="text-2xl font-bold font-display text-white">🏨</span>
         <h1 className="text-lg font-bold font-display text-white tracking-tight">Hostly Ai Concierge</h1>
       </div>
       <nav className="flex-1 px-2 py-5 space-y-2">
