@@ -1,7 +1,7 @@
 
 import React from "react";
 import Sidebar from "./Sidebar";
-import Footer from "../components/Footer";
+import Footer from "./Footer";
 
 export default function Layout({ children }) {
   return (
