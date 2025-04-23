@@ -5,12 +5,12 @@ import {
   collection,
   addDoc,
   getDocs,
-  query,
-  where,
+  updateDoc,
+  doc,
 } from "firebase/firestore";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search } from "lucide-react";
+import { Search, Edit } from "lucide-react";
 
 export default function GuestManager() {
   const [guests, setGuests] = useState([]);
@@ -19,6 +19,14 @@ export default function GuestManager() {
   const [propertyId, setPropertyId] = useState("");
   const [search, setSearch] = useState("");
   const [suggestions, setSuggestions] = useState([]);
+
+  // For editing
+  const [editId, setEditId] = useState(null);
+  const [editGuest, setEditGuest] = useState({
+    name: "",
+    phone: "",
+    property_id: "",
+  });
 
   const fetchGuests = async () => {
     const snapshot = await getDocs(collection(db, "guests"));
@@ -39,6 +47,36 @@ export default function GuestManager() {
     fetchGuests();
   };
 
+  const handleEditClick = (guest) => {
+    setEditId(guest.id);
+    setEditGuest({
+      name: guest.name,
+      phone: guest.phone,
+      property_id: guest.property_id,
+    });
+  };
+
+  const handleEditChange = (field, value) => {
+    setEditGuest((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleEditSave = async (guestId) => {
+    const guestRef = doc(db, "guests", guestId);
+    await updateDoc(guestRef, {
+      name: editGuest.name,
+      phone: editGuest.phone,
+      property_id: editGuest.property_id,
+    });
+    setEditId(null);
+    setEditGuest({ name: "", phone: "", property_id: "" });
+    fetchGuests();
+  };
+
+  const handleEditCancel = () => {
+    setEditId(null);
+    setEditGuest({ name: "", phone: "", property_id: "" });
+  };
+
   useEffect(() => {
     fetchGuests();
   }, []);
@@ -49,14 +87,11 @@ export default function GuestManager() {
       return;
     }
     
-    // Generate suggestions based on search input
     const matches = guests.filter(guest =>
       (guest.name || "").toLowerCase().includes(search.toLowerCase()) ||
       (guest.phone || "").toLowerCase().includes(search.toLowerCase()) ||
       (guest.property_id || "").toLowerCase().includes(search.toLowerCase())
     );
-    
-    // Get unique suggestion values across different fields
     const uniqueSuggestions = new Set();
     matches.forEach(guest => {
       if ((guest.name || "").toLowerCase().includes(search.toLowerCase())) {
@@ -69,8 +104,7 @@ export default function GuestManager() {
         uniqueSuggestions.add(guest.property_id);
       }
     });
-    
-    setSuggestions(Array.from(uniqueSuggestions).slice(0, 5)); // Limit to 5 suggestions
+    setSuggestions(Array.from(uniqueSuggestions).slice(0, 5));
   }, [search, guests]);
 
   const handleSuggestionSelect = (suggestion) => {
@@ -116,8 +150,6 @@ export default function GuestManager() {
           className="pl-8 pr-3 py-2 bg-white w-full"
         />
         <Search className="absolute left-2 top-2.5 text-gray-400" size={18} />
-        
-        {/* Suggestions dropdown */}
         {suggestions.length > 0 && (
           <div className="absolute left-0 right-0 mt-1 bg-white border rounded shadow-lg z-10">
             {suggestions.map((suggestion, index) => (
@@ -136,10 +168,41 @@ export default function GuestManager() {
       <h3 className="text-xl font-semibold">Guest List</h3>
       <ul className="space-y-2">
         {filtered.map((guest) => (
-          <li key={guest.id} className="border p-4 rounded-lg bg-white shadow-sm">
-            <p><strong>Name:</strong> {guest.name}</p>
-            <p><strong>Phone:</strong> {guest.phone}</p>
-            <p><strong>Property:</strong> {guest.property_id}</p>
+          <li key={guest.id} className="border p-4 rounded-lg bg-white shadow-sm flex flex-col gap-2">
+            {editId === guest.id ? (
+              <div className="flex flex-col gap-2">
+                <Input
+                  value={editGuest.name}
+                  onChange={(e) => handleEditChange("name", e.target.value)}
+                  placeholder="Guest Name"
+                />
+                <Input
+                  value={editGuest.phone}
+                  onChange={(e) => handleEditChange("phone", e.target.value)}
+                  placeholder="Phone Number"
+                />
+                <Input
+                  value={editGuest.property_id}
+                  onChange={(e) => handleEditChange("property_id", e.target.value)}
+                  placeholder="Property ID"
+                />
+                <div className="flex gap-2 mt-2">
+                  <Button onClick={() => handleEditSave(guest.id)}>Save</Button>
+                  <Button onClick={handleEditCancel} variant="destructive">Cancel</Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                <div>
+                  <p><strong>Name:</strong> {guest.name}</p>
+                  <p><strong>Phone:</strong> {guest.phone}</p>
+                  <p><strong>Property:</strong> {guest.property_id}</p>
+                </div>
+                <Button onClick={() => handleEditClick(guest)} size="sm">
+                  <Edit size={16} className="inline mr-1" /> Edit
+                </Button>
+              </div>
+            )}
           </li>
         ))}
       </ul>
