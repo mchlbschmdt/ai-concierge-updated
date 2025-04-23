@@ -1,24 +1,4 @@
 
-// ✅ Step 1: Firestore Setup
-// You should already have a `messages` collection from previous logging.
-// Now create a new collection for manual FAQs.
-
-// 🔹 Firestore: Create collection `faqs`
-// Each document should have:
-// - property_id (string)
-// - question_keywords (array of strings)
-// - answer (string)
-
-// Example document:
-// {
-//   property_id: "PROP-12345",
-//   question_keywords: ["checkout", "late checkout"],
-//   answer: "Standard checkout is at 10 AM. Late checkout is available upon request."
-// }
-
-// ✅ Step 2: Frontend - Display Messages + Insights
-// File: src/pages/MessagesDashboard.jsx
-
 import React, { useEffect, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
@@ -28,9 +8,9 @@ import { Search as SearchIcon } from "lucide-react";
 function getTopKeywords(messages) {
   const keywordCounts = {};
   messages.forEach((msg) => {
-    const words = msg.message.toLowerCase().split(/\W+/);
+    const words = msg.message?.toLowerCase().split(/\W+/) || [];
     words.forEach((word) => {
-      if (word.length > 3) keywordCounts[word] = (keywordCounts[word] || 0) + 1;
+      if (word && word.length > 3) keywordCounts[word] = (keywordCounts[word] || 0) + 1;
     });
   });
   return Object.entries(keywordCounts)
@@ -87,6 +67,7 @@ export default function MessagesDashboard() {
   }, [search, messages]);
 
   const filtered = messages.filter(msg =>
+    !search ||
     (msg.phone || "").toLowerCase().includes(search.toLowerCase()) ||
     (msg.property_name || "").toLowerCase().includes(search.toLowerCase()) ||
     (msg.message || "").toLowerCase().includes(search.toLowerCase())
@@ -96,6 +77,16 @@ export default function MessagesDashboard() {
     setSearch(suggestion);
     setSuggestions([]);
   };
+
+  // Group messages by phone number/guest
+  const groupedMessages = filtered.reduce((groups, message) => {
+    const phone = message.phone || "Unknown";
+    if (!groups[phone]) {
+      groups[phone] = [];
+    }
+    groups[phone].push(message);
+    return groups;
+  }, {});
 
   const topKeywords = getTopKeywords(messages);
 
@@ -142,15 +133,24 @@ export default function MessagesDashboard() {
             </ul>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filtered.map((msg) => (
-              <Card key={msg.id}>
-                <CardContent>
-                  <p><strong>📱 {msg.phone}</strong></p>
-                  <p><strong>🏠 {msg.property_name}</strong></p>
-                  <p><strong>💬 Guest:</strong> {msg.message}</p>
-                  <p><strong>🤖 Reply:</strong> {msg.response}</p>
-                  <p className="text-sm text-gray-500">🕒 {new Date(msg.timestamp?.seconds * 1000).toLocaleString()}</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {Object.entries(groupedMessages).map(([phone, phoneMessages]) => (
+              <Card key={phone} className="mb-4">
+                <CardContent className="p-4">
+                  <h3 className="text-lg font-bold mb-2">📱 {phone}</h3>
+                  <p className="mb-2"><strong>🏠 {phoneMessages[0]?.property_name || "Unknown Property"}</strong></p>
+                  
+                  <div className="space-y-3 mt-4">
+                    {phoneMessages.map((msg) => (
+                      <div key={msg.id} className="bg-gray-50 p-3 rounded-lg">
+                        <p><strong>💬 Guest:</strong> {msg.message}</p>
+                        <p><strong>🤖 Reply:</strong> {msg.response}</p>
+                        <p className="text-sm text-gray-500 mt-1">
+                          🕒 {msg.timestamp ? new Date(msg.timestamp?.seconds * 1000).toLocaleString() : "Unknown time"}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 </CardContent>
               </Card>
             ))}

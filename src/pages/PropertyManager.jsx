@@ -1,12 +1,12 @@
 
-// File: src/pages/PropertyManager.jsx
-
 import React, { useEffect, useState } from 'react';
 import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Link } from "react-router-dom";
+import { Plus } from "lucide-react";
 
 export default function PropertyManager() {
   const [properties, setProperties] = useState([]);
@@ -35,7 +35,15 @@ export default function PropertyManager() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Manage Properties</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">Manage Properties</h1>
+        <Link 
+          to="/dashboard/add-property" 
+          className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg shadow hover:bg-primary/90 transition"
+        >
+          <Plus size={18} /> Add New Property
+        </Link>
+      </div>
 
       {properties.map((prop) => (
         <div key={prop.id} className="border rounded-lg p-4 mb-4 bg-white shadow-sm">

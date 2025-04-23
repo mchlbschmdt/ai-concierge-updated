@@ -33,9 +33,7 @@ export default function App() {
         <Route
           path="/dashboard/guests"
           element={
-            <Layout>
-              <Guests />
-            </Layout>
+            <Navigate to="/dashboard/guests-manager" />
           }
         />
         <Route

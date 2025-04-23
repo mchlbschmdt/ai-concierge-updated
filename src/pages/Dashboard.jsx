@@ -112,11 +112,11 @@ export default function Dashboard() {
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4 mt-8">
-        <Button onClick={() => navigate("/dashboard/guests")} className="flex gap-2 items-center font-semibold bg-accent hover:bg-primary transition">
+        <Button onClick={() => navigate("/dashboard/guests-manager")} className="flex gap-2 items-center font-semibold bg-accent hover:bg-primary transition">
           <Plus size={16} />
           Add New Guest
         </Button>
-        <Button onClick={() => navigate("/dashboard/properties")} className="flex gap-2 items-center font-semibold bg-primary hover:bg-accent transition">
+        <Button onClick={() => navigate("/dashboard/add-property")} className="flex gap-2 items-center font-semibold bg-primary hover:bg-accent transition">
           <Plus size={16} />
           Add New Property
         </Button>
