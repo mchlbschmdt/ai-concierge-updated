@@ -1,24 +1,24 @@
+
 import React, { useEffect, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 import { Card, CardContent } from "@/components/ui/card";
+import { ChevronDown, ChevronUp, MessageSquare, Phone } from "lucide-react";
 
-function getTopKeywords(messages) {
-  const keywordCounts = {};
+function groupMessagesByPhone(messages) {
+  const groups = {};
   messages.forEach((msg) => {
-    const words = msg.message?.toLowerCase().split(/\W+/);
-    words.forEach((word) => {
-      if (word.length > 3) keywordCounts[word] = (keywordCounts[word] || 0) + 1;
-    });
+    if (!msg.phone) return;
+    if (!groups[msg.phone]) groups[msg.phone] = { guestName: msg.guest_name || msg.name, property: msg.property_name, messages: [] };
+    groups[msg.phone].messages.push(msg);
   });
-  return Object.entries(keywordCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10);
+  return groups;
 }
 
 export default function MessagesDashboard() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [openGuest, setOpenGuest] = useState(null);
 
   useEffect(() => {
     const fetchMessages = async () => {
@@ -30,43 +30,69 @@ export default function MessagesDashboard() {
     fetchMessages();
   }, []);
 
-  const topKeywords = getTopKeywords(messages);
+  const grouped = groupMessagesByPhone(messages);
 
   return (
-    <div className="p-6 space-y-10 bg-gray-100 min-h-screen">
-      <h1 className="text-3xl font-bold text-gray-800">📬 Guest Message Logs</h1>
+    <div className="p-6 space-y-10 bg-white min-h-screen">
+      <h1 className="text-3xl font-bold text-blue-900">📬 Guest Messages by Phone</h1>
 
       {loading ? (
         <p>Loading...</p>
       ) : (
-        <>
-          <div className="bg-white p-4 shadow rounded-lg">
-            <h2 className="text-xl font-semibold mb-3">🔑 Top Keywords</h2>
-            <ul className="list-disc list-inside">
-              {topKeywords.map(([word, count]) => (
-                <li key={word}>
-                  {word} <span className="text-gray-500">({count})</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {messages.map((msg) => (
-              <Card key={msg.id} className="bg-white shadow-md rounded-lg">
-                <CardContent className="space-y-2">
-                  <p className="text-sm text-gray-500">
-                    🕒 {new Date(msg.timestamp?.seconds * 1000).toLocaleString()}
-                  </p>
-                  <p><strong>📱 Guest:</strong> {msg.phone}</p>
-                  <p><strong>🏠 Property:</strong> {msg.property_name}</p>
-                  <p><strong>💬 Message:</strong> {msg.message}</p>
-                  <p><strong>🤖 Response:</strong> {msg.response}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </>
+        <div className="space-y-6">
+          {Object.keys(grouped).length === 0 ? (
+            <div className="text-gray-400 text-lg mt-12 text-center">
+              No messages found.
+            </div>
+          ) : (
+            Object.entries(grouped).map(([phone, group]) => {
+              const guestHeader =
+                (group.guestName ? group.guestName + " – " : "") +
+                phone +
+                (group.property ? ` | Property: ${group.property}` : "");
+              return (
+                <div key={phone} className="border rounded-xl overflow-hidden bg-blue-50/40 shadow group">
+                  <button
+                    className="flex items-center w-full px-6 py-4 bg-blue-800/90 text-white text-left font-semibold text-lg hover:bg-blue-900 transition"
+                    onClick={() => setOpenGuest(openGuest === phone ? null : phone)}
+                  >
+                    <Phone size={20} className="mr-2" />
+                    <span className="flex-1">{guestHeader}</span>
+                    {openGuest === phone ? (
+                      <ChevronUp size={22} />
+                    ) : (
+                      <ChevronDown size={22} />
+                    )}
+                  </button>
+                  {openGuest === phone && (
+                    <div className="bg-white divide-y divide-gray-100">
+                      {group.messages.map((msg) => (
+                        <Card key={msg.id} className="shadow-none bg-white border-0 px-6 py-3">
+                          <CardContent className="space-y-1">
+                            <div className="flex gap-2 items-center text-blue-700 font-semibold">
+                              <MessageSquare size={16} />
+                              <span>{msg.message}</span>
+                            </div>
+                            <div className="ml-6 text-gray-600">
+                              <span className="block">
+                                <strong>🤖 Response:</strong> {msg.response}
+                              </span>
+                              <span className="block text-xs text-gray-500">
+                                {msg.timestamp?.seconds
+                                  ? new Date(msg.timestamp.seconds * 1000).toLocaleString()
+                                  : ""}
+                              </span>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
       )}
     </div>
   );

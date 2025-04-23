@@ -1,10 +1,12 @@
-// File: /frontend/dashboard-fixed/src/pages/PropertyManager.jsx
+
+// File: src/pages/PropertyManager.jsx
 
 import React, { useEffect, useState } from 'react';
 import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 
 export default function PropertyManager() {
   const [properties, setProperties] = useState([]);
@@ -44,12 +46,24 @@ export default function PropertyManager() {
               <Input value={formData.check_in_time || ''} onChange={(e) => setFormData({ ...formData, check_in_time: e.target.value })} placeholder="Check-in Time" />
               <Input value={formData.check_out_time || ''} onChange={(e) => setFormData({ ...formData, check_out_time: e.target.value })} placeholder="Check-out Time" />
               <Input value={formData.local_recommendations || ''} onChange={(e) => setFormData({ ...formData, local_recommendations: e.target.value })} placeholder="Recommendations" />
+              <Textarea
+                value={formData.knowledge_base || ''}
+                onChange={e => setFormData({ ...formData, knowledge_base: e.target.value })}
+                placeholder="Knowledge Base"
+                className="resize-y min-h-[100px] max-h-[250px] bg-gray-50 border border-gray-300"
+              />
               <Button onClick={handleUpdate}>Save</Button>
             </div>
           ) : (
             <>
               <h2 className="text-lg font-semibold">{prop.property_name}</h2>
               <p className="text-sm text-gray-600">{prop.address}</p>
+              <div className="mt-2">
+                <strong>Knowledge Base:</strong>
+                <div className="overflow-auto bg-gray-100 p-2 rounded border mt-1 max-h-36 text-sm whitespace-pre-line">
+                  {prop.knowledge_base}
+                </div>
+              </div>
               <Button variant="outline" size="sm" onClick={() => handleEdit(prop)} className="mt-2">
                 Edit
               </Button>
