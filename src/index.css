@@ -1,18 +1,19 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Font import for Montserrat to match hostlyai.co branding */
-@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap");
+/* Font imports for Plus Jakarta Sans & Playfair Display (as on hostlyai.co) */
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&family=Playfair+Display:wght@700&display=swap");
 
 :root {
-  font-family: 'Montserrat', 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
   background: #dde4ff;
   color: #16213d;
 }
 
 body {
-  font-family: 'Montserrat', 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
   background: #dde4ff;
   color: #16213d;
   margin: 0;
@@ -21,7 +22,7 @@ body {
 }
 
 h1, h2, h3, h4, .font-display {
-  font-family: 'Montserrat', 'Playfair Display', 'Plus Jakarta Sans', serif !important;
+  font-family: 'Playfair Display', 'Plus Jakarta Sans', serif !important;
   color: #16213d;
   letter-spacing: -0.01em;
   font-weight: 700;
@@ -44,8 +45,8 @@ button {
   padding: 0.7em 1.6em;
   font-size: 1em;
   font-weight: 700;
-  font-family: 'Montserrat', sans-serif;
-  background: linear-gradient(to right, #1b3898, #22305b);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  background: linear-gradient(to right, #1b3898, #8797c7);
   color: #fff;
   cursor: pointer;
   transition: background 0.18s, box-shadow 0.18s;
