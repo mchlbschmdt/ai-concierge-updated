@@ -1,11 +1,11 @@
 
 import React from "react";
 import Sidebar from "./Sidebar";
-import Footer from "./Footer";
+import Footer from "../components/Footer";
 
 export default function Layout({ children }) {
   return (
-    <div className="flex min-h-screen bg-background font-sans">
+    <div className="flex min-h-screen bg-slate-50">
       <Sidebar />
       <div className="flex flex-col flex-1">
         {/* App Bar/Header */}
