@@ -3,12 +3,13 @@ import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
-import { Mail, Loader2, Calendar, Download } from "lucide-react";
+import { Mail, Loader2, Calendar, Download, ExternalLink } from "lucide-react";
 
 export default function GmailIntegration({ propertyId, onMessagesImported }) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
+  const [authWindow, setAuthWindow] = useState(null);
   const [filters, setFilters] = useState({
     from: 'express@airbnb.com',
     subject: '',
@@ -18,17 +19,38 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
   const [advancedOptions, setAdvancedOptions] = useState(false);
   const [oauthStep, setOauthStep] = useState(0);
 
-  // This would be connected to a real Gmail API integration
-  // For now we'll simulate the authentication and data fetching
+  // Simulated Gmail OAuth flow
   const handleAuthenticate = () => {
     setLoading(true);
     setOauthStep(1);
+    
+    // Open a popup window for authentication (in a real implementation)
+    const width = 600;
+    const height = 700;
+    const left = window.innerWidth / 2 - width / 2;
+    const top = window.innerHeight / 2 - height / 2;
+    
+    // In a real implementation, this would be a real OAuth URL
+    const authUrl = "https://accounts.google.com/o/oauth2/auth";
+    const authWindowObj = window.open(
+      authUrl,
+      "Gmail Authentication",
+      `width=${width},height=${height},left=${left},top=${top}`
+    );
+    
+    setAuthWindow(authWindowObj);
     
     // Simulate OAuth authentication steps
     setTimeout(() => {
       setOauthStep(2);
       setTimeout(() => {
         setOauthStep(3);
+        
+        if (authWindowObj) {
+          authWindowObj.close();
+          setAuthWindow(null);
+        }
+        
         setTimeout(() => {
           setAuthenticated(true);
           setLoading(false);
@@ -38,8 +60,24 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
             description: "Your Gmail account has been successfully connected."
           });
         }, 1000);
-      }, 1000);
-    }, 1000);
+      }, 1500);
+    }, 1500);
+  };
+  
+  // Function to simulate canceling authentication
+  const cancelAuthentication = () => {
+    if (authWindow) {
+      authWindow.close();
+      setAuthWindow(null);
+    }
+    setOauthStep(0);
+    setLoading(false);
+    
+    toast({
+      title: "Authentication Cancelled",
+      description: "Gmail connection was cancelled.",
+      variant: "destructive"
+    });
   };
   
   const handleFilterChange = (e) => {
@@ -120,15 +158,34 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
               {oauthStep === 1 && (
                 <div className="flex flex-col items-center">
                   <Loader2 className="animate-spin mb-2 text-primary" size={24} />
-                  <p>Requesting access to Gmail...</p>
+                  <p>Redirecting to Google authentication...</p>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="mt-2"
+                    onClick={cancelAuthentication}
+                  >
+                    Cancel
+                  </Button>
                 </div>
               )}
               {oauthStep === 2 && (
                 <div className="flex flex-col items-center">
-                  <p className="mb-2">Select Google account to connect:</p>
-                  <div className="border p-2 rounded w-full max-w-xs cursor-pointer hover:bg-gray-50">
-                    youremail@gmail.com
+                  <p className="mb-2">Waiting for Google authentication...</p>
+                  <div className="border p-2 rounded w-full max-w-xs">
+                    <div className="flex items-center justify-between">
+                      <span>Gmail Account</span>
+                      <ExternalLink size={16} />
+                    </div>
                   </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="mt-2"
+                    onClick={cancelAuthentication}
+                  >
+                    Cancel
+                  </Button>
                 </div>
               )}
               {oauthStep === 3 && (

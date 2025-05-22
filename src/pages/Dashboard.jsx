@@ -1,11 +1,15 @@
 
 import React from "react";
 import { Card } from "@/components/ui/card";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import KnowledgeBaseUploader from "../components/KnowledgeBaseUploader";
 import GmailIntegration from "../components/GmailIntegration";
 
 export default function Dashboard() {
+  const navigate = useNavigate();
+  
   const handleFileAdded = (fileData) => {
     console.log("File added:", fileData);
     // This would update state in a real implementation
@@ -15,11 +19,25 @@ export default function Dashboard() {
     console.log("Messages imported:", messages);
     // This would update state in a real implementation
   };
+  
+  const handleAddProperty = () => {
+    navigate("/dashboard/add-property");
+  };
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Dashboard</h1>
-      <p className="text-gray-600">Welcome to the Hostly AI Concierge dashboard.</p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold">Dashboard</h1>
+          <p className="text-gray-600">Welcome to the Hostly AI Concierge dashboard.</p>
+        </div>
+        <Button 
+          onClick={handleAddProperty}
+          className="flex items-center gap-2"
+        >
+          <Plus size={18} /> Add Property
+        </Button>
+      </div>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Link to="/dashboard/guests-manager" className="block">
