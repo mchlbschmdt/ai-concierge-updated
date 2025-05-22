@@ -6,10 +6,10 @@ import { Home, Users, Mail, LayoutList, Settings, Search, FileText } from "lucid
 const navItems = [
   { label: "Dashboard", path: "/dashboard", icon: Home },
   { label: "Guests", path: "/dashboard/guests-manager", icon: Users },
-  { label: "Properties", path: "/dashboard/properties", icon: Home },
+  { label: "Properties", path: "/dashboard/properties-manager", icon: Home },
   { label: "Messages", path: "/dashboard/messages", icon: Mail },
   { label: "Analytics", path: "/dashboard/analytics", icon: LayoutList },
-  { label: "FAQ Editor", path: "/dashboard/faq-editor", icon: Settings },
+  { label: "FAQ Editor", path: "/dashboard/faq-editor", icon: FileText },
   { label: "Smart Insights", path: "/dashboard/insights", icon: Search },
   { label: "Email Management", path: "/dashboard/email-management", icon: Mail },
 ];
@@ -34,11 +34,11 @@ export default function Sidebar() {
               className={`flex items-center gap-3 px-4 py-2 rounded-xl transition-colors font-medium ${
                 isActive
                   ? "bg-white/20 text-white shadow"
-                  : "hover:bg-white/10 hover:text-secondary text-white/90"
+                  : "hover:bg-white/10 hover:text-white text-white/90"
               }`}
               style={{ letterSpacing: ".01em" }}
             >
-              <Icon size={20} className={`mr-1 ${isActive ? "text-secondary" : "text-white"}`} />
+              <Icon size={20} className={`mr-1 ${isActive ? "text-white" : "text-white/90"}`} />
               <span>{item.label}</span>
             </Link>
           );
