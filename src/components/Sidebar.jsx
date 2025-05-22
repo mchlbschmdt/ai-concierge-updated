@@ -6,11 +6,11 @@ import { Home, Users, Mail, LayoutList, Settings, Search, FileText } from "lucid
 const navItems = [
   { label: "Dashboard", path: "/dashboard", icon: Home },
   { label: "Guests", path: "/dashboard/guests-manager", icon: Users },
+  { label: "Properties", path: "/dashboard/properties", icon: Home },
   { label: "Messages", path: "/dashboard/messages", icon: Mail },
   { label: "Analytics", path: "/dashboard/analytics", icon: LayoutList },
   { label: "FAQ Editor", path: "/dashboard/faq-editor", icon: Settings },
   { label: "Smart Insights", path: "/dashboard/insights", icon: Search },
-  { label: "Property Manager", path: "/dashboard/properties-manager", icon: Home },
   { label: "Email Management", path: "/dashboard/email-management", icon: Mail },
 ];
 

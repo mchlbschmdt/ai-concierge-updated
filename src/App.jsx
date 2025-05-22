@@ -23,10 +23,10 @@ export default function App() {
         <Route path="/dashboard" element={<Layout><Dashboard /></Layout>} />
         <Route path="/dashboard/guests-manager" element={<Layout><GuestManager /></Layout>} />
         <Route path="/dashboard/properties-manager" element={<Layout><PropertyManager /></Layout>} />
+        <Route path="/dashboard/properties" element={<Layout><Properties /></Layout>} />
         <Route path="/dashboard/messages" element={<Layout><MessagesDashboard /></Layout>} />
         <Route path="/dashboard/faq-editor" element={<Layout><FaqEditor /></Layout>} />
         <Route path="/dashboard/insights" element={<Layout><SmartInsights /></Layout>} />
-        <Route path="/dashboard/properties" element={<Layout><Properties /></Layout>} />
         <Route path="/dashboard/add-property" element={<Layout><AddProperty /></Layout>} />
         <Route path="/dashboard/add-guest" element={<Layout><AddGuest /></Layout>} />
         <Route path="/dashboard/email-management" element={<Layout><EmailManagement /></Layout>} />
