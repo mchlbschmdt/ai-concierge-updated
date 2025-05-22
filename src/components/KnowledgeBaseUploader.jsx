@@ -1,30 +1,13 @@
 
 import React, { useState } from 'react';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { doc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
-import { db, storage } from '../firebase';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
-import { Loader2, Upload, File, X } from "lucide-react";
-
-const ALLOWED_FILE_TYPES = [
-  "application/pdf",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // .docx
-  "text/plain",
-  "text/csv",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
-  "application/json"
-];
-
-const FILE_EXTENSIONS = {
-  "application/pdf": ".pdf",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
-  "text/plain": ".txt",
-  "text/csv": ".csv",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
-  "application/json": ".json"
-};
+import { Loader2, Upload } from "lucide-react";
+import { ALLOWED_FILE_TYPES } from '../utils/fileConstants';
+import FilePreview from './FilePreview';
+import UploadProgress from './UploadProgress';
+import { uploadFileToProperty } from '../services/fileUploadService';
 
 export default function KnowledgeBaseUploader({ propertyId, onFileAdded }) {
   const { toast } = useToast();
@@ -84,77 +67,10 @@ export default function KnowledgeBaseUploader({ propertyId, onFileAdded }) {
   };
 
   const handleUpload = async () => {
-    if (!file || !propertyId) {
-      console.error("Missing file or propertyId:", { file, propertyId });
-      toast({
-        title: "Error",
-        description: "File or property ID missing.",
-        variant: "destructive"
-      });
-      return;
-    }
-    
     try {
       setLoading(true);
-      setUploadProgress(10);
       
-      console.log("Starting upload process for property:", propertyId);
-      
-      // Reference to property
-      const propertyDocRef = doc(db, "properties", propertyId);
-      const propertyDoc = await getDoc(propertyDocRef);
-      
-      if (!propertyDoc.exists()) {
-        console.error("Property not found:", propertyId);
-        toast({
-          title: "Error",
-          description: "Property not found.",
-          variant: "destructive"
-        });
-        return;
-      }
-      
-      setUploadProgress(20);
-      
-      // Create a reference to the file location in Firebase Storage
-      const fileExtension = FILE_EXTENSIONS[file.type] || '';
-      const timestamp = Date.now();
-      const storagePath = `properties/${propertyId}/knowledge_base/${timestamp}_${file.name}`;
-      const storageRef = ref(storage, storagePath);
-      
-      console.log("Uploading file to path:", storagePath);
-      
-      setUploadProgress(40);
-      
-      // Upload file
-      const uploadResult = await uploadBytes(storageRef, file);
-      console.log("File uploaded successfully:", uploadResult);
-      
-      setUploadProgress(70);
-      
-      // Get download URL
-      const downloadURL = await getDownloadURL(storageRef);
-      console.log("File download URL:", downloadURL);
-      
-      setUploadProgress(90);
-      
-      // Add file metadata to property document
-      const fileData = {
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        uploaded_at: new Date(),
-        url: downloadURL,
-        path: storagePath
-      };
-      
-      await updateDoc(propertyDocRef, {
-        files: arrayUnion(fileData)
-      });
-      
-      console.log("File metadata added to property document");
-      
-      setUploadProgress(100);
+      const fileData = await uploadFileToProperty(file, propertyId, setUploadProgress);
       
       toast({
         title: "File Uploaded",
@@ -205,52 +121,13 @@ export default function KnowledgeBaseUploader({ propertyId, onFileAdded }) {
         />
       </div>
       
-      {filePreview && (
-        <div className="mb-4 p-3 bg-white border rounded-md relative">
-          <button 
-            onClick={handleClearFile}
-            className="absolute top-2 right-2 text-gray-400 hover:text-gray-600"
-            type="button"
-          >
-            <X size={16} />
-          </button>
-          
-          <div className="flex items-start gap-3">
-            <File className="text-primary" />
-            
-            <div className="flex-1 overflow-hidden">
-              <p className="font-medium">{file?.name}</p>
-              
-              {filePreview.type === "application/json" && (
-                <pre className="text-xs bg-gray-100 p-2 mt-2 rounded overflow-x-auto max-h-32">
-                  {filePreview.content}
-                </pre>
-              )}
-              
-              {(filePreview.type === "text/plain" || filePreview.type === "text/csv") && (
-                <div className="text-xs bg-gray-100 p-2 mt-2 rounded overflow-x-auto max-h-32 whitespace-pre-line">
-                  {filePreview.content}
-                </div>
-              )}
-              
-              {!filePreview.content && (
-                <p className="text-sm text-gray-500">
-                  {filePreview.size} • {filePreview.type.split('/')[1].toUpperCase()}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <FilePreview 
+        file={file}
+        filePreview={filePreview}
+        onClear={handleClearFile}
+      />
       
-      {uploadProgress > 0 && (
-        <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
-          <div 
-            className="bg-primary h-2 rounded-full transition-all duration-300"
-            style={{ width: `${uploadProgress}%` }}
-          ></div>
-        </div>
-      )}
+      <UploadProgress progress={uploadProgress} />
       
       <Button 
         onClick={handleUpload} 
