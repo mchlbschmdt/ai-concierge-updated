@@ -1,3 +1,8 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* Font imports for Plus Jakarta Sans & Playfair Display (as on hostlyai.co) */
 @import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&family=Playfair+Display:wght@700&display=swap");
 

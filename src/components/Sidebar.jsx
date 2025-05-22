@@ -1,7 +1,7 @@
 
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Home, Users, Mail, LayoutList, Settings, Search, FileText, Gmail } from "lucide-react";
+import { Home, Users, Mail, LayoutList, Settings, Search, FileText } from "lucide-react";
 
 const navItems = [
   { label: "Dashboard", path: "/dashboard", icon: Home },
@@ -11,7 +11,7 @@ const navItems = [
   { label: "FAQ Editor", path: "/dashboard/faq-editor", icon: Settings },
   { label: "Smart Insights", path: "/dashboard/insights", icon: Search },
   { label: "Property Manager", path: "/dashboard/properties-manager", icon: Home },
-  { label: "Email Management", path: "/dashboard/email-management", icon: Gmail },
+  { label: "Email Management", path: "/dashboard/email-management", icon: Mail },
 ];
 
 export default function Sidebar() {

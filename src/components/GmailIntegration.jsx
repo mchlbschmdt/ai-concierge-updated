@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
-import { Gmail, Loader2 } from "lucide-react";
+import { Mail, Loader2 } from "lucide-react";
 
 export default function GmailIntegration({ propertyId, onMessagesImported }) {
   const { toast } = useToast();
@@ -85,7 +85,7 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
   return (
     <div className="border rounded-lg p-4 bg-gray-50">
       <h3 className="text-lg font-medium mb-4">
-        <Gmail className="inline-block mr-2 text-primary" size={20} />
+        <Mail className="inline-block mr-2 text-primary" size={20} />
         Gmail Integration
       </h3>
       
@@ -106,7 +106,7 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
               </>
             ) : (
               <>
-                <Gmail className="mr-2 h-4 w-4" />
+                <Mail className="mr-2 h-4 w-4" />
                 Connect Gmail
               </>
             )}
