@@ -1,7 +1,5 @@
 
 import React, { useEffect, useState } from 'react';
-import { collection, getDocs, doc, updateDoc, getDoc } from 'firebase/firestore';
-import { db } from '../firebase';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,9 +22,44 @@ export default function PropertyManager() {
     const fetchProperties = async () => {
       try {
         setLoading(true);
-        const snapshot = await getDocs(collection(db, 'properties'));
-        const propertiesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setProperties(propertiesData);
+        // For demo purposes, use mock data
+        const mockProperties = [
+          {
+            id: "prop1",
+            property_name: "Beachside Villa",
+            address: "123 Oceanview Dr, Malibu, CA",
+            code: "BSVILLA1",
+            check_in_time: "3:00 PM",
+            check_out_time: "11:00 AM",
+            local_recommendations: "Visit the nearby Santa Monica Pier and enjoy local seafood restaurants along the boardwalk.",
+            knowledge_base: "This beautiful beachside villa features 4 bedrooms and 3.5 bathrooms. The property has direct beach access and includes a private pool and hot tub. Parking available for up to 3 cars.\n\nWiFi password: BeachLife2023\nPool heating instructions: Control panel located in the garage.",
+            files: [
+              {
+                name: "house_manual.pdf",
+                type: "application/pdf",
+                size: 1250000,
+                uploaded_at: { seconds: Date.now() / 1000 },
+                url: "#",
+                path: "properties/prop1/knowledge_base/house_manual.pdf"
+              }
+            ],
+            messages: []
+          },
+          {
+            id: "prop2",
+            property_name: "Downtown Loft",
+            address: "456 Main St, San Francisco, CA",
+            code: "DTLOFT2",
+            check_in_time: "4:00 PM",
+            check_out_time: "10:00 AM",
+            local_recommendations: "Check out the Ferry Building Marketplace for local food and the SFMOMA which is just a 10-minute walk away.",
+            knowledge_base: "Modern downtown loft with 2 bedrooms and 2 bathrooms. Building amenities include gym access and rooftop lounge.\n\nWiFi password: UrbanLoft88\nGarage entry code: 3344#\n\nNoise policy: Quiet hours from 10PM to 8AM",
+            files: [],
+            messages: []
+          }
+        ];
+        
+        setProperties(mockProperties);
       } catch (error) {
         console.error("Error fetching properties:", error);
         toast({
@@ -48,10 +81,8 @@ export default function PropertyManager() {
 
   const handleUpdate = async () => {
     try {
-      const propertyRef = doc(db, 'properties', editing);
-      await updateDoc(propertyRef, formData);
-      
-      // Update local state
+      // In a real app, this would update Firestore
+      // Update local state for demo
       setProperties(prev => prev.map(p => 
         p.id === editing ? { ...p, ...formData } : p
       ));

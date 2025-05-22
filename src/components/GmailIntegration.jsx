@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
-import { Mail, Loader2 } from "lucide-react";
+import { Mail, Loader2, Calendar, Download } from "lucide-react";
 
 export default function GmailIntegration({ propertyId, onMessagesImported }) {
   const { toast } = useToast();
@@ -15,21 +15,31 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
     after: '',
     maxResults: 10
   });
+  const [advancedOptions, setAdvancedOptions] = useState(false);
+  const [oauthStep, setOauthStep] = useState(0);
 
   // This would be connected to a real Gmail API integration
   // For now we'll simulate the authentication and data fetching
   const handleAuthenticate = () => {
     setLoading(true);
+    setOauthStep(1);
     
-    // Simulate OAuth authentication
+    // Simulate OAuth authentication steps
     setTimeout(() => {
-      setAuthenticated(true);
-      setLoading(false);
-      toast({
-        title: "Gmail Connected",
-        description: "Your Gmail account has been successfully connected."
-      });
-    }, 1500);
+      setOauthStep(2);
+      setTimeout(() => {
+        setOauthStep(3);
+        setTimeout(() => {
+          setAuthenticated(true);
+          setLoading(false);
+          setOauthStep(0);
+          toast({
+            title: "Gmail Connected",
+            description: "Your Gmail account has been successfully connected."
+          });
+        }, 1000);
+      }, 1000);
+    }, 1000);
   };
   
   const handleFilterChange = (e) => {
@@ -65,6 +75,16 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
           content: 'Is the pool heated in October? And do you provide beach towels?',
           timestamp: new Date(Date.now() - 86400000).toISOString(), // Yesterday
           source: 'gmail_import'
+        },
+        {
+          id: 'email3',
+          sender: 'Airbnb',
+          sender_email: 'express@airbnb.com',
+          receiver: 'Host',
+          subject: 'Booking confirmed',
+          content: 'Your booking for Property #123 has been confirmed for July 15-20.',
+          timestamp: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
+          source: 'gmail_import'
         }
       ];
       
@@ -94,6 +114,32 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
           <p className="text-sm text-gray-600 mb-4">
             Connect your Gmail account to import Airbnb guest messages
           </p>
+          
+          {oauthStep > 0 && (
+            <div className="mb-4 p-3 bg-white border rounded shadow-sm">
+              {oauthStep === 1 && (
+                <div className="flex flex-col items-center">
+                  <Loader2 className="animate-spin mb-2 text-primary" size={24} />
+                  <p>Requesting access to Gmail...</p>
+                </div>
+              )}
+              {oauthStep === 2 && (
+                <div className="flex flex-col items-center">
+                  <p className="mb-2">Select Google account to connect:</p>
+                  <div className="border p-2 rounded w-full max-w-xs cursor-pointer hover:bg-gray-50">
+                    youremail@gmail.com
+                  </div>
+                </div>
+              )}
+              {oauthStep === 3 && (
+                <div className="flex flex-col items-center">
+                  <p className="text-green-600 mb-2">✓ Authorization successful</p>
+                  <p className="text-sm">Completing connection...</p>
+                </div>
+              )}
+            </div>
+          )}
+          
           <Button 
             onClick={handleAuthenticate} 
             disabled={loading}
@@ -116,7 +162,7 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
         <div className="space-y-4">
           <p className="text-sm text-green-600 flex items-center">
             <span className="inline-block w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-            Gmail account connected
+            Gmail account connected (youremail@gmail.com)
           </p>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -163,24 +209,83 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
             </div>
           </div>
           
-          <Button 
-            onClick={handleFetchEmails} 
-            disabled={loading}
-            className="w-full"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Fetching Emails...
-              </>
-            ) : (
-              "Fetch Airbnb Emails"
-            )}
-          </Button>
+          <div className="flex items-center justify-between">
+            <button 
+              onClick={() => setAdvancedOptions(!advancedOptions)} 
+              className="text-sm text-primary flex items-center"
+            >
+              {advancedOptions ? "Hide" : "Show"} advanced options
+            </button>
+            
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="flex items-center gap-1"
+              onClick={() => setAuthenticated(false)}
+            >
+              Switch account
+            </Button>
+          </div>
           
-          <p className="text-xs text-gray-500 mt-2">
-            Note: This will fetch emails matching your filters and associate them with this property.
-          </p>
+          {advancedOptions && (
+            <div className="border-t pt-3 space-y-3">
+              <div>
+                <label className="text-sm font-medium block mb-1">Filter by Label</label>
+                <Input 
+                  name="label"
+                  placeholder="e.g. Airbnb"
+                />
+              </div>
+              
+              <div>
+                <label className="text-sm font-medium block mb-1">Attachment Types</label>
+                <Input 
+                  name="attachmentTypes"
+                  placeholder="e.g. pdf,docx"
+                />
+              </div>
+              
+              <div className="flex items-center">
+                <input 
+                  type="checkbox" 
+                  id="includeAttachments" 
+                  className="mr-2"
+                />
+                <label htmlFor="includeAttachments" className="text-sm">
+                  Download attachments
+                </label>
+              </div>
+            </div>
+          )}
+          
+          <div className="flex gap-2">
+            <Button 
+              onClick={handleFetchEmails} 
+              disabled={loading}
+              className="w-full"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Fetching Emails...
+                </>
+              ) : (
+                "Fetch Airbnb Emails"
+              )}
+            </Button>
+            
+            <Button variant="outline" className="flex items-center gap-1">
+              <Calendar className="h-4 w-4" />
+              Schedule
+            </Button>
+          </div>
+          
+          <div className="flex justify-between items-center text-xs text-gray-500">
+            <span>Last sync: Never</span>
+            <button className="text-primary flex items-center gap-1">
+              <Download className="h-3 w-3" /> Export settings
+            </button>
+          </div>
         </div>
       )}
     </div>
