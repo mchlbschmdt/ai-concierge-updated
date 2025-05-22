@@ -1,14 +1,14 @@
+
 import React from "react";
 
-export const Textarea = ({ value, onChange, placeholder }) => {
+export const Textarea = ({ className = "", value, onChange, placeholder, ...props }) => {
   return (
     <textarea
-      className="w-full p-2 border border-gray-300 rounded-md"
-      rows="4"
+      className={`flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
       value={value}
       onChange={onChange}
       placeholder={placeholder}
+      {...props}
     />
   );
 };
-

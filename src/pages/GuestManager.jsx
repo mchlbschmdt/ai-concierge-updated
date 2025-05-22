@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import { db } from "../firebase";
 import {
@@ -11,6 +10,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, Edit } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
 
 export default function GuestManager() {
   const [guests, setGuests] = useState([]);
@@ -19,6 +19,7 @@ export default function GuestManager() {
   const [propertyId, setPropertyId] = useState("");
   const [search, setSearch] = useState("");
   const [suggestions, setSuggestions] = useState([]);
+  const { toast } = useToast();
 
   // For editing
   const [editId, setEditId] = useState(null);
@@ -29,22 +30,54 @@ export default function GuestManager() {
   });
 
   const fetchGuests = async () => {
-    const snapshot = await getDocs(collection(db, "guests"));
-    const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    setGuests(data);
+    try {
+      const snapshot = await getDocs(collection(db, "guests"));
+      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      setGuests(data);
+    } catch (error) {
+      console.error("Error fetching guests:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load guests: " + error.message,
+        variant: "destructive"
+      });
+    }
   };
 
   const handleAddGuest = async () => {
-    if (!name || !phone || !propertyId) return;
-    await addDoc(collection(db, "guests"), {
-      name,
-      phone,
-      property_id: propertyId,
-    });
-    setName("");
-    setPhone("");
-    setPropertyId("");
-    fetchGuests();
+    if (!name || !phone || !propertyId) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all guest fields",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    try {
+      await addDoc(collection(db, "guests"), {
+        name,
+        phone,
+        property_id: propertyId,
+      });
+      
+      toast({
+        title: "Success",
+        description: "Guest added successfully"
+      });
+      
+      setName("");
+      setPhone("");
+      setPropertyId("");
+      fetchGuests();
+    } catch (error) {
+      console.error("Error adding guest:", error);
+      toast({
+        title: "Error",
+        description: "Failed to add guest: " + error.message,
+        variant: "destructive"
+      });
+    }
   };
 
   const handleEditClick = (guest) => {
@@ -122,21 +155,24 @@ export default function GuestManager() {
   return (
     <div className="p-6 space-y-6">
       <h2 className="text-2xl font-bold">Add New Guest</h2>
-      <div className="flex gap-4">
+      <div className="flex flex-col md:flex-row gap-4">
         <Input
           placeholder="Guest Name"
           value={name}
           onChange={(e) => setName(e.target.value)}
+          className="flex-1"
         />
         <Input
           placeholder="Phone Number"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
+          className="flex-1"
         />
         <Input
           placeholder="Property ID (e.g., PR1234)"
           value={propertyId}
           onChange={(e) => setPropertyId(e.target.value)}
+          className="flex-1"
         />
         <Button onClick={handleAddGuest}>Add</Button>
       </div>

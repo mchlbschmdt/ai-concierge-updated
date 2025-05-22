@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
@@ -18,13 +18,24 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
   });
   const [advancedOptions, setAdvancedOptions] = useState(false);
   const [oauthStep, setOauthStep] = useState(0);
+  const [userEmail, setUserEmail] = useState('');
+  
+  // Check for existing Gmail auth in localStorage
+  useEffect(() => {
+    const savedAuth = localStorage.getItem('gmail_auth');
+    const savedEmail = localStorage.getItem('gmail_email');
+    if (savedAuth === 'true' && savedEmail) {
+      setAuthenticated(true);
+      setUserEmail(savedEmail);
+    }
+  }, []);
 
-  // Simulated Gmail OAuth flow
+  // Simulated Gmail OAuth flow with localStorage persistence
   const handleAuthenticate = () => {
     setLoading(true);
     setOauthStep(1);
     
-    // Open a popup window for authentication (in a real implementation)
+    // Open a popup window for authentication
     const width = 600;
     const height = 700;
     const left = window.innerWidth / 2 - width / 2;
@@ -44,6 +55,10 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
     setTimeout(() => {
       setOauthStep(2);
       setTimeout(() => {
+        // Simulate user selecting email
+        const mockUserEmail = "yourname@gmail.com";
+        setUserEmail(mockUserEmail);
+        
         setOauthStep(3);
         
         if (authWindowObj) {
@@ -55,13 +70,31 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
           setAuthenticated(true);
           setLoading(false);
           setOauthStep(0);
+          
+          // Save authentication state to localStorage
+          localStorage.setItem('gmail_auth', 'true');
+          localStorage.setItem('gmail_email', mockUserEmail);
+          
           toast({
             title: "Gmail Connected",
-            description: "Your Gmail account has been successfully connected."
+            description: `Your Gmail account (${mockUserEmail}) has been successfully connected.`
           });
         }, 1000);
       }, 1500);
     }, 1500);
+  };
+  
+  // Function to logout/disconnect Gmail
+  const disconnectGmail = () => {
+    localStorage.removeItem('gmail_auth');
+    localStorage.removeItem('gmail_email');
+    setAuthenticated(false);
+    setUserEmail('');
+    
+    toast({
+      title: "Gmail Disconnected",
+      description: "Your Gmail account has been disconnected."
+    });
   };
   
   // Function to simulate canceling authentication
@@ -88,6 +121,15 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
   };
   
   const handleFetchEmails = () => {
+    if (!authenticated) {
+      toast({
+        title: "Not Authenticated",
+        description: "Please connect your Gmail account first.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     setLoading(true);
     
     // Simulate API request
@@ -171,17 +213,30 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
               )}
               {oauthStep === 2 && (
                 <div className="flex flex-col items-center">
-                  <p className="mb-2">Waiting for Google authentication...</p>
-                  <div className="border p-2 rounded w-full max-w-xs">
+                  <p className="mb-2">Select your Google account:</p>
+                  <div className="border p-2 rounded w-full max-w-xs mb-2 hover:bg-gray-100 cursor-pointer">
                     <div className="flex items-center justify-between">
-                      <span>Gmail Account</span>
-                      <ExternalLink size={16} />
+                      <div className="flex items-center">
+                        <div className="w-8 h-8 rounded-full bg-blue-500 mr-2 flex items-center justify-center text-white">
+                          Y
+                        </div>
+                        <span>yourname@gmail.com</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="border p-2 rounded w-full max-w-xs mb-3 hover:bg-gray-100 cursor-pointer">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <div className="w-8 h-8 rounded-full bg-green-500 mr-2 flex items-center justify-center text-white">
+                          +
+                        </div>
+                        <span>Use another account</span>
+                      </div>
                     </div>
                   </div>
                   <Button 
                     variant="outline" 
                     size="sm" 
-                    className="mt-2"
                     onClick={cancelAuthentication}
                   >
                     Cancel
@@ -219,7 +274,7 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
         <div className="space-y-4">
           <p className="text-sm text-green-600 flex items-center">
             <span className="inline-block w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-            Gmail account connected (youremail@gmail.com)
+            Gmail account connected ({userEmail})
           </p>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -278,7 +333,7 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
               variant="outline" 
               size="sm" 
               className="flex items-center gap-1"
-              onClick={() => setAuthenticated(false)}
+              onClick={disconnectGmail}
             >
               Switch account
             </Button>
