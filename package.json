@@ -11,6 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@radix-ui/react-select": "^2.2.5",
     "@radix-ui/react-tabs": "^1.0.4",
     "@shadcn/ui": "^0.0.4",
     "clsx": "^2.1.1",
