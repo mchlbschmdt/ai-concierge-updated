@@ -18,7 +18,7 @@ export default function Sidebar() {
   const location = useLocation();
 
   return (
-    <div className="h-screen w-64 bg-nav text-white flex flex-col shadow-sidebar z-20">
+    <div className="h-screen w-64 bg-slate-800 text-white flex flex-col shadow-md z-20">
       <div className="flex items-center gap-2 px-6 py-7 border-b border-white/20">
         <span className="text-2xl font-bold font-display text-white">🏨</span>
         <h1 className="text-lg font-bold font-display text-white tracking-tight">Hostly Ai Concierge</h1>
