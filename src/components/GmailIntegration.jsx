@@ -40,35 +40,33 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
     const left = window.innerWidth / 2 - width / 2;
     const top = window.innerHeight / 2 - height / 2;
     
-    // Since we can't actually connect to Gmail OAuth in this demo,
-    // we'll simulate the OAuth flow
-    
-    // First step - show loading
+    // Here we would typically open the OAuth popup
+    // Since we can't actually connect to Gmail OAuth API directly in this demo,
+    // we'll simulate the OAuth flow with timeouts
     setTimeout(() => {
       setOauthStep(2); // Move to account selection step
-      
-      // Set a timeout for the final authentication step
-      setTimeout(() => {
-        const mockUserEmail = "yourname@gmail.com";
-        setUserEmail(mockUserEmail);
-        setOauthStep(3); // Show success
-        
-        setTimeout(() => {
-          // Complete the authentication
-          setAuthenticated(true);
-          setLoading(false);
-          setOauthStep(0);
-          
-          localStorage.setItem('gmail_auth', 'true');
-          localStorage.setItem('gmail_email', mockUserEmail);
-          
-          toast({
-            title: "Gmail Connected",
-            description: `Your Gmail account (${mockUserEmail}) has been successfully connected.`
-          });
-        }, 1000);
-      }, 1500);
     }, 1500);
+  };
+  
+  // Function to complete Gmail authentication
+  const completeAuthentication = (email) => {
+    setUserEmail(email);
+    setOauthStep(3); // Show success
+    
+    setTimeout(() => {
+      // Complete the authentication
+      setAuthenticated(true);
+      setLoading(false);
+      setOauthStep(0);
+      
+      localStorage.setItem('gmail_auth', 'true');
+      localStorage.setItem('gmail_email', email);
+      
+      toast({
+        title: "Gmail Connected",
+        description: `Your Gmail account (${email}) has been successfully connected.`
+      });
+    }, 1000);
   };
   
   // Function to logout/disconnect Gmail
@@ -188,29 +186,28 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
                 <div className="flex flex-col items-center">
                   <p className="mb-2">Select your Google account:</p>
                   <div 
-                    onClick={() => {
-                      setOauthStep(3);
-                      setTimeout(() => {
-                        const mockUserEmail = "yourname@gmail.com";
-                        setUserEmail(mockUserEmail);
-                        setAuthenticated(true);
-                        setLoading(false);
-                        localStorage.setItem('gmail_auth', 'true');
-                        localStorage.setItem('gmail_email', mockUserEmail);
-                        toast({
-                          title: "Gmail Connected",
-                          description: `Your Gmail account (${mockUserEmail}) has been successfully connected.`
-                        });
-                      }, 1500);
-                    }}
+                    onClick={() => completeAuthentication("user@gmail.com")}
                     className="border p-2 rounded w-full max-w-xs mb-2 hover:bg-gray-100 cursor-pointer"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center">
                         <div className="w-8 h-8 rounded-full bg-blue-500 mr-2 flex items-center justify-center text-white">
-                          Y
+                          U
                         </div>
-                        <span>yourname@gmail.com</span>
+                        <span>user@gmail.com</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div 
+                    onClick={() => completeAuthentication("work@gmail.com")}
+                    className="border p-2 rounded w-full max-w-xs mb-2 hover:bg-gray-100 cursor-pointer"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <div className="w-8 h-8 rounded-full bg-red-500 mr-2 flex items-center justify-center text-white">
+                          W
+                        </div>
+                        <span>work@gmail.com</span>
                       </div>
                     </div>
                   </div>

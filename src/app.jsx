@@ -8,6 +8,7 @@ import AddGuest from "./AddGuest";
 import AddProperty from "./pages/AddProperty";
 import GuestManager from "./pages/GuestManager";
 import PropertyManager from "./pages/PropertyManager";
+import EmailManagement from "./pages/EmailManagement";
 import Layout from "./components/Layout";
 
 function App() {
@@ -22,6 +23,7 @@ function App() {
       <Route path="/dashboard/add-property" element={<Layout><AddProperty /></Layout>} />
       <Route path="/dashboard/guests-manager" element={<Layout><GuestManager /></Layout>} />
       <Route path="/dashboard/properties-manager" element={<Layout><PropertyManager /></Layout>} />
+      <Route path="/dashboard/email-management" element={<Layout><EmailManagement /></Layout>} />
     </Routes>
   );
 }
