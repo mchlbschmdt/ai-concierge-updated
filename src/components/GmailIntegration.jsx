@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
-import { Mail, Loader2, Calendar, Download, ExternalLink } from "lucide-react";
+import { Mail, Loader2, Calendar, Download } from "lucide-react";
 
 export default function GmailIntegration({ propertyId, onMessagesImported }) {
   const { toast } = useToast();
@@ -30,39 +30,22 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
     }
   }, []);
 
-  // Simulated Gmail OAuth flow with localStorage persistence
+  // Gmail OAuth flow with localStorage persistence
   const handleAuthenticate = () => {
     setLoading(true);
     setOauthStep(1);
     
-    // Open a popup window for authentication
-    const width = 600;
-    const height = 700;
-    const left = window.innerWidth / 2 - width / 2;
-    const top = window.innerHeight / 2 - height / 2;
-    
-    // In a real implementation, this would be a real OAuth URL
-    const authUrl = "https://accounts.google.com/o/oauth2/auth";
-    const authWindowObj = window.open(
-      authUrl,
-      "Gmail Authentication",
-      `width=${width},height=${height},left=${left},top=${top}`
-    );
-    
-    setAuthWindow(authWindowObj);
-    
-    // Simulate OAuth authentication steps
+    // This is a mock OAuth for demo purposes
+    // In a production app, you would use the Google OAuth API
     setTimeout(() => {
       setOauthStep(2);
       setTimeout(() => {
-        // Simulate user selecting email
         const mockUserEmail = "yourname@gmail.com";
         setUserEmail(mockUserEmail);
-        
         setOauthStep(3);
         
-        if (authWindowObj) {
-          authWindowObj.close();
+        if (authWindow) {
+          authWindow.close();
           setAuthWindow(null);
         }
         
@@ -71,7 +54,6 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
           setLoading(false);
           setOauthStep(0);
           
-          // Save authentication state to localStorage
           localStorage.setItem('gmail_auth', 'true');
           localStorage.setItem('gmail_email', mockUserEmail);
           
@@ -97,7 +79,7 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
     });
   };
   
-  // Function to simulate canceling authentication
+  // Function to cancel authentication
   const cancelAuthentication = () => {
     if (authWindow) {
       authWindow.close();
@@ -154,16 +136,6 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
           subject: 'New message from Sarah',
           content: 'Is the pool heated in October? And do you provide beach towels?',
           timestamp: new Date(Date.now() - 86400000).toISOString(), // Yesterday
-          source: 'gmail_import'
-        },
-        {
-          id: 'email3',
-          sender: 'Airbnb',
-          sender_email: 'express@airbnb.com',
-          receiver: 'Host',
-          subject: 'Booking confirmed',
-          content: 'Your booking for Property #123 has been confirmed for July 15-20.',
-          timestamp: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
           source: 'gmail_import'
         }
       ];

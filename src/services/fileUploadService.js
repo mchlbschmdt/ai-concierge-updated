@@ -1,6 +1,6 @@
 
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { doc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { doc, updateDoc, arrayUnion, arrayRemove, getDoc } from 'firebase/firestore';
 import { db, storage } from '../firebase';
 import { FILE_EXTENSIONS } from '../utils/fileConstants';
 
@@ -66,4 +66,48 @@ export async function uploadFileToProperty(file, propertyId, onProgressUpdate) {
   onProgressUpdate(100);
   
   return fileData;
+}
+
+export async function deleteFileFromProperty(propertyId, filePath) {
+  if (!propertyId || !filePath) {
+    throw new Error("Property ID and file path are required");
+  }
+  
+  console.log("Deleting file:", filePath, "from property:", propertyId);
+  
+  // Create a reference to the file in storage
+  const storageRef = ref(storage, filePath);
+  
+  try {
+    // Delete the file from storage
+    await deleteObject(storageRef);
+    console.log("File deleted from storage");
+    
+    // Get the property document to find the file data
+    const propertyDocRef = doc(db, "properties", propertyId);
+    const propertyDoc = await getDoc(propertyDocRef);
+    
+    if (!propertyDoc.exists()) {
+      throw new Error("Property not found");
+    }
+    
+    // Find the file data in the property document
+    const propertyData = propertyDoc.data();
+    const fileData = (propertyData.files || []).find(f => f.path === filePath);
+    
+    if (!fileData) {
+      console.warn("File data not found in property document");
+      return;
+    }
+    
+    // Remove the file data from the property document
+    await updateDoc(propertyDocRef, {
+      files: arrayRemove(fileData)
+    });
+    
+    console.log("File metadata removed from property document");
+  } catch (error) {
+    console.error("Error deleting file:", error);
+    throw error;
+  }
 }

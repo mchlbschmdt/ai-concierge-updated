@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/use-toast";
+import { Loader2, Save } from "lucide-react";
 
 export default function AddProperty() {
   const navigate = useNavigate();
@@ -45,6 +46,11 @@ export default function AddProperty() {
 
       // Create a timestamped property code if one isn't provided
       const propertyCode = form.code || `PROP-${Date.now()}`;
+      
+      console.log("Saving property with data:", {
+        ...form,
+        code: propertyCode
+      });
       
       // Add document to Firestore with error handling
       const docRef = await addDoc(collection(db, 'properties'), {
@@ -161,10 +167,20 @@ export default function AddProperty() {
         
         <Button 
           type="submit" 
-          className="w-full"
+          className="w-full flex items-center justify-center gap-2"
           disabled={loading}
         >
-          {loading ? "Adding Property..." : "Add Property"}
+          {loading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Adding Property...
+            </>
+          ) : (
+            <>
+              <Save className="h-4 w-4" />
+              Save Property
+            </>
+          )}
         </Button>
       </form>
     </div>

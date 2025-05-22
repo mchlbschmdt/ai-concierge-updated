@@ -1,12 +1,12 @@
 
 import React, { useEffect, useState } from 'react';
 import { Link } from "react-router-dom";
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import PropertyCard from '../components/PropertyCard';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyProperties from '../components/EmptyProperties';
-import { fetchProperties, updateProperty } from '../services/propertyService';
+import { fetchProperties, updateProperty, deleteProperty } from '../services/propertyService';
 
 export default function PropertyManager() {
   const { toast } = useToast();
@@ -57,6 +57,27 @@ export default function PropertyManager() {
     }
   };
   
+  const handlePropertyDelete = async (propertyId) => {
+    try {
+      await deleteProperty(propertyId);
+      
+      // Update local state
+      setProperties(prev => prev.filter(p => p.id !== propertyId));
+      
+      toast({
+        title: "Success",
+        description: "Property deleted successfully"
+      });
+    } catch (error) {
+      console.error("Error deleting property:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete property",
+        variant: "destructive"
+      });
+    }
+  };
+  
   const handleFileAdded = (propertyId, fileData) => {
     // Update the local state to include the new file
     setProperties(prev => prev.map(p => {
@@ -65,6 +86,18 @@ export default function PropertyManager() {
       return {
         ...p,
         files: [...(p.files || []), fileData]
+      };
+    }));
+  };
+  
+  const handleFileDeleted = (propertyId, filePath) => {
+    // Update the local state to remove the deleted file
+    setProperties(prev => prev.map(p => {
+      if (p.id !== propertyId) return p;
+      
+      return {
+        ...p,
+        files: (p.files || []).filter(file => file.path !== filePath)
       };
     }));
   };
@@ -103,7 +136,9 @@ export default function PropertyManager() {
             key={property.id}
             property={property}
             onUpdate={handlePropertyUpdate}
+            onDelete={handlePropertyDelete}
             onFileAdded={handleFileAdded}
+            onFileDeleted={handleFileDeleted}
             onMessagesAdded={handleMessagesAdded}
           />
         ))
