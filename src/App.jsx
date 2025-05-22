@@ -13,6 +13,7 @@ import Properties from "./pages/Properties";
 import SmartInsights from "./pages/SmartInsights";
 import AddProperty from './pages/AddProperty';
 import AddGuest from './AddGuest';
+import EmailManagement from './pages/EmailManagement';
 import Layout from "./components/Layout";
 import { Toaster } from "@/components/ui/toaster";
 
@@ -105,6 +106,14 @@ export default function App() {
           element={
             <Layout>
               <SmartInsights />
+            </Layout>
+          }
+        />
+        <Route
+          path="/dashboard/email-management"
+          element={
+            <Layout>
+              <EmailManagement />
             </Layout>
           }
         />
