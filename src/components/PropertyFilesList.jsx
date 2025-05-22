@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { FileText, Trash2 } from 'lucide-react';
+import { FileText, Trash2, Loader2 } from 'lucide-react';
 import { deleteFileFromProperty } from '../services/fileUploadService';
 import { useToast } from "@/components/ui/use-toast";
 
@@ -57,8 +57,12 @@ export default function PropertyFilesList({ files = [], propertyId, onFileDelete
               onClick={() => handleDeleteFile(file)}
               disabled={deletingFile === file.path}
               className="text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-gray-100"
+              title="Delete file"
             >
-              <Trash2 size={14} />
+              {deletingFile === file.path ? 
+                <Loader2 size={14} className="animate-spin" /> : 
+                <Trash2 size={14} />
+              }
             </button>
           </div>
         </div>

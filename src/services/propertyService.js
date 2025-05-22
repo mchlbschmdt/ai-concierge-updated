@@ -44,6 +44,7 @@ export async function deleteProperty(propertyId) {
     
     // Delete all files associated with the property from storage
     const filesRef = ref(storage, `properties/${propertyId}`);
+    
     try {
       const filesList = await listAll(filesRef);
       

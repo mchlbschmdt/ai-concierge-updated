@@ -9,7 +9,7 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
-  const [authWindow, setAuthWindow] = useState(null);
+  const [oauthStep, setOauthStep] = useState(0);
   const [filters, setFilters] = useState({
     from: 'express@airbnb.com',
     subject: '',
@@ -17,7 +17,6 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
     maxResults: 10
   });
   const [advancedOptions, setAdvancedOptions] = useState(false);
-  const [oauthStep, setOauthStep] = useState(0);
   const [userEmail, setUserEmail] = useState('');
   
   // Check for existing Gmail auth in localStorage
@@ -35,21 +34,27 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
     setLoading(true);
     setOauthStep(1);
     
-    // This is a mock OAuth for demo purposes
-    // In a production app, you would use the Google OAuth API
+    // Open a popup window for OAuth authentication
+    const width = 600;
+    const height = 600;
+    const left = window.innerWidth / 2 - width / 2;
+    const top = window.innerHeight / 2 - height / 2;
+    
+    // Since we can't actually connect to Gmail OAuth in this demo,
+    // we'll simulate the OAuth flow
+    
+    // First step - show loading
     setTimeout(() => {
-      setOauthStep(2);
+      setOauthStep(2); // Move to account selection step
+      
+      // Set a timeout for the final authentication step
       setTimeout(() => {
         const mockUserEmail = "yourname@gmail.com";
         setUserEmail(mockUserEmail);
-        setOauthStep(3);
-        
-        if (authWindow) {
-          authWindow.close();
-          setAuthWindow(null);
-        }
+        setOauthStep(3); // Show success
         
         setTimeout(() => {
+          // Complete the authentication
           setAuthenticated(true);
           setLoading(false);
           setOauthStep(0);
@@ -81,10 +86,6 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
   
   // Function to cancel authentication
   const cancelAuthentication = () => {
-    if (authWindow) {
-      authWindow.close();
-      setAuthWindow(null);
-    }
     setOauthStep(0);
     setLoading(false);
     
@@ -116,7 +117,7 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
     
     // Simulate API request
     setTimeout(() => {
-      // Mock email data
+      // Mock email data for demonstration
       const mockEmails = [
         {
           id: 'email1',
@@ -186,7 +187,24 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
               {oauthStep === 2 && (
                 <div className="flex flex-col items-center">
                   <p className="mb-2">Select your Google account:</p>
-                  <div className="border p-2 rounded w-full max-w-xs mb-2 hover:bg-gray-100 cursor-pointer">
+                  <div 
+                    onClick={() => {
+                      setOauthStep(3);
+                      setTimeout(() => {
+                        const mockUserEmail = "yourname@gmail.com";
+                        setUserEmail(mockUserEmail);
+                        setAuthenticated(true);
+                        setLoading(false);
+                        localStorage.setItem('gmail_auth', 'true');
+                        localStorage.setItem('gmail_email', mockUserEmail);
+                        toast({
+                          title: "Gmail Connected",
+                          description: `Your Gmail account (${mockUserEmail}) has been successfully connected.`
+                        });
+                      }, 1500);
+                    }}
+                    className="border p-2 rounded w-full max-w-xs mb-2 hover:bg-gray-100 cursor-pointer"
+                  >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center">
                         <div className="w-8 h-8 rounded-full bg-blue-500 mr-2 flex items-center justify-center text-white">

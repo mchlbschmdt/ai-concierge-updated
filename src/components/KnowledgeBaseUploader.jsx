@@ -4,10 +4,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { Loader2, Upload } from "lucide-react";
-import { ALLOWED_FILE_TYPES } from '../utils/fileConstants';
 import FilePreview from './FilePreview';
 import UploadProgress from './UploadProgress';
 import { uploadFileToProperty } from '../services/fileUploadService';
+
+const ALLOWED_FILE_TYPES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+  'text/csv',
+  'application/json',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+];
 
 export default function KnowledgeBaseUploader({ propertyId, onFileAdded }) {
   const { toast } = useToast();
@@ -67,6 +75,15 @@ export default function KnowledgeBaseUploader({ propertyId, onFileAdded }) {
   };
 
   const handleUpload = async () => {
+    if (!propertyId) {
+      toast({
+        title: "Error",
+        description: "Property ID is required for file upload",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     try {
       setLoading(true);
       
@@ -131,7 +148,7 @@ export default function KnowledgeBaseUploader({ propertyId, onFileAdded }) {
       
       <Button 
         onClick={handleUpload} 
-        disabled={!file || loading}
+        disabled={!file || loading || !propertyId}
         className="w-full"
       >
         {loading ? (

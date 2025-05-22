@@ -35,12 +35,13 @@ export default function AddProperty() {
       setLoading(true);
       
       // Validate required fields
-      if (!form.property_name || !form.code || !form.address) {
+      if (!form.property_name || !form.address) {
         toast({
           title: "Missing Information",
           description: "Please fill in all required fields.",
           variant: "destructive"
         });
+        setLoading(false);
         return;
       }
 

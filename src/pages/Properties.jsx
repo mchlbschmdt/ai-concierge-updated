@@ -2,31 +2,37 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Plus, Search as SearchIcon } from "lucide-react";
+import { fetchProperties } from "../services/propertyService";
+import LoadingSpinner from "../components/LoadingSpinner";
+import { useToast } from "@/components/ui/use-toast";
 
 export default function Properties() {
   const [properties, setProperties] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [suggestions, setSuggestions] = useState([]);
+  const { toast } = useToast();
 
   useEffect(() => {
-    // For demo purposes, use mock data
-    const mockProperties = [
-      {
-        code: "PROP001",
-        address: "123 Main St, San Francisco, CA",
-        user_id: "user123",
-        knowledge_base: "This property features 3 bedrooms, 2 bathrooms, and a full kitchen."
-      },
-      {
-        code: "PROP002",
-        address: "456 Market St, San Francisco, CA",
-        user_id: "user456",
-        knowledge_base: "Luxury condo with pool access and gym facilities."
+    async function loadProperties() {
+      try {
+        setLoading(true);
+        const data = await fetchProperties();
+        setProperties(data);
+      } catch (error) {
+        console.error("Error loading properties:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load properties",
+          variant: "destructive"
+        });
+      } finally {
+        setLoading(false);
       }
-    ];
+    }
     
-    setProperties(mockProperties);
-  }, []);
+    loadProperties();
+  }, [toast]);
 
   useEffect(() => {
     if (search.trim() === '') {
@@ -38,7 +44,8 @@ export default function Properties() {
     const matches = properties.filter(property =>
       (property.code || "").toLowerCase().includes(search.toLowerCase()) ||
       (property.address || "").toLowerCase().includes(search.toLowerCase()) ||
-      (property.knowledgeBase || property.knowledge_base || "").toLowerCase().includes(search.toLowerCase())
+      (property.property_name || "").toLowerCase().includes(search.toLowerCase()) ||
+      (property.knowledge_base || "").toLowerCase().includes(search.toLowerCase())
     );
     
     // Get unique suggestion values across different fields
@@ -50,6 +57,9 @@ export default function Properties() {
       if ((property.address || "").toLowerCase().includes(search.toLowerCase())) {
         uniqueSuggestions.add(property.address);
       }
+      if ((property.property_name || "").toLowerCase().includes(search.toLowerCase())) {
+        uniqueSuggestions.add(property.property_name);
+      }
     });
     
     setSuggestions(Array.from(uniqueSuggestions).slice(0, 5)); // Limit to 5 suggestions
@@ -58,13 +68,25 @@ export default function Properties() {
   const filtered = properties.filter(property =>
     (property.code || "").toLowerCase().includes(search.toLowerCase()) ||
     (property.address || "").toLowerCase().includes(search.toLowerCase()) ||
-    (property.knowledgeBase || property.knowledge_base || "").toLowerCase().includes(search.toLowerCase())
+    (property.property_name || "").toLowerCase().includes(search.toLowerCase()) ||
+    (property.knowledge_base || "").toLowerCase().includes(search.toLowerCase())
   );
 
   const handleSuggestionSelect = (suggestion) => {
     setSearch(suggestion);
     setSuggestions([]);
   };
+
+  if (loading) {
+    return (
+      <div className="container mx-auto p-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+          <h2 className="text-2xl font-bold">Properties</h2>
+        </div>
+        <LoadingSpinner />
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto p-4">
@@ -104,19 +126,31 @@ export default function Properties() {
           </Link>
         </div>
       </div>
-      {filtered.map(property => (
-        <div key={property.code} className="border p-4 mb-2 bg-white shadow rounded">
-          <p><strong>Code:</strong> {property.code}</p>
-          <p><strong>Address:</strong> {property.address}</p>
-          <p><strong>User Assigned:</strong> {property.user_id}</p>
-          <div>
-            <strong>Knowledge Base:</strong>
-            <div className="overflow-auto bg-gray-100 p-2 rounded border mt-1 max-h-36 text-sm whitespace-pre-line">
-              {property.knowledgeBase || property.knowledge_base}
+
+      {properties.length === 0 ? (
+        <div className="text-center py-12">
+          <p className="text-gray-500">No properties found. Add your first property to get started.</p>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-12">
+          <p className="text-gray-500">No properties match your search criteria.</p>
+        </div>
+      ) : (
+        filtered.map(property => (
+          <div key={property.id || property.code} className="border p-4 mb-4 bg-white shadow rounded">
+            <h3 className="text-xl font-semibold text-primary">{property.property_name}</h3>
+            <p><strong>Code:</strong> {property.code}</p>
+            <p><strong>Address:</strong> {property.address}</p>
+            <p><strong>Files:</strong> {property.files?.length || 0}</p>
+            <div>
+              <strong>Knowledge Base:</strong>
+              <div className="overflow-auto bg-gray-100 p-2 rounded border mt-1 max-h-36 text-sm whitespace-pre-line">
+                {property.knowledge_base}
+              </div>
             </div>
           </div>
-        </div>
-      ))}
+        ))
+      )}
     </div>
   );
 }
