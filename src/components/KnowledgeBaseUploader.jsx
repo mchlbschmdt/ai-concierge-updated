@@ -84,17 +84,28 @@ export default function KnowledgeBaseUploader({ propertyId, onFileAdded }) {
   };
 
   const handleUpload = async () => {
-    if (!file || !propertyId) return;
+    if (!file || !propertyId) {
+      console.error("Missing file or propertyId:", { file, propertyId });
+      toast({
+        title: "Error",
+        description: "File or property ID missing.",
+        variant: "destructive"
+      });
+      return;
+    }
     
     try {
       setLoading(true);
       setUploadProgress(10);
+      
+      console.log("Starting upload process for property:", propertyId);
       
       // Reference to property
       const propertyDocRef = doc(db, "properties", propertyId);
       const propertyDoc = await getDoc(propertyDocRef);
       
       if (!propertyDoc.exists()) {
+        console.error("Property not found:", propertyId);
         toast({
           title: "Error",
           description: "Property not found.",
@@ -108,17 +119,22 @@ export default function KnowledgeBaseUploader({ propertyId, onFileAdded }) {
       // Create a reference to the file location in Firebase Storage
       const fileExtension = FILE_EXTENSIONS[file.type] || '';
       const timestamp = Date.now();
-      const storageRef = ref(storage, `properties/${propertyId}/knowledge_base/${timestamp}_${file.name}`);
+      const storagePath = `properties/${propertyId}/knowledge_base/${timestamp}_${file.name}`;
+      const storageRef = ref(storage, storagePath);
+      
+      console.log("Uploading file to path:", storagePath);
       
       setUploadProgress(40);
       
       // Upload file
-      await uploadBytes(storageRef, file);
+      const uploadResult = await uploadBytes(storageRef, file);
+      console.log("File uploaded successfully:", uploadResult);
       
       setUploadProgress(70);
       
       // Get download URL
       const downloadURL = await getDownloadURL(storageRef);
+      console.log("File download URL:", downloadURL);
       
       setUploadProgress(90);
       
@@ -129,12 +145,14 @@ export default function KnowledgeBaseUploader({ propertyId, onFileAdded }) {
         size: file.size,
         uploaded_at: new Date(),
         url: downloadURL,
-        path: `properties/${propertyId}/knowledge_base/${timestamp}_${file.name}`
+        path: storagePath
       };
       
       await updateDoc(propertyDocRef, {
         files: arrayUnion(fileData)
       });
+      
+      console.log("File metadata added to property document");
       
       setUploadProgress(100);
       

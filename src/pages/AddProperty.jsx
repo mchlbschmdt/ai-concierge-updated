@@ -47,13 +47,15 @@ export default function AddProperty() {
       const propertyCode = form.code || `PROP-${Date.now()}`;
       
       // Add document to Firestore with error handling
-      await addDoc(collection(db, 'properties'), {
+      const docRef = await addDoc(collection(db, 'properties'), {
         ...form,
         code: propertyCode,
         created_at: new Date(),
         files: [],
         messages: []
       });
+      
+      console.log("Property document written with ID: ", docRef.id);
       
       toast({
         title: "Success!",
