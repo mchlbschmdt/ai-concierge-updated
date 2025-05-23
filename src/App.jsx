@@ -8,12 +8,14 @@ import Properties from "./pages/Properties";
 import MessagesDashboard from "./pages/MessagesDashboard";
 import FaqEditor from "./pages/FaqEditor";
 import SmartInsights from "./pages/SmartInsights";
-import PropertyAnalytics from "./pages/PropertyAnalytics"; // Add import for PropertyAnalytics
+import PropertyAnalytics from "./pages/PropertyAnalytics";
 import AddProperty from './pages/AddProperty';
 import AddGuest from './AddGuest';
 import EmailManagement from './pages/EmailManagement';
 import Layout from "./components/Layout";
+import GoogleAuthCallback from "./pages/GoogleAuthCallback";
 import { Toaster } from "@/components/ui/toaster";
+import Login from "./Login";
 
 export default function App() {
   return (
@@ -21,6 +23,7 @@ export default function App() {
       <Toaster />
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" />} />
+        <Route path="/login" element={<Login />} />
         <Route path="/dashboard" element={<Layout><Dashboard /></Layout>} />
         <Route path="/dashboard/guests-manager" element={<Layout><GuestManager /></Layout>} />
         <Route path="/dashboard/properties-manager" element={<Layout><PropertyManager /></Layout>} />
@@ -32,6 +35,7 @@ export default function App() {
         <Route path="/dashboard/add-guest" element={<Layout><AddGuest /></Layout>} />
         <Route path="/dashboard/email-management" element={<Layout><EmailManagement /></Layout>} />
         <Route path="/dashboard/analytics" element={<Layout><PropertyAnalytics /></Layout>} />
+        <Route path="/auth/google/callback" element={<GoogleAuthCallback />} />
       </Routes>
     </>
   );
