@@ -36,19 +36,31 @@ export default function GmailIntegration({ onEmailsReceived = () => {} }) {
     setLoading(true);
     
     try {
-      // Mock the authentication process
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // In a real implementation, we would open the OAuth window here
+      // For demonstration, we'll simulate OAuth with a confirmation dialog
+      const confirmed = window.confirm(`Do you want to authenticate ${emailAddress} with Gmail? (This is a simulation of the OAuth window)`);
       
-      // Store authentication state in localStorage
-      localStorage.setItem('gmail_authenticated', 'true');
-      localStorage.setItem('gmail_email', emailAddress);
-      
-      setIsAuthenticated(true);
-      
-      toast({
-        title: "Success",
-        description: `Connected to Gmail account: ${emailAddress}`
-      });
+      if (confirmed) {
+        // Mock successful authentication
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Store authentication state in localStorage
+        localStorage.setItem('gmail_authenticated', 'true');
+        localStorage.setItem('gmail_email', emailAddress);
+        
+        setIsAuthenticated(true);
+        
+        toast({
+          title: "Success",
+          description: `Connected to Gmail account: ${emailAddress}`
+        });
+      } else {
+        toast({
+          title: "Authentication Cancelled",
+          description: "Gmail connection was cancelled",
+          variant: "destructive"
+        });
+      }
     } catch (error) {
       console.error("Gmail authentication error:", error);
       toast({

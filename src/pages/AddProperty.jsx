@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -125,8 +124,6 @@ export default function AddProperty() {
         
         // Add file to property
         if (fileResult.success) {
-          // In a real app, we would update the property with the new file
-          // For now, we'll just show a success message
           console.log("File added to property");
         }
       }
@@ -136,8 +133,9 @@ export default function AddProperty() {
         description: "Property has been successfully added.",
       });
       
-      // Redirect to property manager
-      navigate("/dashboard/properties");
+      // Force a reload of the properties page by using navigate with a timestamp
+      // This ensures the properties page will refresh its data when we return to it
+      navigate("/dashboard/properties?t=" + Date.now());
     } catch (error) {
       console.error("Error adding property:", error);
       toast({

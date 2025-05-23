@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Plus, Search as SearchIcon, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { fetchProperties } from "../services/propertyService";
@@ -11,6 +11,7 @@ export default function Properties() {
   const [search, setSearch] = useState("");
   const [suggestions, setSuggestions] = useState([]);
   const { toast } = useToast();
+  const location = useLocation();
 
   useEffect(() => {
     async function loadProperties() {
@@ -32,7 +33,10 @@ export default function Properties() {
     }
     
     loadProperties();
-  }, [toast]);
+    
+    // This will force a reload when we navigate back to this page
+    // after adding a property
+  }, [toast, location.key]); // Adding location.key triggers rerender on navigation
 
   useEffect(() => {
     if (search.trim() === '') {
@@ -106,7 +110,6 @@ export default function Properties() {
             />
             <SearchIcon className="absolute left-2 top-2.5 text-gray-400" size={18} />
             
-            {/* Suggestions dropdown */}
             {suggestions.length > 0 && (
               <div className="absolute left-0 right-0 mt-1 bg-white border rounded shadow-lg z-10">
                 {suggestions.map((suggestion, index) => (
