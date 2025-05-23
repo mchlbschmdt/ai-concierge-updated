@@ -1,12 +1,15 @@
+
 import { useState, useEffect } from "react";
 import { Link, useLocation, useSearchParams, useNavigate } from "react-router-dom";
 import { Plus, Search as SearchIcon, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { fetchProperties } from "../services/propertyService";
+import { Button } from "@/components/ui/button";
 
 export default function Properties() {
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [search, setSearch] = useState("");
   const [suggestions, setSuggestions] = useState([]);
   const { toast } = useToast();
@@ -23,14 +26,16 @@ export default function Properties() {
     async function loadProperties() {
       try {
         setLoading(true);
+        setError(null);
         const propertiesData = await fetchProperties();
         console.log("Properties loaded:", propertiesData);
         setProperties(propertiesData);
       } catch (error) {
         console.error("Error loading properties:", error);
+        setError(error.message || "Failed to load properties");
         toast({
           title: "Error",
-          description: "Failed to load properties. " + error.message,
+          description: "Failed to load properties. " + (error.message || "Unknown error"),
           variant: "destructive"
         });
       } finally {
@@ -100,6 +105,22 @@ export default function Properties() {
         <div className="flex justify-center items-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <span className="ml-2">Loading properties...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto p-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+          <h2 className="text-2xl font-bold">Properties</h2>
+        </div>
+        <div className="flex justify-center items-center h-64 flex-col">
+          <div className="text-red-500 mb-2">Error: {error}</div>
+          <Button onClick={() => window.location.reload()} variant="outline">
+            Try Again
+          </Button>
         </div>
       </div>
     );
