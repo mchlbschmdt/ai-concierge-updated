@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from "react";
 import { Link, useLocation, useSearchParams, useNavigate } from "react-router-dom";
-import { Plus, Search as SearchIcon, Loader2 } from "lucide-react";
+import { Plus, Search as SearchIcon, Loader2, AlertCircle } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { fetchProperties } from "../services/propertyService";
 import { Button } from "@/components/ui/button";
@@ -21,21 +21,46 @@ export default function Properties() {
   const refreshTimestamp = searchParams.get('t');
 
   useEffect(() => {
+    console.log("Properties component mounted, path:", location.pathname);
     console.log("Loading properties, refresh trigger:", location.key, refreshTimestamp);
     
     async function loadProperties() {
       try {
         setLoading(true);
         setError(null);
+        console.log("Fetching properties data...");
         const propertiesData = await fetchProperties();
         console.log("Properties loaded:", propertiesData);
-        setProperties(Array.isArray(propertiesData) ? propertiesData : []);
+        
+        // Ensure we have an array, even if API returns null or undefined
+        if (!propertiesData) {
+          console.warn("Properties data is null or undefined");
+          setProperties([]);
+          toast({
+            title: "Notice",
+            description: "No properties found or could not connect to database.",
+            variant: "default"
+          });
+        } else {
+          setProperties(Array.isArray(propertiesData) ? propertiesData : []);
+        }
       } catch (error) {
         console.error("Error loading properties:", error);
-        setError(error.message || "Failed to load properties");
+        // Handle storage errors specifically
+        const errorMessage = error.message || "Failed to load properties";
+        const isStorageError = errorMessage.includes("storage") || 
+                              errorMessage.includes("space") ||
+                              errorMessage.includes("quota");
+        
+        setError(isStorageError 
+          ? "Browser storage is full. Please clear some space and try again." 
+          : errorMessage);
+          
         toast({
           title: "Error",
-          description: "Failed to load properties. " + (error.message || "Unknown error"),
+          description: isStorageError 
+            ? "Browser storage issue detected. Try clearing your browser cache." 
+            : `Failed to load properties. ${errorMessage}`,
           variant: "destructive"
         });
       } finally {
@@ -115,12 +140,25 @@ export default function Properties() {
       <div className="container mx-auto p-4">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
           <h2 className="text-2xl font-bold">Properties</h2>
+          <Button
+            onClick={handleAddProperty}
+            className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg shadow hover:bg-primary/90 transition"
+          >
+            <Plus size={18} /> Add Property
+          </Button>
         </div>
         <div className="flex justify-center items-center h-64 flex-col">
-          <div className="text-red-500 mb-2">Error: {error}</div>
+          <div className="flex items-center justify-center mb-4 text-red-500">
+            <AlertCircle className="mr-2" />
+            <span className="font-medium">Error:</span>
+          </div>
+          <div className="text-red-500 mb-4 text-center max-w-md">{error}</div>
           <Button onClick={() => window.location.reload()} variant="outline">
             Try Again
           </Button>
+          <div className="mt-4 text-sm text-gray-500 text-center max-w-md">
+            If this error persists, try clearing your browser cache or using a different browser.
+          </div>
         </div>
       </div>
     );

@@ -18,14 +18,13 @@ import { Toaster } from "@/components/ui/toaster";
 import Login from "./Login";
 
 export default function App() {
-  // Add a console.log to verify routes are being registered
   console.log("App component rendering with routes");
   
   return (
     <>
       <Toaster />
       <Routes>
-        <Route path="/" element={<Navigate to="/dashboard" />} />
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/login" element={<Login />} />
         <Route path="/dashboard" element={<Layout><Dashboard /></Layout>} />
         <Route path="/dashboard/guests-manager" element={<Layout><GuestManager /></Layout>} />
