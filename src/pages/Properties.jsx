@@ -164,6 +164,13 @@ export default function Properties() {
     );
   }
 
+  const filtered = properties.filter(property =>
+    (property.code || "").toLowerCase().includes(search.toLowerCase()) ||
+    (property.address || "").toLowerCase().includes(search.toLowerCase()) ||
+    (property.property_name || "").toLowerCase().includes(search.toLowerCase()) ||
+    (property.knowledge_base || "").toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
     <div className="container mx-auto p-4">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
