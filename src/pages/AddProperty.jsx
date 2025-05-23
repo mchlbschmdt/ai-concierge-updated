@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -133,9 +134,8 @@ export default function AddProperty() {
         description: "Property has been successfully added.",
       });
       
-      // Fix: Navigate to properties-manager instead of properties since that's the current route
-      // Also force a refresh with timestamp parameter
-      navigate("/dashboard/properties-manager?t=" + Date.now());
+      // Navigate to the correct properties page with a timestamp to force refresh
+      navigate("/dashboard/properties?t=" + Date.now());
     } catch (error) {
       console.error("Error adding property:", error);
       toast({

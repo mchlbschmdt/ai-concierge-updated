@@ -36,12 +36,19 @@ export default function GmailIntegration({ onEmailsReceived = () => {} }) {
     setLoading(true);
     
     try {
-      // Create a more visible authentication popup window
-      // This simulates an OAuth window better than a confirm dialog
-      const authWindow = window.open('', 'Gmail Authentication', 'width=600,height=600');
+      // Force create a popup window instead of using window.open which can be blocked
+      const width = 600;
+      const height = 600;
+      const left = window.screenX + (window.outerWidth - width) / 2;
+      const top = window.screenY + (window.outerHeight - height) / 2;
+      
+      const authWindow = window.open(
+        'about:blank',
+        'Gmail Authentication', 
+        `width=${width},height=${height},left=${left},top=${top}`
+      );
       
       if (!authWindow) {
-        // If popup is blocked
         toast({
           title: "Popup Blocked",
           description: "Please allow popups for this site to authenticate with Gmail",
@@ -56,18 +63,25 @@ export default function GmailIntegration({ onEmailsReceived = () => {} }) {
           <head>
             <title>Gmail Authentication</title>
             <style>
-              body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
-              .btn { padding: 10px 20px; margin: 10px; cursor: pointer; border: none; border-radius: 4px; }
-              .confirm { background: #4CAF50; color: white; }
-              .cancel { background: #f44336; color: white; }
+              body { font-family: Arial, sans-serif; padding: 20px; text-align: center; background-color: #f9f9f9; }
+              .container { max-width: 500px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+              .logo { font-size: 24px; font-weight: bold; color: #4285F4; margin-bottom: 20px; }
+              .btn { padding: 12px 24px; margin: 10px; cursor: pointer; border: none; border-radius: 4px; font-weight: bold; }
+              .confirm { background: #4285F4; color: white; }
+              .cancel { background: #f1f1f1; color: #333; }
               h2 { color: #333; }
+              .email { font-weight: bold; color: #4285F4; }
             </style>
           </head>
           <body>
-            <h2>Gmail Authentication</h2>
-            <p>Do you want to connect ${emailAddress} to the application?</p>
-            <button class="btn confirm" id="confirm">Connect Account</button>
-            <button class="btn cancel" id="cancel">Cancel</button>
+            <div class="container">
+              <div class="logo">Gmail Authentication</div>
+              <h2>Sign in with Google</h2>
+              <p>Allow this application to connect to your Gmail account:<br><span class="email">${emailAddress}</span></p>
+              <p>This will let the app manage emails related to your property and guest communications.</p>
+              <button class="btn confirm" id="confirm">Authorize Access</button>
+              <button class="btn cancel" id="cancel">Cancel</button>
+            </div>
             <script>
               document.getElementById('confirm').addEventListener('click', function() {
                 window.opener.postMessage({ type: 'gmail-auth-success' }, '*');

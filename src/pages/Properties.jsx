@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams, useNavigate } from "react-router-dom";
 import { Plus, Search as SearchIcon, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { fetchProperties } from "../services/propertyService";
@@ -11,6 +11,7 @@ export default function Properties() {
   const [suggestions, setSuggestions] = useState([]);
   const { toast } = useToast();
   const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   // Extract the timestamp parameter that forces a refresh
@@ -41,7 +42,7 @@ export default function Properties() {
     
     // This will force a reload when we navigate back to this page
     // after adding a property or when the t parameter changes
-  }, [toast, location.key, refreshTimestamp]); // Adding location.key triggers rerender on navigation
+  }, [toast, location.key, refreshTimestamp]); 
 
   useEffect(() => {
     if (search.trim() === '') {
@@ -84,6 +85,10 @@ export default function Properties() {
   const handleSuggestionSelect = (suggestion) => {
     setSearch(suggestion);
     setSuggestions([]);
+  };
+
+  const handleAddProperty = () => {
+    navigate("/dashboard/add-property");
   };
 
   if (loading) {
@@ -129,12 +134,12 @@ export default function Properties() {
               </div>
             )}
           </div>
-          <Link
-            to="/dashboard/add-property"
+          <Button
+            onClick={handleAddProperty}
             className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg shadow hover:bg-primary/90 transition"
           >
             <Plus size={18} /> Add Property
-          </Link>
+          </Button>
         </div>
       </div>
 
