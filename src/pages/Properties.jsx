@@ -105,7 +105,7 @@ export default function Properties() {
     setSuggestions(Array.from(uniqueSuggestions).slice(0, 5)); // Limit to 5 suggestions
   }, [search, properties]);
 
-  const filtered = properties.filter(property =>
+  const filteredProperties = properties.filter(property =>
     (property.code || "").toLowerCase().includes(search.toLowerCase()) ||
     (property.address || "").toLowerCase().includes(search.toLowerCase()) ||
     (property.property_name || "").toLowerCase().includes(search.toLowerCase()) ||
@@ -164,13 +164,6 @@ export default function Properties() {
     );
   }
 
-  const filtered = properties.filter(property =>
-    (property.code || "").toLowerCase().includes(search.toLowerCase()) ||
-    (property.address || "").toLowerCase().includes(search.toLowerCase()) ||
-    (property.property_name || "").toLowerCase().includes(search.toLowerCase()) ||
-    (property.knowledge_base || "").toLowerCase().includes(search.toLowerCase())
-  );
-
   return (
     <div className="container mx-auto p-4">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
@@ -213,13 +206,13 @@ export default function Properties() {
         <div className="text-center py-12">
           <p className="text-gray-500">No properties found. Add your first property to get started.</p>
         </div>
-      ) : filtered.length === 0 ? (
+      ) : filteredProperties.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-gray-500">No properties match your search criteria.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map(property => (
+          {filteredProperties.map(property => (
             <Link to={`/dashboard/properties-manager#${property.id}`} key={property.id || property.code} 
               className="border p-4 bg-white shadow rounded hover:shadow-md transition">
               <h3 className="text-xl font-semibold text-primary">{property.property_name || "Unnamed Property"}</h3>
