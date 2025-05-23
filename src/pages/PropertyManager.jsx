@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Link } from "react-router-dom";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import PropertyCard from '../components/PropertyCard';
 import LoadingSpinner from '../components/LoadingSpinner';

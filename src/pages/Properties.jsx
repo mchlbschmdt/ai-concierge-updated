@@ -2,10 +2,9 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Plus, Search as SearchIcon } from "lucide-react";
-import { collection, getDocs } from "firebase/firestore";
-import { db } from "../firebase";
 import LoadingSpinner from "../components/LoadingSpinner";
 import { useToast } from "@/components/ui/use-toast";
+import { fetchProperties } from "../services/propertyService";
 
 export default function Properties() {
   const [properties, setProperties] = useState([]);
@@ -18,17 +17,7 @@ export default function Properties() {
     async function loadProperties() {
       try {
         setLoading(true);
-        console.log("Fetching properties directly from Firestore in Properties.jsx");
-        const querySnapshot = await getDocs(collection(db, "properties"));
-        
-        const propertiesData = [];
-        querySnapshot.forEach((doc) => {
-          propertiesData.push({
-            id: doc.id,
-            ...doc.data()
-          });
-        });
-        
+        const propertiesData = await fetchProperties();
         console.log("Properties loaded:", propertiesData);
         setProperties(propertiesData);
       } catch (error) {

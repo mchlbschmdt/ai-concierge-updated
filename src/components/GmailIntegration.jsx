@@ -9,7 +9,7 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
-  const [oauthStep, setOauthStep] = useState(0);
+  const [authStep, setAuthStep] = useState(0);
   const [filters, setFilters] = useState({
     from: 'express@airbnb.com',
     subject: '',
@@ -29,35 +29,24 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
     }
   }, []);
 
-  // Gmail OAuth flow with localStorage persistence
   const handleAuthenticate = () => {
     setLoading(true);
-    setOauthStep(1);
+    setAuthStep(1);
     
-    // Open a popup window for OAuth authentication
-    const width = 600;
-    const height = 600;
-    const left = window.innerWidth / 2 - width / 2;
-    const top = window.innerHeight / 2 - height / 2;
-    
-    // Here we would typically open the OAuth popup
-    // Since we can't actually connect to Gmail OAuth API directly in this demo,
-    // we'll simulate the OAuth flow with timeouts
+    // Simulate redirect to Google OAuth
     setTimeout(() => {
-      setOauthStep(2); // Move to account selection step
+      setAuthStep(2);
     }, 1500);
   };
   
-  // Function to complete Gmail authentication
   const completeAuthentication = (email) => {
     setUserEmail(email);
-    setOauthStep(3); // Show success
+    setAuthStep(3);
     
     setTimeout(() => {
-      // Complete the authentication
       setAuthenticated(true);
       setLoading(false);
-      setOauthStep(0);
+      setAuthStep(0);
       
       localStorage.setItem('gmail_auth', 'true');
       localStorage.setItem('gmail_email', email);
@@ -69,7 +58,6 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
     }, 1000);
   };
   
-  // Function to logout/disconnect Gmail
   const disconnectGmail = () => {
     localStorage.removeItem('gmail_auth');
     localStorage.removeItem('gmail_email');
@@ -82,9 +70,8 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
     });
   };
   
-  // Function to cancel authentication
   const cancelAuthentication = () => {
-    setOauthStep(0);
+    setAuthStep(0);
     setLoading(false);
     
     toast({
@@ -115,7 +102,7 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
     
     // Simulate API request
     setTimeout(() => {
-      // Mock email data for demonstration
+      // Mock email data
       const mockEmails = [
         {
           id: 'email1',
@@ -166,9 +153,9 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
             Connect your Gmail account to import Airbnb guest messages
           </p>
           
-          {oauthStep > 0 && (
+          {authStep > 0 && (
             <div className="mb-4 p-3 bg-white border rounded shadow-sm">
-              {oauthStep === 1 && (
+              {authStep === 1 && (
                 <div className="flex flex-col items-center">
                   <Loader2 className="animate-spin mb-2 text-primary" size={24} />
                   <p>Redirecting to Google authentication...</p>
@@ -182,7 +169,7 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
                   </Button>
                 </div>
               )}
-              {oauthStep === 2 && (
+              {authStep === 2 && (
                 <div className="flex flex-col items-center">
                   <p className="mb-2">Select your Google account:</p>
                   <div 
@@ -211,7 +198,10 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
                       </div>
                     </div>
                   </div>
-                  <div className="border p-2 rounded w-full max-w-xs mb-3 hover:bg-gray-100 cursor-pointer">
+                  <div 
+                    onClick={() => completeAuthentication(prompt("Enter your email address") || "custom@gmail.com")}
+                    className="border p-2 rounded w-full max-w-xs mb-3 hover:bg-gray-100 cursor-pointer"
+                  >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center">
                         <div className="w-8 h-8 rounded-full bg-green-500 mr-2 flex items-center justify-center text-white">
@@ -230,7 +220,7 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
                   </Button>
                 </div>
               )}
-              {oauthStep === 3 && (
+              {authStep === 3 && (
                 <div className="flex flex-col items-center">
                   <p className="text-green-600 mb-2">✓ Authorization successful</p>
                   <p className="text-sm">Completing connection...</p>
@@ -336,14 +326,6 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
                 />
               </div>
               
-              <div>
-                <label className="text-sm font-medium block mb-1">Attachment Types</label>
-                <Input 
-                  name="attachmentTypes"
-                  placeholder="e.g. pdf,docx"
-                />
-              </div>
-              
               <div className="flex items-center">
                 <input 
                   type="checkbox" 
@@ -372,18 +354,6 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
                 "Fetch Airbnb Emails"
               )}
             </Button>
-            
-            <Button variant="outline" className="flex items-center gap-1">
-              <Calendar className="h-4 w-4" />
-              Schedule
-            </Button>
-          </div>
-          
-          <div className="flex justify-between items-center text-xs text-gray-500">
-            <span>Last sync: Never</span>
-            <button className="text-primary flex items-center gap-1">
-              <Download className="h-3 w-3" /> Export settings
-            </button>
           </div>
         </div>
       )}
