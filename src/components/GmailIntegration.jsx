@@ -36,31 +36,89 @@ export default function GmailIntegration({ onEmailsReceived = () => {} }) {
     setLoading(true);
     
     try {
-      // In a real implementation, we would open the OAuth window here
-      // For demonstration, we'll simulate OAuth with a confirmation dialog
-      const confirmed = window.confirm(`Do you want to authenticate ${emailAddress} with Gmail? (This is a simulation of the OAuth window)`);
+      // Create a more visible authentication popup window
+      // This simulates an OAuth window better than a confirm dialog
+      const authWindow = window.open('', 'Gmail Authentication', 'width=600,height=600');
       
-      if (confirmed) {
-        // Mock successful authentication
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Store authentication state in localStorage
-        localStorage.setItem('gmail_authenticated', 'true');
-        localStorage.setItem('gmail_email', emailAddress);
-        
-        setIsAuthenticated(true);
-        
+      if (!authWindow) {
+        // If popup is blocked
         toast({
-          title: "Success",
-          description: `Connected to Gmail account: ${emailAddress}`
-        });
-      } else {
-        toast({
-          title: "Authentication Cancelled",
-          description: "Gmail connection was cancelled",
+          title: "Popup Blocked",
+          description: "Please allow popups for this site to authenticate with Gmail",
           variant: "destructive"
         });
+        setLoading(false);
+        return;
       }
+      
+      authWindow.document.write(`
+        <html>
+          <head>
+            <title>Gmail Authentication</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
+              .btn { padding: 10px 20px; margin: 10px; cursor: pointer; border: none; border-radius: 4px; }
+              .confirm { background: #4CAF50; color: white; }
+              .cancel { background: #f44336; color: white; }
+              h2 { color: #333; }
+            </style>
+          </head>
+          <body>
+            <h2>Gmail Authentication</h2>
+            <p>Do you want to connect ${emailAddress} to the application?</p>
+            <button class="btn confirm" id="confirm">Connect Account</button>
+            <button class="btn cancel" id="cancel">Cancel</button>
+            <script>
+              document.getElementById('confirm').addEventListener('click', function() {
+                window.opener.postMessage({ type: 'gmail-auth-success' }, '*');
+                window.close();
+              });
+              document.getElementById('cancel').addEventListener('click', function() {
+                window.opener.postMessage({ type: 'gmail-auth-cancel' }, '*');
+                window.close();
+              });
+            </script>
+          </body>
+        </html>
+      `);
+      
+      // Set up message listener
+      const handleAuthMessage = (event) => {
+        if (event.data && event.data.type === 'gmail-auth-success') {
+          // Store authentication state in localStorage
+          localStorage.setItem('gmail_authenticated', 'true');
+          localStorage.setItem('gmail_email', emailAddress);
+          
+          setIsAuthenticated(true);
+          
+          toast({
+            title: "Success",
+            description: `Connected to Gmail account: ${emailAddress}`
+          });
+        } else if (event.data && event.data.type === 'gmail-auth-cancel') {
+          toast({
+            title: "Authentication Cancelled",
+            description: "Gmail connection was cancelled",
+            variant: "destructive"
+          });
+        }
+        
+        // Clean up
+        setLoading(false);
+        window.removeEventListener('message', handleAuthMessage);
+      };
+      
+      window.addEventListener('message', handleAuthMessage);
+      
+      // Fallback if window is closed without clicking buttons
+      const checkWindowClosed = setInterval(() => {
+        if (authWindow.closed) {
+          clearInterval(checkWindowClosed);
+          setLoading(false);
+          window.removeEventListener('message', handleAuthMessage);
+        }
+      }, 500);
+      
     } catch (error) {
       console.error("Gmail authentication error:", error);
       toast({
@@ -68,7 +126,6 @@ export default function GmailIntegration({ onEmailsReceived = () => {} }) {
         description: error.message || "Failed to connect to Gmail",
         variant: "destructive"
       });
-    } finally {
       setLoading(false);
     }
   };

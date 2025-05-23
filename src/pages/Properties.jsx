@@ -1,6 +1,5 @@
-
 import { useState, useEffect } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { Plus, Search as SearchIcon, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { fetchProperties } from "../services/propertyService";
@@ -12,8 +11,14 @@ export default function Properties() {
   const [suggestions, setSuggestions] = useState([]);
   const { toast } = useToast();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+
+  // Extract the timestamp parameter that forces a refresh
+  const refreshTimestamp = searchParams.get('t');
 
   useEffect(() => {
+    console.log("Loading properties, refresh trigger:", location.key, refreshTimestamp);
+    
     async function loadProperties() {
       try {
         setLoading(true);
@@ -35,8 +40,8 @@ export default function Properties() {
     loadProperties();
     
     // This will force a reload when we navigate back to this page
-    // after adding a property
-  }, [toast, location.key]); // Adding location.key triggers rerender on navigation
+    // after adding a property or when the t parameter changes
+  }, [toast, location.key, refreshTimestamp]); // Adding location.key triggers rerender on navigation
 
   useEffect(() => {
     if (search.trim() === '') {
