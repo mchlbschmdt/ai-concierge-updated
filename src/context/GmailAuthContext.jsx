@@ -63,13 +63,6 @@ export function GmailAuthProvider({ children }) {
   const updateAuthState = async (email) => {
     setIsAuthenticated(true);
     setUserEmail(email);
-    
-    // In a real implementation, this would be handled by the edge function
-    // This is just for UI demonstration purposes when not fully connected
-    if (!supabase) {
-      localStorage.setItem('google_authenticated', 'true');
-      localStorage.setItem('google_email', email);
-    }
   };
   
   return (

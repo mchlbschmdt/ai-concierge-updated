@@ -3,10 +3,12 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
+import { useGmailAuth } from "@/context/GmailAuthContext";
 
 export default function GoogleAuthCallback() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { updateAuthState } = useGmailAuth();
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -46,25 +48,23 @@ export default function GoogleAuthCallback() {
         }
         
         // Call our edge function to exchange code for tokens
-        const response = await fetch(`${window.location.origin}/api/google-auth`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${userId}`
-          },
-          body: JSON.stringify({ code }),
+        const response = await supabase.functions.invoke("google-auth", {
+          body: { code }
         });
         
-        const result = await response.json();
-        
-        if (!response.ok) {
-          throw new Error(result.error || 'Failed to authenticate with Google');
+        if (response.error) {
+          throw new Error(response.error.message || 'Failed to authenticate with Google');
         }
+        
+        const result = response.data;
         
         toast({
           title: "Authentication Successful",
           description: `Connected to Gmail as ${result.email}`
         });
+        
+        // Update auth state
+        updateAuthState(result.email);
         
         // Redirect to dashboard
         navigate('/dashboard');
@@ -84,7 +84,7 @@ export default function GoogleAuthCallback() {
     };
     
     handleCallback();
-  }, [navigate, toast]);
+  }, [navigate, toast, updateAuthState]);
 
   return (
     <div className="flex items-center justify-center h-screen">

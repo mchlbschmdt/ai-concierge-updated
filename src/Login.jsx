@@ -1,7 +1,5 @@
 
 import { useState } from "react";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "./firebase";
 import { useNavigate } from "react-router-dom";
 import GoogleOAuthButton from "./components/GoogleOAuthButton";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,20 +19,14 @@ export default function Login() {
     setError("");
     
     try {
-      // If using Supabase auth
-      if (supabase) {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password
-        });
-        
-        if (error) throw error;
-        navigate("/dashboard");
-      } else {
-        // Fallback to Firebase
-        await signInWithEmailAndPassword(auth, email, password);
-        navigate("/dashboard");
-      }
+      // Sign in with Supabase
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+      
+      if (error) throw error;
+      navigate("/dashboard");
     } catch (err) {
       console.error("Login error:", err);
       setError(err.message || "Failed to sign in");

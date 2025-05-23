@@ -1,6 +1,6 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -72,12 +72,26 @@ serve(async (req) => {
     
     const userInfo = await userInfoResponse.json();
     
+    // Get user ID from auth header
+    const authHeader = req.headers.get("authorization");
+    const userId = authHeader ? authHeader.split(" ")[1] : null;
+    
+    if (!userId) {
+      return new Response(
+        JSON.stringify({ error: "User ID not found in request" }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+    
     // Store tokens in service_connections table
     const { data, error } = await supabase
       .from("service_connections")
       .upsert(
         {
-          user_id: req.headers.get("authorization")?.split(" ")[1] || "anonymous",
+          user_id: userId,
           service_type: "gmail",
           connection_details: {
             access_token: tokens.access_token,

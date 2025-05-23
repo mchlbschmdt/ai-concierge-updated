@@ -14,8 +14,8 @@ export default function GoogleOAuthButton() {
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     try {
-      // Use the correct Google Client ID for your project
-      const clientId = "970043813008-kbkeu2g2arq2c2rs2rvdm3mfksvpfmf2.apps.googleusercontent.com"; // Updated client ID
+      // Get client ID from the environment or use a default for development
+      const clientId = "622389255458-bfl9jc9fl8mnd6v83pkoef6a6s6tvl5r.apps.googleusercontent.com";
       const redirectUri = encodeURIComponent(window.location.origin + "/auth/google/callback");
       const scope = encodeURIComponent("openid email profile https://www.googleapis.com/auth/gmail.readonly");
       const responseType = "code";
