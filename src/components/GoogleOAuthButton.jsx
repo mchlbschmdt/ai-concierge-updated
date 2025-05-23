@@ -3,17 +3,19 @@ import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { useGmailAuth } from "../context/GmailAuthContext";
 
 export default function GoogleOAuthButton() {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const { updateAuthState } = useGmailAuth();
 
   // Function to handle Google OAuth
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     try {
-      // Create OAuth URL with required scopes
-      const clientId = "YOUR_GOOGLE_CLIENT_ID"; // Replace this with your Google Client ID
+      // Use the correct Google Client ID for your project
+      const clientId = "970043813008-kbkeu2g2arq2c2rs2rvdm3mfksvpfmf2.apps.googleusercontent.com"; // Updated client ID
       const redirectUri = encodeURIComponent(window.location.origin + "/auth/google/callback");
       const scope = encodeURIComponent("openid email profile https://www.googleapis.com/auth/gmail.readonly");
       const responseType = "code";
@@ -58,13 +60,14 @@ export default function GoogleOAuthButton() {
               description: "Successfully authenticated with Google"
             });
             
-            // Here you would send the code to your backend to exchange for tokens
-            // This requires Supabase Edge Function to handle securely
+            // Process token in a real implementation
             console.log("Auth code received:", code);
             
-            // Mock successful authentication for demo
-            localStorage.setItem('google_authenticated', 'true');
-            localStorage.setItem('google_email', 'user@gmail.com');
+            // For now, we'll mock a successful authentication
+            updateAuthState('user@gmail.com');
+            
+            // In a production app, you would send this code to your server or Supabase Edge Function
+            // to exchange for tokens and store them securely
           } else if (error) {
             toast({
               title: "Authentication Failed",

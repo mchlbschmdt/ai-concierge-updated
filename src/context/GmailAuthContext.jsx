@@ -1,5 +1,6 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 const GmailAuthContext = createContext();
 
@@ -8,33 +9,67 @@ export function GmailAuthProvider({ children }) {
   const [userEmail, setUserEmail] = useState(null);
   const [loading, setLoading] = useState(true);
   
-  // Check localStorage on mount
+  // Check for existing Gmail authentication in Supabase
   useEffect(() => {
-    const savedAuth = localStorage.getItem('google_authenticated');
-    const savedEmail = localStorage.getItem('google_email');
+    const checkGmailAuth = async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData?.session?.user) {
+          // Check if user has Gmail connection
+          const { data: connections } = await supabase
+            .from("service_connections")
+            .select("*")
+            .eq("user_id", sessionData.session.user.id)
+            .eq("service_type", "gmail")
+            .eq("is_active", true)
+            .single();
+            
+          if (connections) {
+            setIsAuthenticated(true);
+            setUserEmail(connections.connection_details.email);
+          }
+        }
+      } catch (error) {
+        console.error("Error checking Gmail auth:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
     
-    if (savedAuth === 'true' && savedEmail) {
-      setIsAuthenticated(true);
-      setUserEmail(savedEmail);
-    }
-    
-    setLoading(false);
+    checkGmailAuth();
   }, []);
   
-  // Function to sign out
-  const signOut = () => {
-    localStorage.removeItem('google_authenticated');
-    localStorage.removeItem('google_email');
+  // Function to sign out from Gmail connection
+  const signOut = async () => {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData?.session?.user) {
+        // Deactivate Gmail connection
+        await supabase
+          .from("service_connections")
+          .update({ is_active: false })
+          .eq("user_id", sessionData.session.user.id)
+          .eq("service_type", "gmail");
+      }
+    } catch (error) {
+      console.error("Error signing out from Gmail:", error);
+    }
+    
     setIsAuthenticated(false);
     setUserEmail(null);
   };
   
-  // Function to update auth state
-  const updateAuthState = (email) => {
-    localStorage.setItem('google_authenticated', 'true');
-    localStorage.setItem('google_email', email);
+  // Function to update auth state after successful authentication
+  const updateAuthState = async (email) => {
     setIsAuthenticated(true);
     setUserEmail(email);
+    
+    // In a real implementation, this would be handled by the edge function
+    // This is just for UI demonstration purposes when not fully connected
+    if (!supabase) {
+      localStorage.setItem('google_authenticated', 'true');
+      localStorage.setItem('google_email', email);
+    }
   };
   
   return (
