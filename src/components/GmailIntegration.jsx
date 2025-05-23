@@ -18,6 +18,8 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
   });
   const [advancedOptions, setAdvancedOptions] = useState(false);
   const [userEmail, setUserEmail] = useState('');
+  const [customEmailInput, setCustomEmailInput] = useState('');
+  const [showCustomEmailInput, setShowCustomEmailInput] = useState(false);
   
   // Check for existing Gmail auth in localStorage
   useEffect(() => {
@@ -40,22 +42,40 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
   };
   
   const completeAuthentication = (email) => {
-    setUserEmail(email);
-    setAuthStep(3);
-    
-    setTimeout(() => {
-      setAuthenticated(true);
-      setLoading(false);
-      setAuthStep(0);
+    if (email) {
+      setUserEmail(email);
+      setAuthStep(3);
       
-      localStorage.setItem('gmail_auth', 'true');
-      localStorage.setItem('gmail_email', email);
-      
+      setTimeout(() => {
+        setAuthenticated(true);
+        setLoading(false);
+        setAuthStep(0);
+        
+        localStorage.setItem('gmail_auth', 'true');
+        localStorage.setItem('gmail_email', email);
+        
+        toast({
+          title: "Gmail Connected",
+          description: `Your Gmail account (${email}) has been successfully connected.`
+        });
+      }, 1000);
+    } else {
+      cancelAuthentication();
+    }
+  };
+  
+  const handleSubmitCustomEmail = () => {
+    if (customEmailInput && customEmailInput.includes('@')) {
+      completeAuthentication(customEmailInput);
+      setShowCustomEmailInput(false);
+      setCustomEmailInput('');
+    } else {
       toast({
-        title: "Gmail Connected",
-        description: `Your Gmail account (${email}) has been successfully connected.`
+        title: "Invalid Email",
+        description: "Please enter a valid email address",
+        variant: "destructive"
       });
-    }, 1000);
+    }
   };
   
   const disconnectGmail = () => {
@@ -73,6 +93,8 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
   const cancelAuthentication = () => {
     setAuthStep(0);
     setLoading(false);
+    setShowCustomEmailInput(false);
+    setCustomEmailInput('');
     
     toast({
       title: "Authentication Cancelled",
@@ -135,7 +157,7 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
       
       // Notify parent component
       if (onMessagesImported) {
-        onMessagesImported(mockEmails);
+        onMessagesImported(propertyId, mockEmails);
       }
     }, 2000);
   };
@@ -169,7 +191,7 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
                   </Button>
                 </div>
               )}
-              {authStep === 2 && (
+              {authStep === 2 && !showCustomEmailInput && (
                 <div className="flex flex-col items-center">
                   <p className="mb-2">Select your Google account:</p>
                   <div 
@@ -199,7 +221,7 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
                     </div>
                   </div>
                   <div 
-                    onClick={() => completeAuthentication(prompt("Enter your email address") || "custom@gmail.com")}
+                    onClick={() => setShowCustomEmailInput(true)}
                     className="border p-2 rounded w-full max-w-xs mb-3 hover:bg-gray-100 cursor-pointer"
                   >
                     <div className="flex items-center justify-between">
@@ -218,6 +240,37 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
                   >
                     Cancel
                   </Button>
+                </div>
+              )}
+              {showCustomEmailInput && (
+                <div className="flex flex-col items-center p-3">
+                  <p className="mb-2">Enter your email address:</p>
+                  <Input 
+                    type="email"
+                    value={customEmailInput}
+                    onChange={(e) => setCustomEmailInput(e.target.value)}
+                    placeholder="your.name@gmail.com"
+                    className="mb-3"
+                  />
+                  <div className="flex gap-2">
+                    <Button 
+                      size="sm" 
+                      onClick={handleSubmitCustomEmail}
+                      disabled={!customEmailInput || !customEmailInput.includes('@')}
+                    >
+                      Connect
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => {
+                        setShowCustomEmailInput(false);
+                        setCustomEmailInput('');
+                      }}
+                    >
+                      Back
+                    </Button>
+                  </div>
                 </div>
               )}
               {authStep === 3 && (

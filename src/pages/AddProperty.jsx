@@ -1,18 +1,21 @@
 
 import React, { useState } from 'react';
-import { collection, addDoc } from 'firebase/firestore';
-import { db } from '../firebase';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/use-toast";
-import { Loader2, Save } from "lucide-react";
+import { Loader2, Save, Upload, FileUp } from "lucide-react";
+import { addProperty } from '../services/propertyService';
+import FilePreview from '../components/FilePreview';
 
 export default function AddProperty() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [file, setFile] = useState(null);
+  const [filePreview, setFilePreview] = useState(null);
   
   const [form, setForm] = useState({
     property_name: '',
@@ -26,6 +29,45 @@ export default function AddProperty() {
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
+  };
+
+  const handleFileChange = (e) => {
+    const selectedFile = e.target.files[0];
+    
+    if (!selectedFile) {
+      setFile(null);
+      setFilePreview(null);
+      return;
+    }
+    
+    setFile(selectedFile);
+    
+    // Create preview for text-based files
+    if (selectedFile.type === "application/json" || 
+        selectedFile.type === "text/plain" || 
+        selectedFile.type === "text/csv") {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const content = e.target.result;
+          setFilePreview({
+            type: selectedFile.type,
+            content: content.slice(0, 500) + (content.length > 500 ? '...' : '')
+          });
+        } catch (error) {
+          console.error("Error reading file:", error);
+          setFilePreview(null);
+        }
+      };
+      reader.readAsText(selectedFile);
+    } else {
+      // For other file types, just show the name and size
+      setFilePreview({
+        type: selectedFile.type,
+        name: selectedFile.name,
+        size: (selectedFile.size / 1024).toFixed(2) + " KB"
+      });
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -53,16 +95,34 @@ export default function AddProperty() {
         code: propertyCode
       });
       
-      // Add document to Firestore with error handling
-      const docRef = await addDoc(collection(db, 'properties'), {
+      // Mock file upload if a file is selected
+      let files = [];
+      if (file) {
+        // Simulate upload progress
+        for (let i = 0; i <= 100; i += 10) {
+          setUploadProgress(i);
+          await new Promise(r => setTimeout(r, 100));
+        }
+        
+        // Add mock file data
+        files = [{
+          name: file.name,
+          type: file.type,
+          size: `${(file.size / 1024).toFixed(2)} KB`,
+          uploaded_at: new Date(),
+          path: `properties/${propertyCode}/knowledge_base/${file.name.replace(/\s/g, '_')}`,
+          url: URL.createObjectURL(file) // This is temporary and will be revoked when the page refreshes
+        }];
+      }
+      
+      // Add property with optional file
+      const result = await addProperty({
         ...form,
         code: propertyCode,
-        created_at: new Date(),
-        files: [],
-        messages: []
+        files: files
       });
       
-      console.log("Property document written with ID: ", docRef.id);
+      console.log("Property added:", result);
       
       toast({
         title: "Success!",
@@ -70,7 +130,7 @@ export default function AddProperty() {
       });
       
       // Redirect to property manager
-      navigate("/dashboard/properties-manager");
+      navigate("/dashboard/properties");
     } catch (error) {
       console.error("Error adding property:", error);
       toast({
@@ -80,7 +140,13 @@ export default function AddProperty() {
       });
     } finally {
       setLoading(false);
+      setUploadProgress(0);
     }
+  };
+
+  const handleClearFile = () => {
+    setFile(null);
+    setFilePreview(null);
   };
 
   return (
@@ -166,6 +232,38 @@ export default function AddProperty() {
           />
         </div>
         
+        <div>
+          <label htmlFor="file_upload" className="block text-sm font-medium mb-1">Attach File (optional)</label>
+          <Input
+            id="file_upload"
+            type="file"
+            onChange={handleFileChange}
+            className="mb-2"
+            accept=".pdf,.docx,.txt,.csv,.xlsx,.json"
+          />
+          
+          {/* File Preview */}
+          {file && (
+            <div className="mt-2">
+              <FilePreview 
+                file={file}
+                filePreview={filePreview}
+                onClear={handleClearFile}
+              />
+              
+              {/* Upload Progress */}
+              {uploadProgress > 0 && uploadProgress < 100 && (
+                <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
+                  <div 
+                    className="bg-primary h-2.5 rounded-full transition-all duration-300" 
+                    style={{ width: `${uploadProgress}%` }}
+                  ></div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        
         <Button 
           type="submit" 
           className="w-full flex items-center justify-center gap-2"
@@ -174,7 +272,7 @@ export default function AddProperty() {
           {loading ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Adding Property...
+              {file ? 'Uploading...' : 'Adding Property...'}
             </>
           ) : (
             <>

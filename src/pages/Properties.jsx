@@ -1,8 +1,7 @@
 
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Plus, Search as SearchIcon } from "lucide-react";
-import LoadingSpinner from "../components/LoadingSpinner";
+import { Plus, Search as SearchIcon, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { fetchProperties } from "../services/propertyService";
 
@@ -84,7 +83,10 @@ export default function Properties() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
           <h2 className="text-2xl font-bold">Properties</h2>
         </div>
-        <LoadingSpinner />
+        <div className="flex justify-center items-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <span className="ml-2">Loading properties...</span>
+        </div>
       </div>
     );
   }
