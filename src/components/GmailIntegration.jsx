@@ -3,11 +3,12 @@ import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
-import { Mail, Loader2, Calendar, Download } from "lucide-react";
+import { Mail, Loader2 } from "lucide-react";
 
 export default function GmailIntegration({ propertyId, onMessagesImported }) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [loadingEmails, setLoadingEmails] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [authStep, setAuthStep] = useState(0);
   const [filters, setFilters] = useState({
@@ -35,10 +36,11 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
     setLoading(true);
     setAuthStep(1);
     
-    // Simulate redirect to Google OAuth
+    // Simulate OAuth flow
     setTimeout(() => {
       setAuthStep(2);
-    }, 1500);
+      setLoading(false);
+    }, 1000);
   };
   
   const completeAuthentication = (email) => {
@@ -46,13 +48,14 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
       setUserEmail(email);
       setAuthStep(3);
       
+      // Save authentication state
+      localStorage.setItem('gmail_auth', 'true');
+      localStorage.setItem('gmail_email', email);
+      
       setTimeout(() => {
         setAuthenticated(true);
         setLoading(false);
         setAuthStep(0);
-        
-        localStorage.setItem('gmail_auth', 'true');
-        localStorage.setItem('gmail_email', email);
         
         toast({
           title: "Gmail Connected",
@@ -120,9 +123,9 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
       return;
     }
     
-    setLoading(true);
+    setLoadingEmails(true);
     
-    // Simulate API request
+    // Simulate fetching emails
     setTimeout(() => {
       // Mock email data
       const mockEmails = [
@@ -134,6 +137,7 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
           subject: 'New message from Alex',
           content: 'Hi there! I was wondering if early check-in would be possible around 1pm?',
           timestamp: new Date().toISOString(),
+          property_id: propertyId,
           source: 'gmail_import'
         },
         {
@@ -143,12 +147,13 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
           receiver: 'Host',
           subject: 'New message from Sarah',
           content: 'Is the pool heated in October? And do you provide beach towels?',
-          timestamp: new Date(Date.now() - 86400000).toISOString(), // Yesterday
+          timestamp: new Date(Date.now() - 86400000).toISOString(),
+          property_id: propertyId,
           source: 'gmail_import'
         }
       ];
       
-      setLoading(false);
+      setLoadingEmails(false);
       
       toast({
         title: "Emails Imported",
@@ -395,10 +400,10 @@ export default function GmailIntegration({ propertyId, onMessagesImported }) {
           <div className="flex gap-2">
             <Button 
               onClick={handleFetchEmails} 
-              disabled={loading}
+              disabled={loadingEmails}
               className="w-full"
             >
-              {loading ? (
+              {loadingEmails ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Fetching Emails...

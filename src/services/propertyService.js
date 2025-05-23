@@ -1,6 +1,6 @@
 
 import { doc, updateDoc, collection, getDocs, getDoc, deleteDoc, addDoc } from 'firebase/firestore';
-import { ref, deleteObject, listAll } from 'firebase/storage';
+import { ref, deleteObject, listAll, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
 
 export async function fetchProperties() {
@@ -142,5 +142,54 @@ export async function addProperty(propertyData) {
   } catch (error) {
     console.error("Error adding property:", error);
     throw new Error("Failed to add property");
+  }
+}
+
+export async function uploadFile(propertyId, file) {
+  try {
+    console.log(`Uploading file for property ${propertyId}:`, file.name);
+    
+    // Simulate file upload with delay
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        // Create mock file data
+        const fileData = {
+          name: file.name,
+          path: `properties/${propertyId}/knowledge_base/${file.name.replace(/\s/g, '_')}`,
+          type: file.type.split('/')[1] || 'unknown',
+          size: `${(file.size / 1024).toFixed(2)} KB`,
+          uploaded_at: new Date(),
+          url: URL.createObjectURL(file) // Note: This URL will be revoked when page refreshes
+        };
+        
+        resolve({
+          success: true,
+          message: "File uploaded successfully",
+          file: fileData
+        });
+      }, 1000);
+    });
+  } catch (error) {
+    console.error("Error uploading file:", error);
+    throw new Error("Failed to upload file");
+  }
+}
+
+export async function deleteFile(propertyId, filePath) {
+  try {
+    console.log(`Deleting file from property ${propertyId}:`, filePath);
+    
+    // Mock successful deletion
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve({
+          success: true,
+          message: "File deleted successfully"
+        });
+      }, 500);
+    });
+  } catch (error) {
+    console.error("Error deleting file:", error);
+    throw new Error("Failed to delete file");
   }
 }

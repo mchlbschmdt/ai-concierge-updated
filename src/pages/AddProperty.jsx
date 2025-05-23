@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/use-toast";
-import { Loader2, Save, Upload, FileUp } from "lucide-react";
-import { addProperty } from '../services/propertyService';
+import { Loader2, Save } from "lucide-react";
+import { addProperty, uploadFile } from '../services/propertyService';
 import FilePreview from '../components/FilePreview';
 
 export default function AddProperty() {
@@ -95,34 +95,41 @@ export default function AddProperty() {
         code: propertyCode
       });
       
-      // Mock file upload if a file is selected
-      let files = [];
-      if (file) {
-        // Simulate upload progress
-        for (let i = 0; i <= 100; i += 10) {
-          setUploadProgress(i);
-          await new Promise(r => setTimeout(r, 100));
-        }
-        
-        // Add mock file data
-        files = [{
-          name: file.name,
-          type: file.type,
-          size: `${(file.size / 1024).toFixed(2)} KB`,
-          uploaded_at: new Date(),
-          path: `properties/${propertyCode}/knowledge_base/${file.name.replace(/\s/g, '_')}`,
-          url: URL.createObjectURL(file) // This is temporary and will be revoked when the page refreshes
-        }];
-      }
-      
       // Add property with optional file
       const result = await addProperty({
         ...form,
         code: propertyCode,
-        files: files
+        files: [] // We'll upload files separately
       });
       
       console.log("Property added:", result);
+      
+      // Upload file if selected
+      if (file) {
+        // Start upload progress simulation
+        const progressInterval = setInterval(() => {
+          setUploadProgress(prev => {
+            if (prev >= 90) {
+              clearInterval(progressInterval);
+              return 90;
+            }
+            return prev + 10;
+          });
+        }, 200);
+        
+        const fileResult = await uploadFile(result.propertyId, file);
+        console.log("File uploaded:", fileResult);
+        
+        clearInterval(progressInterval);
+        setUploadProgress(100);
+        
+        // Add file to property
+        if (fileResult.success) {
+          // In a real app, we would update the property with the new file
+          // For now, we'll just show a success message
+          console.log("File added to property");
+        }
+      }
       
       toast({
         title: "Success!",
