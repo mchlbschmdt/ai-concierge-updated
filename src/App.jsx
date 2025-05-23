@@ -18,6 +18,9 @@ import { Toaster } from "@/components/ui/toaster";
 import Login from "./Login";
 
 export default function App() {
+  // Add a console.log to verify routes are being registered
+  console.log("App component rendering with routes");
+  
   return (
     <>
       <Toaster />

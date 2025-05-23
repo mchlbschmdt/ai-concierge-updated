@@ -29,7 +29,7 @@ export default function Properties() {
         setError(null);
         const propertiesData = await fetchProperties();
         console.log("Properties loaded:", propertiesData);
-        setProperties(propertiesData);
+        setProperties(Array.isArray(propertiesData) ? propertiesData : []);
       } catch (error) {
         console.error("Error loading properties:", error);
         setError(error.message || "Failed to load properties");
