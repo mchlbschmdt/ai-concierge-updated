@@ -8,6 +8,7 @@ import Properties from "./pages/Properties";
 import MessagesDashboard from "./pages/MessagesDashboard";
 import FaqEditor from "./pages/FaqEditor";
 import SmartInsights from "./pages/SmartInsights";
+import PropertyAnalytics from "./pages/PropertyAnalytics"; // Add import for PropertyAnalytics
 import AddProperty from './pages/AddProperty';
 import AddGuest from './AddGuest';
 import EmailManagement from './pages/EmailManagement';
@@ -30,6 +31,7 @@ export default function App() {
         <Route path="/dashboard/add-property" element={<Layout><AddProperty /></Layout>} />
         <Route path="/dashboard/add-guest" element={<Layout><AddGuest /></Layout>} />
         <Route path="/dashboard/email-management" element={<Layout><EmailManagement /></Layout>} />
+        <Route path="/dashboard/analytics" element={<Layout><PropertyAnalytics /></Layout>} />
       </Routes>
     </>
   );

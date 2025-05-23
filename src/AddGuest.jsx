@@ -1,18 +1,31 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/use-toast";
 import { Loader2 } from "lucide-react";
+import { collection, addDoc } from "firebase/firestore";
+import { db } from "./firebase";
 
 export default function AddGuest() {
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
   const [guestPropertyId, setGuestPropertyId] = useState("");
+  const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Load mock properties for the dropdown
+    const mockProperties = [
+      { id: 'prop1', property_name: 'Sunset Beach Villa', code: 'SBV001' },
+      { id: 'prop2', property_name: 'Mountain Retreat Cabin', code: 'MRC002' },
+      { id: 'prop3', property_name: 'Downtown Loft', code: 'DTL003' }
+    ];
+    setProperties(mockProperties);
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -33,6 +46,18 @@ export default function AddGuest() {
       // Mock adding a guest to the database
       await new Promise(resolve => setTimeout(resolve, 1000));
       
+      const guestData = {
+        name: guestName,
+        phone: guestPhone,
+        property_id: guestPropertyId,
+        created_at: new Date()
+      };
+      
+      console.log("Adding guest:", guestData);
+      
+      // In production, this would write to Firestore
+      // await addDoc(collection(db, "guests"), guestData);
+      
       // Show success toast
       toast({
         title: "Success",
@@ -47,6 +72,7 @@ export default function AddGuest() {
       // Navigate to guests page
       navigate("/dashboard/guests-manager");
     } catch (err) {
+      console.error("Error adding guest:", err);
       toast({
         title: "Error",
         description: "Failed to add guest: " + (err.message || "Unknown error"),
@@ -88,16 +114,21 @@ export default function AddGuest() {
         </div>
         
         <div>
-          <label htmlFor="guestPropertyId" className="block text-sm font-medium mb-1">Property ID *</label>
-          <Input
+          <label htmlFor="guestPropertyId" className="block text-sm font-medium mb-1">Property *</label>
+          <select
             id="guestPropertyId"
-            type="text"
-            placeholder="e.g. PROP-12345"
             value={guestPropertyId}
             onChange={(e) => setGuestPropertyId(e.target.value)}
-            className="w-full"
+            className="w-full p-2 border rounded"
             required
-          />
+          >
+            <option value="">Select a property</option>
+            {properties.map(property => (
+              <option key={property.id} value={property.id}>
+                {property.property_name} ({property.code})
+              </option>
+            ))}
+          </select>
         </div>
         
         <Button 

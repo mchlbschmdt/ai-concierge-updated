@@ -1,3 +1,4 @@
+
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 
@@ -5,6 +6,7 @@ const navItems = [
   { label: "Dashboard", path: "/dashboard" },
   { label: "Guests", path: "/dashboard/guests" },
   { label: "Guest Manager", path: "/dashboard/guests-manager" },
+  { label: "Properties", path: "/dashboard/properties" },
   { label: "Messages", path: "/dashboard/messages" },
   { label: "Analytics", path: "/dashboard/analytics" },
   { label: "FAQ Editor", path: "/dashboard/faq-editor" },
