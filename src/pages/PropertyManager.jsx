@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { Link } from "react-router-dom";
 import { Plus } from "lucide-react";
@@ -15,18 +14,37 @@ export default function PropertyManager() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    console.log("PropertyManager component mounted");
+    console.log("PropertyManager component mounted - starting data fetch");
     
     const loadProperties = async () => {
       try {
+        console.log("Setting loading to true and clearing error");
         setLoading(true);
         setError(null);
-        console.log("Loading properties in PropertyManager...");
+        
+        console.log("About to call fetchProperties...");
+        const startTime = Date.now();
         const propertiesData = await fetchProperties();
-        console.log("Properties loaded in PropertyManager:", propertiesData);
-        setProperties(propertiesData || []);
+        const endTime = Date.now();
+        
+        console.log(`fetchProperties completed in ${endTime - startTime}ms`);
+        console.log("Raw properties data received:", propertiesData);
+        console.log("Properties data type:", typeof propertiesData);
+        console.log("Properties data length:", propertiesData?.length);
+        
+        if (Array.isArray(propertiesData)) {
+          console.log("Setting properties array with", propertiesData.length, "items");
+          setProperties(propertiesData);
+        } else {
+          console.log("Properties data is not an array, setting empty array");
+          setProperties([]);
+        }
+        
+        console.log("Successfully completed property loading");
       } catch (error) {
-        console.error("Error loading properties in PropertyManager:", error);
+        console.error("Error in loadProperties:", error);
+        console.error("Error stack:", error.stack);
+        console.error("Error message:", error.message);
         setError(error.message);
         setProperties([]);
         toast({
@@ -35,11 +53,21 @@ export default function PropertyManager() {
           variant: "destructive"
         });
       } finally {
+        console.log("Setting loading to false");
         setLoading(false);
       }
     };
     
-    loadProperties();
+    // Add a timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      console.log("TIMEOUT: Loading took too long, forcing loading to false");
+      setLoading(false);
+      setError("Loading timeout - please refresh the page");
+    }, 10000); // 10 second timeout
+    
+    loadProperties().finally(() => {
+      clearTimeout(timeoutId);
+    });
   }, [toast]);
 
   const handlePropertyUpdate = async (propertyId, updatedData) => {
@@ -126,7 +154,12 @@ export default function PropertyManager() {
     }));
   };
 
-  console.log("PropertyManager render - loading:", loading, "error:", error, "properties count:", properties.length);
+  console.log("PropertyManager render state:", { 
+    loading, 
+    error, 
+    propertiesCount: properties.length,
+    propertiesData: properties
+  });
 
   if (loading) {
     return (
@@ -135,6 +168,9 @@ export default function PropertyManager() {
           <h1 className="text-2xl font-bold text-primary">Manage Properties</h1>
         </div>
         <LoadingSpinner />
+        <div className="mt-4 text-center text-sm text-gray-500">
+          If this takes too long, try refreshing the page
+        </div>
       </div>
     );
   }

@@ -1,24 +1,38 @@
-
 import { supabase } from '../integrations/supabase/client';
 
 export async function fetchProperties() {
   try {
-    console.log("Fetching properties from Supabase");
+    console.log("=== fetchProperties START ===");
+    console.log("Supabase client:", supabase);
+    console.log("About to query properties table...");
     
     const { data: properties, error } = await supabase
       .from('properties')
       .select('*')
       .order('created_at', { ascending: false });
     
+    console.log("Supabase query completed");
+    console.log("Error:", error);
+    console.log("Data:", properties);
+    
     if (error) {
-      console.error("Supabase error:", error);
+      console.error("Supabase error details:", {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      });
       throw new Error(`Database error: ${error.message}`);
     }
     
-    console.log("Properties fetched successfully:", properties);
+    console.log("Query successful, returning properties:", properties);
+    console.log("=== fetchProperties END ===");
     return properties || [];
   } catch (error) {
-    console.error("Error in fetchProperties:", error);
+    console.error("=== fetchProperties ERROR ===");
+    console.error("Caught error:", error);
+    console.error("Error type:", typeof error);
+    console.error("Error constructor:", error.constructor.name);
     throw error;
   }
 }
