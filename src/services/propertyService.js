@@ -11,41 +11,39 @@ export async function fetchProperties() {
       .order('created_at', { ascending: false });
     
     if (error) {
-      console.error("Error fetching properties from Supabase:", error);
-      throw new Error(`Failed to fetch properties: ${error.message}`);
+      console.error("Supabase error:", error);
+      throw new Error(`Database error: ${error.message}`);
     }
     
-    console.log("Properties fetched from Supabase:", properties);
+    console.log("Properties fetched successfully:", properties);
     return properties || [];
   } catch (error) {
-    console.error("Exception fetching properties:", error);
-    throw error; // Don't fall back to mock data - let the error bubble up
+    console.error("Error in fetchProperties:", error);
+    throw error;
   }
 }
 
 export async function updateProperty(propertyId, propertyData) {
   try {
-    console.log(`Updating property ${propertyId} with data:`, propertyData);
-    
-    const updateData = {
-      ...propertyData,
-      updated_at: new Date().toISOString()
-    };
+    console.log(`Updating property ${propertyId}:`, propertyData);
     
     const { error } = await supabase
       .from('properties')
-      .update(updateData)
+      .update({
+        ...propertyData,
+        updated_at: new Date().toISOString()
+      })
       .eq('id', propertyId);
     
     if (error) {
-      console.error("Supabase error updating property:", error);
-      throw new Error(`Failed to update property: ${error.message}`);
+      console.error("Update error:", error);
+      throw new Error(`Failed to update: ${error.message}`);
     }
     
     console.log("Property updated successfully");
-    return { success: true, message: "Property updated successfully" };
+    return { success: true };
   } catch (error) {
-    console.error("Error updating property:", error);
+    console.error("Error in updateProperty:", error);
     throw error;
   }
 }
@@ -60,54 +58,49 @@ export async function deleteProperty(propertyId) {
       .eq('id', propertyId);
     
     if (error) {
-      console.error("Supabase error deleting property:", error);
-      throw new Error(`Failed to delete property: ${error.message}`);
+      console.error("Delete error:", error);
+      throw new Error(`Failed to delete: ${error.message}`);
     }
     
     console.log("Property deleted successfully");
-    return { success: true, message: "Property deleted successfully" };
+    return { success: true };
   } catch (error) {
-    console.error("Error deleting property:", error);
+    console.error("Error in deleteProperty:", error);
     throw error;
   }
 }
 
 export async function addProperty(propertyData) {
   try {
-    console.log(`Adding new property with data:`, propertyData);
+    console.log("Adding property:", propertyData);
     
-    // Ensure we have required fields
     if (!propertyData.property_name || !propertyData.address) {
       throw new Error("Property name and address are required");
     }
     
-    // Add timestamps
-    const newProperty = {
-      ...propertyData,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-    
     const { data, error } = await supabase
       .from('properties')
-      .insert(newProperty)
+      .insert({
+        ...propertyData,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
       .select()
       .single();
     
     if (error) {
-      console.error("Supabase error adding property:", error);
+      console.error("Insert error:", error);
       throw new Error(`Failed to add property: ${error.message}`);
     }
     
     console.log("Property added successfully:", data);
     return { 
       success: true, 
-      message: "Property added successfully",
       propertyId: data.id,
       property: data
     };
   } catch (error) {
-    console.error("Error adding property:", error);
+    console.error("Error in addProperty:", error);
     throw error;
   }
 }
@@ -126,15 +119,13 @@ export async function uploadFile(propertyId, file) {
     
     if (error) {
       console.error("Storage upload error:", error);
-      throw new Error(`Failed to upload file: ${error.message}`);
+      throw new Error(`Upload failed: ${error.message}`);
     }
     
-    // Get the public URL
     const { data: urlData } = supabase.storage
       .from('property-files')
       .getPublicUrl(filePath);
     
-    // Create file metadata
     const fileData = {
       name: file.name,
       path: filePath,
@@ -147,11 +138,10 @@ export async function uploadFile(propertyId, file) {
     console.log("File uploaded successfully:", fileData);
     return {
       success: true,
-      message: "File uploaded successfully",
       file: fileData
     };
   } catch (error) {
-    console.error("Error uploading file:", error);
+    console.error("Error in uploadFile:", error);
     throw error;
   }
 }
@@ -166,16 +156,13 @@ export async function deleteFile(propertyId, filePath) {
     
     if (error) {
       console.error("Storage delete error:", error);
-      throw new Error(`Failed to delete file: ${error.message}`);
+      throw new Error(`Delete failed: ${error.message}`);
     }
     
     console.log("File deleted successfully");
-    return {
-      success: true,
-      message: "File deleted successfully"
-    };
+    return { success: true };
   } catch (error) {
-    console.error("Error deleting file:", error);
+    console.error("Error in deleteFile:", error);
     throw error;
   }
 }

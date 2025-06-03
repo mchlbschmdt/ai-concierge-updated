@@ -7,33 +7,34 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import KnowledgeBaseUploader from "../components/KnowledgeBaseUploader";
 import GmailIntegration from "../components/GmailIntegration";
-import { fetchProperties } from "../services/propertyService";
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [properties, setProperties] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [propertiesCount, setPropertiesCount] = useState(0);
+  const [loading, setLoading] = useState(false);
   
+  // Simplified stats loading - don't block the UI
   useEffect(() => {
     const loadStats = async () => {
       try {
-        const propertiesData = await fetchProperties();
-        setProperties(propertiesData || []);
+        setLoading(true);
+        // This is optional data - don't block the UI if it fails
+        const { supabase } = await import("../integrations/supabase/client");
+        const { count } = await supabase
+          .from('properties')
+          .select('*', { count: 'exact', head: true });
+        setPropertiesCount(count || 0);
       } catch (error) {
-        console.error("Error loading dashboard data:", error);
-        toast({
-          title: "Warning",
-          description: "Could not load some dashboard data",
-          variant: "default"
-        });
+        console.log("Could not load stats:", error);
+        // Don't show error toast for optional data
       } finally {
         setLoading(false);
       }
     };
     
     loadStats();
-  }, [toast]);
+  }, []);
   
   const handleFileAdded = (fileData) => {
     console.log("File added:", fileData);
@@ -58,7 +59,7 @@ export default function Dashboard() {
   const stats = [
     { 
       label: "Properties", 
-      value: loading ? "..." : properties.length, 
+      value: loading ? "..." : propertiesCount, 
       icon: HomeIcon, 
       color: "bg-blue-500" 
     },

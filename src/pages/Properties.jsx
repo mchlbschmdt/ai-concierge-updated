@@ -22,53 +22,35 @@ export default function Properties() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   
-  // Extract the timestamp parameter that forces a refresh
   const refreshTimestamp = searchParams.get('t');
-  
-  // Use the custom hook for search functionality
   const { suggestions, filteredProperties } = usePropertySearch(properties, search);
 
   useEffect(() => {
-    console.log("Properties component mounted, path:", location.pathname);
-    console.log("Loading properties, refresh trigger:", location.key, refreshTimestamp);
+    console.log("Properties component mounted");
     
     async function loadProperties() {
       try {
         setLoading(true);
         setError(null);
-        console.log("Fetching properties data...");
-        const propertiesData = await fetchProperties();
-        console.log("Properties loaded:", propertiesData);
+        console.log("Fetching properties...");
         
-        // Ensure we have an array, even if API returns null or undefined
-        if (!propertiesData) {
-          console.warn("Properties data is null or undefined");
-          setProperties([]);
-          toast({
-            title: "Notice",
-            description: "No properties found or could not connect to database.",
-            variant: "default"
-          });
+        const propertiesData = await fetchProperties();
+        console.log("Properties data received:", propertiesData);
+        
+        if (Array.isArray(propertiesData)) {
+          setProperties(propertiesData);
         } else {
-          setProperties(Array.isArray(propertiesData) ? propertiesData : []);
+          console.log("No properties found, setting empty array");
+          setProperties([]);
         }
       } catch (error) {
         console.error("Error loading properties:", error);
-        // Handle storage errors specifically
-        const errorMessage = error.message || "Failed to load properties";
-        const isStorageError = errorMessage.includes("storage") || 
-                              errorMessage.includes("space") ||
-                              errorMessage.includes("quota");
+        setError("Failed to load properties. Please try again.");
+        setProperties([]);
         
-        setError(isStorageError 
-          ? "Browser storage is full. Please clear some space and try again." 
-          : errorMessage);
-          
         toast({
           title: "Error",
-          description: isStorageError 
-            ? "Browser storage issue detected. Try clearing your browser cache." 
-            : `Failed to load properties. ${errorMessage}`,
+          description: "Could not load properties. Please check your connection.",
           variant: "destructive"
         });
       } finally {
@@ -92,17 +74,6 @@ export default function Properties() {
       <div className="container mx-auto p-4">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
           <h2 className="text-2xl font-bold">Properties</h2>
-        </div>
-        <PropertyLoadingState />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="container mx-auto p-4">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-          <h2 className="text-2xl font-bold">Properties</h2>
           <Button
             onClick={handleAddProperty}
             className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg shadow hover:bg-primary/90 transition"
@@ -110,7 +81,7 @@ export default function Properties() {
             <Plus size={18} /> Add Property
           </Button>
         </div>
-        <PropertyErrorState error={error} />
+        <PropertyLoadingState />
       </div>
     );
   }
@@ -120,12 +91,14 @@ export default function Properties() {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
         <h2 className="text-2xl font-bold">Properties</h2>
         <div className="flex items-center gap-2">
-          <PropertySearch 
-            search={search} 
-            setSearch={setSearch} 
-            suggestions={suggestions} 
-            handleSuggestionSelect={handleSuggestionSelect}
-          />
+          {properties.length > 0 && (
+            <PropertySearch 
+              search={search} 
+              setSearch={setSearch} 
+              suggestions={suggestions} 
+              handleSuggestionSelect={handleSuggestionSelect}
+            />
+          )}
           <Button
             onClick={handleAddProperty}
             className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg shadow hover:bg-primary/90 transition"
@@ -135,7 +108,9 @@ export default function Properties() {
         </div>
       </div>
 
-      {properties.length === 0 ? (
+      {error ? (
+        <PropertyErrorState error={error} />
+      ) : properties.length === 0 ? (
         <PropertyEmptyState isSearchResults={false} />
       ) : filteredProperties.length === 0 ? (
         <PropertyEmptyState isSearchResults={true} />

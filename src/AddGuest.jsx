@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/use-toast";
 import { Loader2 } from "lucide-react";
-import { collection, addDoc } from "firebase/firestore";
-import { db } from "./firebase";
+import { supabase } from "./integrations/supabase/client";
+import { fetchProperties } from "./services/propertyService";
 
 export default function AddGuest() {
   const [guestName, setGuestName] = useState("");
@@ -14,23 +14,35 @@ export default function AddGuest() {
   const [guestPropertyId, setGuestPropertyId] = useState("");
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadingProperties, setLoadingProperties] = useState(true);
   const { toast } = useToast();
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Load mock properties for the dropdown
-    const mockProperties = [
-      { id: 'prop1', property_name: 'Sunset Beach Villa', code: 'SBV001' },
-      { id: 'prop2', property_name: 'Mountain Retreat Cabin', code: 'MRC002' },
-      { id: 'prop3', property_name: 'Downtown Loft', code: 'DTL003' }
-    ];
-    setProperties(mockProperties);
-  }, []);
+    async function loadProperties() {
+      try {
+        console.log("Loading properties for guest form...");
+        const propertiesData = await fetchProperties();
+        setProperties(propertiesData || []);
+      } catch (error) {
+        console.error("Error loading properties:", error);
+        toast({
+          title: "Warning",
+          description: "Could not load properties. You may need to add properties first.",
+          variant: "default"
+        });
+        setProperties([]);
+      } finally {
+        setLoadingProperties(false);
+      }
+    }
+    
+    loadProperties();
+  }, [toast]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Validate inputs
     if (!guestName.trim() || !guestPhone.trim() || !guestPropertyId.trim()) {
       toast({
         title: "Missing Information",
@@ -43,22 +55,26 @@ export default function AddGuest() {
     setLoading(true);
     
     try {
-      // Mock adding a guest to the database
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      console.log("Adding guest to database...");
       
-      const guestData = {
-        name: guestName,
-        phone: guestPhone,
-        property_id: guestPropertyId,
-        created_at: new Date()
-      };
+      const { data, error } = await supabase
+        .from('sms_conversations')
+        .insert({
+          phone_number: guestPhone,
+          property_id: guestPropertyId,
+          conversation_state: 'property_confirmed',
+          property_confirmed: true
+        })
+        .select()
+        .single();
       
-      console.log("Adding guest:", guestData);
+      if (error) {
+        console.error("Database error:", error);
+        throw new Error(error.message);
+      }
       
-      // In production, this would write to Firestore
-      // await addDoc(collection(db, "guests"), guestData);
+      console.log("Guest added successfully:", data);
       
-      // Show success toast
       toast({
         title: "Success",
         description: "Guest added successfully!"
@@ -69,13 +85,13 @@ export default function AddGuest() {
       setGuestPhone("");
       setGuestPropertyId("");
       
-      // Navigate to guests page
+      // Navigate to guests manager
       navigate("/dashboard/guests-manager");
-    } catch (err) {
-      console.error("Error adding guest:", err);
+    } catch (error) {
+      console.error("Error adding guest:", error);
       toast({
         title: "Error",
-        description: "Failed to add guest: " + (err.message || "Unknown error"),
+        description: `Failed to add guest: ${error.message}`,
         variant: "destructive"
       });
     } finally {
@@ -83,9 +99,37 @@ export default function AddGuest() {
     }
   };
 
+  if (loadingProperties) {
+    return (
+      <div className="p-6 max-w-md mx-auto bg-white rounded shadow">
+        <div className="flex items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin mr-2" />
+          <span>Loading properties...</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 max-w-md mx-auto bg-white rounded shadow">
       <h2 className="text-xl font-bold mb-4">Add Guest</h2>
+      
+      {properties.length === 0 && (
+        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
+          <p className="text-yellow-800 text-sm">
+            No properties found. Please add a property first before adding guests.
+          </p>
+          <Button 
+            onClick={() => navigate("/dashboard/add-property")}
+            variant="outline"
+            size="sm"
+            className="mt-2"
+          >
+            Add Property
+          </Button>
+        </div>
+      )}
+      
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label htmlFor="guestName" className="block text-sm font-medium mb-1">Guest Name *</label>
@@ -121,10 +165,11 @@ export default function AddGuest() {
             onChange={(e) => setGuestPropertyId(e.target.value)}
             className="w-full p-2 border rounded"
             required
+            disabled={properties.length === 0}
           >
             <option value="">Select a property</option>
             {properties.map(property => (
-              <option key={property.id} value={property.id}>
+              <option key={property.id} value={property.code}>
                 {property.property_name} ({property.code})
               </option>
             ))}
@@ -134,7 +179,7 @@ export default function AddGuest() {
         <Button 
           type="submit" 
           className="w-full mt-4"
-          disabled={loading}
+          disabled={loading || properties.length === 0}
         >
           {loading ? (
             <>
