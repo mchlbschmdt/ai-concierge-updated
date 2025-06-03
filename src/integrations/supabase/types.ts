@@ -149,6 +149,33 @@ export type Database = {
         }
         Relationships: []
       }
+      property_codes: {
+        Row: {
+          address: string
+          code: string
+          created_at: string
+          id: string
+          property_id: string
+          property_name: string
+        }
+        Insert: {
+          address: string
+          code: string
+          created_at?: string
+          id?: string
+          property_id: string
+          property_name: string
+        }
+        Update: {
+          address?: string
+          code?: string
+          created_at?: string
+          id?: string
+          property_id?: string
+          property_name?: string
+        }
+        Relationships: []
+      }
       service_connections: {
         Row: {
           connection_details: Json
@@ -182,6 +209,36 @@ export type Database = {
           store_url?: string | null
           sync_status?: string | null
           user_id?: string
+        }
+        Relationships: []
+      }
+      sms_conversations: {
+        Row: {
+          conversation_state: string
+          created_at: string
+          id: string
+          phone_number: string
+          property_confirmed: boolean | null
+          property_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          conversation_state?: string
+          created_at?: string
+          id?: string
+          phone_number: string
+          property_confirmed?: boolean | null
+          property_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          conversation_state?: string
+          created_at?: string
+          id?: string
+          phone_number?: string
+          property_confirmed?: boolean | null
+          property_id?: string | null
+          updated_at?: string
         }
         Relationships: []
       }

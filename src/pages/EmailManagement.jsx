@@ -7,9 +7,10 @@ import { useToast } from "@/components/ui/use-toast";
 import GmailIntegration from '../components/GmailIntegration';
 import EmailDraftGenerator from '../components/EmailDraftGenerator';
 import SmsIntegration from '../components/SmsIntegration';
+import PropertyCodeManager from '../components/PropertyCodeManager';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, MessageSquare, Mail, MessageCircle } from "lucide-react";
+import { Search, MessageSquare, Mail, MessageCircle, Settings } from "lucide-react";
 
 export default function EmailManagement() {
   const { toast } = useToast();
@@ -171,9 +172,10 @@ export default function EmailManagement() {
             
             {selectedPropertyId && (
               <Tabs defaultValue="email" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
+                <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="email">Email</TabsTrigger>
                   <TabsTrigger value="sms">SMS</TabsTrigger>
+                  <TabsTrigger value="setup">Setup</TabsTrigger>
                 </TabsList>
                 <TabsContent value="email">
                   <GmailIntegration 
@@ -183,6 +185,14 @@ export default function EmailManagement() {
                 </TabsContent>
                 <TabsContent value="sms">
                   <SmsIntegration propertyId={selectedPropertyId} />
+                </TabsContent>
+                <TabsContent value="setup">
+                  <div className="bg-white rounded-lg shadow-sm p-4">
+                    <h3 className="text-lg font-semibold mb-4 flex items-center">
+                      <Settings className="mr-2" /> SMS Setup
+                    </h3>
+                    <PropertyCodeManager />
+                  </div>
                 </TabsContent>
               </Tabs>
             )}
