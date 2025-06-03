@@ -39,6 +39,7 @@ export default function Properties() {
         
         if (Array.isArray(propertiesData)) {
           setProperties(propertiesData);
+          console.log(`Loaded ${propertiesData.length} properties`);
         } else {
           console.log("No properties found, setting empty array");
           setProperties([]);
@@ -89,7 +90,7 @@ export default function Properties() {
   return (
     <div className="container mx-auto p-4">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-        <h2 className="text-2xl font-bold">Properties</h2>
+        <h2 className="text-2xl font-bold">Properties ({properties.length})</h2>
         <div className="flex items-center gap-2">
           {properties.length > 0 && (
             <PropertySearch 

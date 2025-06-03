@@ -11,7 +11,7 @@ import { fetchProperties } from "./services/propertyService";
 export default function AddGuest() {
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
-  const [guestPropertyId, setGuestPropertyId] = useState("");
+  const [selectedPropertyId, setSelectedPropertyId] = useState("");
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingProperties, setLoadingProperties] = useState(true);
@@ -23,6 +23,7 @@ export default function AddGuest() {
       try {
         console.log("Loading properties for guest form...");
         const propertiesData = await fetchProperties();
+        console.log("Properties loaded:", propertiesData);
         setProperties(propertiesData || []);
       } catch (error) {
         console.error("Error loading properties:", error);
@@ -43,7 +44,7 @@ export default function AddGuest() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!guestName.trim() || !guestPhone.trim() || !guestPropertyId.trim()) {
+    if (!guestName.trim() || !guestPhone.trim() || !selectedPropertyId.trim()) {
       toast({
         title: "Missing Information",
         description: "Please fill in all required fields",
@@ -56,12 +57,21 @@ export default function AddGuest() {
     
     try {
       console.log("Adding guest to database...");
+      console.log("Selected property ID:", selectedPropertyId);
+      
+      // Find the selected property to get its code
+      const selectedProperty = properties.find(p => p.id === selectedPropertyId);
+      if (!selectedProperty) {
+        throw new Error("Selected property not found");
+      }
+      
+      console.log("Selected property:", selectedProperty);
       
       const { data, error } = await supabase
         .from('sms_conversations')
         .insert({
           phone_number: guestPhone,
-          property_id: guestPropertyId,
+          property_id: selectedProperty.code, // Use the property code as stored in the database
           conversation_state: 'property_confirmed',
           property_confirmed: true
         })
@@ -77,16 +87,18 @@ export default function AddGuest() {
       
       toast({
         title: "Success",
-        description: "Guest added successfully!"
+        description: `Guest ${guestName} added successfully for ${selectedProperty.property_name}!`
       });
       
       // Reset form
       setGuestName("");
       setGuestPhone("");
-      setGuestPropertyId("");
+      setSelectedPropertyId("");
       
       // Navigate to guests manager
-      navigate("/dashboard/guests-manager");
+      setTimeout(() => {
+        navigate("/dashboard/guests-manager");
+      }, 1000);
     } catch (error) {
       console.error("Error adding guest:", error);
       toast({
@@ -158,18 +170,18 @@ export default function AddGuest() {
         </div>
         
         <div>
-          <label htmlFor="guestPropertyId" className="block text-sm font-medium mb-1">Property *</label>
+          <label htmlFor="selectedPropertyId" className="block text-sm font-medium mb-1">Property *</label>
           <select
-            id="guestPropertyId"
-            value={guestPropertyId}
-            onChange={(e) => setGuestPropertyId(e.target.value)}
+            id="selectedPropertyId"
+            value={selectedPropertyId}
+            onChange={(e) => setSelectedPropertyId(e.target.value)}
             className="w-full p-2 border rounded"
             required
             disabled={properties.length === 0}
           >
             <option value="">Select a property</option>
             {properties.map(property => (
-              <option key={property.id} value={property.code}>
+              <option key={property.id} value={property.id}>
                 {property.property_name} ({property.code})
               </option>
             ))}

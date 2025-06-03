@@ -78,13 +78,24 @@ export async function addProperty(propertyData) {
       throw new Error("Property name and address are required");
     }
     
+    // Ensure we have all required fields with defaults
+    const insertData = {
+      property_name: propertyData.property_name,
+      code: propertyData.code || `PROP-${Date.now()}`,
+      address: propertyData.address,
+      check_in_time: propertyData.check_in_time || '4:00 PM',
+      check_out_time: propertyData.check_out_time || '11:00 AM',
+      knowledge_base: propertyData.knowledge_base || '',
+      local_recommendations: propertyData.local_recommendations || '',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    
+    console.log("Insert data:", insertData);
+    
     const { data, error } = await supabase
       .from('properties')
-      .insert({
-        ...propertyData,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
+      .insert(insertData)
       .select()
       .single();
     

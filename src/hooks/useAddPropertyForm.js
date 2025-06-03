@@ -53,7 +53,6 @@ export default function useAddPropertyForm() {
           description: "Please fill in property name and address.",
           variant: "destructive"
         });
-        setLoading(false);
         return;
       }
 
@@ -64,11 +63,18 @@ export default function useAddPropertyForm() {
         code: propertyCode
       });
       
-      const result = await addProperty({
-        ...form,
+      // Only include fields that exist in the database schema
+      const propertyData = {
+        property_name: form.property_name,
         code: propertyCode,
-        amenities: JSON.stringify(form.amenities)
-      });
+        address: form.address,
+        check_in_time: form.check_in_time,
+        check_out_time: form.check_out_time,
+        knowledge_base: form.knowledge_base,
+        local_recommendations: form.local_recommendations
+      };
+      
+      const result = await addProperty(propertyData);
       
       console.log("Property added:", result);
       
@@ -83,11 +89,22 @@ export default function useAddPropertyForm() {
           });
         }, 200);
         
-        const fileResult = await uploadFile(result.propertyId, file);
-        console.log("File uploaded:", fileResult);
-        
-        clearInterval(progressInterval);
-        setUploadProgress(100);
+        try {
+          const fileResult = await uploadFile(result.propertyId, file);
+          console.log("File uploaded:", fileResult);
+          clearInterval(progressInterval);
+          setUploadProgress(100);
+        } catch (fileError) {
+          console.error("File upload failed:", fileError);
+          clearInterval(progressInterval);
+          setUploadProgress(0);
+          // Don't fail the whole process if file upload fails
+          toast({
+            title: "Property Added",
+            description: "Property saved successfully, but file upload failed. You can add files later.",
+            variant: "default"
+          });
+        }
       }
       
       toast({
@@ -95,6 +112,7 @@ export default function useAddPropertyForm() {
         description: "Property has been successfully added.",
       });
       
+      // Navigate to properties with timestamp to force refresh
       navigate("/dashboard/properties?t=" + Date.now());
     } catch (error) {
       console.error("Error adding property:", error);
