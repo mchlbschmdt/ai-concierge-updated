@@ -2,45 +2,25 @@ import { supabase } from '../integrations/supabase/client';
 
 export async function fetchProperties() {
   try {
-    console.log("=== fetchProperties START ===");
-    console.log("Supabase client:", supabase);
-    console.log("About to query properties table...");
-    
     const { data: properties, error } = await supabase
       .from('properties')
       .select('*')
       .order('created_at', { ascending: false });
     
-    console.log("Supabase query completed");
-    console.log("Error:", error);
-    console.log("Data:", properties);
-    
     if (error) {
-      console.error("Supabase error details:", {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code
-      });
+      console.error("Supabase error:", error.message);
       throw new Error(`Database error: ${error.message}`);
     }
     
-    console.log("Query successful, returning properties:", properties);
-    console.log("=== fetchProperties END ===");
     return properties || [];
   } catch (error) {
-    console.error("=== fetchProperties ERROR ===");
-    console.error("Caught error:", error);
-    console.error("Error type:", typeof error);
-    console.error("Error constructor:", error.constructor.name);
+    console.error("Error fetching properties:", error);
     throw error;
   }
 }
 
 export async function updateProperty(propertyId, propertyData) {
   try {
-    console.log(`Updating property ${propertyId}:`, propertyData);
-    
     const { error } = await supabase
       .from('properties')
       .update({
@@ -54,7 +34,6 @@ export async function updateProperty(propertyId, propertyData) {
       throw new Error(`Failed to update: ${error.message}`);
     }
     
-    console.log("Property updated successfully");
     return { success: true };
   } catch (error) {
     console.error("Error in updateProperty:", error);
@@ -64,8 +43,6 @@ export async function updateProperty(propertyId, propertyData) {
 
 export async function deleteProperty(propertyId) {
   try {
-    console.log(`Deleting property ${propertyId}`);
-    
     const { error } = await supabase
       .from('properties')
       .delete()
@@ -76,7 +53,6 @@ export async function deleteProperty(propertyId) {
       throw new Error(`Failed to delete: ${error.message}`);
     }
     
-    console.log("Property deleted successfully");
     return { success: true };
   } catch (error) {
     console.error("Error in deleteProperty:", error);
