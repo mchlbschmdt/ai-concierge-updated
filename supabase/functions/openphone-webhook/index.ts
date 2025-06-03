@@ -9,6 +9,48 @@ const corsHeaders = {
 
 console.log("OpenPhone webhook function starting up...")
 
+// Webhook signature verification
+async function verifyWebhookSignature(body: string, signature: string, secret: string): Promise<boolean> {
+  try {
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify']
+    );
+
+    // Extract the actual signature from the header (format: "hmac;1;timestamp;signature")
+    const parts = signature.split(';');
+    if (parts.length !== 4 || parts[0] !== 'hmac') {
+      console.error('Invalid signature format');
+      return false;
+    }
+
+    const timestamp = parts[2];
+    const providedSignature = parts[3];
+    
+    // Create the payload that was signed: timestamp + body
+    const payload = timestamp + body;
+    
+    // Verify the signature
+    const signatureBuffer = Uint8Array.from(atob(providedSignature), c => c.charCodeAt(0));
+    const isValid = await crypto.subtle.verify(
+      'HMAC',
+      key,
+      signatureBuffer,
+      encoder.encode(payload)
+    );
+
+    console.log('Signature verification result:', isValid);
+    return isValid;
+  } catch (error) {
+    console.error('Error verifying webhook signature:', error);
+    return false;
+  }
+}
+
 // SMS Conversation Service - embedded implementation
 class SmsConversationService {
   constructor(supabase) {
@@ -267,6 +309,29 @@ serve(async (req) => {
 
       const body = await req.text()
       console.log('Received webhook body:', body);
+
+      // Verify webhook signature if secret is available
+      const webhookSecret = Deno.env.get('OPENPHONE_WEBHOOK_SECRET');
+      const signature = req.headers.get('openphone-signature');
+      
+      if (webhookSecret && signature) {
+        console.log('Verifying webhook signature...');
+        const isValidSignature = await verifyWebhookSignature(body, signature, webhookSecret);
+        
+        if (!isValidSignature) {
+          console.error('Invalid webhook signature');
+          return new Response(
+            JSON.stringify({ error: 'Invalid signature' }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 401
+            }
+          );
+        }
+        console.log('Webhook signature verified successfully');
+      } else {
+        console.log('No webhook secret configured, skipping signature verification');
+      }
       
       let payload;
       try {
@@ -351,17 +416,11 @@ serve(async (req) => {
                 
                 console.log('SMS payload:', JSON.stringify(smsPayload, null, 2));
                 console.log('Using API key (first 10 chars):', apiKey.substring(0, 10) + '...');
-                console.log('API key type:', typeof apiKey);
-                console.log('API key trimmed length:', apiKey.trim().length);
-                
-                // Test if API key has any invisible characters
-                const cleanApiKey = apiKey.trim();
-                console.log('Clean API key (first 10 chars):', cleanApiKey.substring(0, 10) + '...');
                 
                 const smsResponse = await fetch('https://api.openphone.com/v1/messages', {
                   method: 'POST',
                   headers: {
-                    'Authorization': `Bearer ${cleanApiKey}`,
+                    'Authorization': `Bearer ${apiKey.trim()}`,
                     'Content-Type': 'application/json',
                   },
                   body: JSON.stringify(smsPayload)
@@ -370,7 +429,6 @@ serve(async (req) => {
                 const responseText = await smsResponse.text();
                 console.log('OpenPhone API response status:', smsResponse.status);
                 console.log('OpenPhone API response text:', responseText);
-                console.log('Response headers:', Object.fromEntries(smsResponse.headers.entries()));
                 
                 let smsResult;
                 try {
@@ -412,7 +470,6 @@ serve(async (req) => {
                   if (smsResponse.status === 401) {
                     console.error('AUTHENTICATION ERROR: The OpenPhone API key appears to be invalid or expired');
                     console.error('Please check that the OPENPHONE_API_KEY secret is set correctly');
-                    console.error('API key format should be a 32-character string starting with your API key');
                   }
                 }
               }
