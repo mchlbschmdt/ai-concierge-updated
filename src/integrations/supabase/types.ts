@@ -149,6 +149,45 @@ export type Database = {
         }
         Relationships: []
       }
+      properties: {
+        Row: {
+          address: string
+          check_in_time: string | null
+          check_out_time: string | null
+          code: string
+          created_at: string
+          id: string
+          knowledge_base: string | null
+          local_recommendations: string | null
+          property_name: string
+          updated_at: string
+        }
+        Insert: {
+          address: string
+          check_in_time?: string | null
+          check_out_time?: string | null
+          code: string
+          created_at?: string
+          id?: string
+          knowledge_base?: string | null
+          local_recommendations?: string | null
+          property_name: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string
+          check_in_time?: string | null
+          check_out_time?: string | null
+          code?: string
+          created_at?: string
+          id?: string
+          knowledge_base?: string | null
+          local_recommendations?: string | null
+          property_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       property_codes: {
         Row: {
           address: string
