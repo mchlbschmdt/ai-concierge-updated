@@ -215,12 +215,15 @@ serve(async (req) => {
       if (message.direction === 'incoming') {
         console.log('Processing incoming SMS:', message)
         
-        // Store the raw message
+        // Generate a UUID for the conversation_id using the OpenPhone conversationId
+        const conversationUuid = crypto.randomUUID()
+        
+        // Store the raw message with generated UUID
         const { error: insertError } = await supabase
           .from('conversation_messages')
           .insert({
-            id: message.id,
-            conversation_id: message.conversationId || message.phoneNumberId,
+            id: crypto.randomUUID(), // Generate UUID for message ID
+            conversation_id: conversationUuid,
             role: 'user',
             content: message.body || message.text,
             timestamp: new Date(message.createdAt).toISOString()
@@ -249,6 +252,8 @@ serve(async (req) => {
               return new Response('API key not configured', { status: 500 })
             }
 
+            console.log('Sending SMS response with API key length:', apiKey?.length)
+
             const smsResponse = await fetch('https://api.openphone.com/v1/messages', {
               method: 'POST',
               headers: {
@@ -266,15 +271,17 @@ serve(async (req) => {
             
             if (!smsResponse.ok) {
               console.error('Failed to send SMS response:', responseData)
+              console.error('Response status:', smsResponse.status)
+              console.error('Response headers:', Object.fromEntries(smsResponse.headers.entries()))
             } else {
               console.log('Automated SMS response sent:', responseData)
               
-              // Store the automated response
+              // Store the automated response with generated UUID
               await supabase
                 .from('conversation_messages')
                 .insert({
-                  id: responseData.id,
-                  conversation_id: message.conversationId || message.phoneNumberId,
+                  id: crypto.randomUUID(), // Generate UUID for response message ID
+                  conversation_id: conversationUuid,
                   role: 'assistant',
                   content: result.response,
                   timestamp: new Date().toISOString()
