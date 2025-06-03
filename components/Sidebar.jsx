@@ -7,6 +7,7 @@ const navItems = [
   { label: "Guests", path: "/dashboard/guests" },
   { label: "Guest Manager", path: "/dashboard/guests-manager" },
   { label: "Properties", path: "/dashboard/properties" },
+  { label: "Property Manager", path: "/dashboard/properties-manager" },
   { label: "Messages", path: "/dashboard/messages" },
   { label: "Analytics", path: "/dashboard/analytics" },
   { label: "FAQ Editor", path: "/dashboard/faq-editor" },

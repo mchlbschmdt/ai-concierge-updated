@@ -15,17 +15,20 @@ export default function PropertyManager() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    console.log("PropertyManager component mounted");
+    
     const loadProperties = async () => {
       try {
         setLoading(true);
         setError(null);
-        console.log("Loading properties...");
+        console.log("Loading properties in PropertyManager...");
         const propertiesData = await fetchProperties();
-        console.log("Properties loaded successfully:", propertiesData);
-        setProperties(propertiesData);
+        console.log("Properties loaded in PropertyManager:", propertiesData);
+        setProperties(propertiesData || []);
       } catch (error) {
-        console.error("Error loading properties:", error);
+        console.error("Error loading properties in PropertyManager:", error);
         setError(error.message);
+        setProperties([]);
         toast({
           title: "Error",
           description: `Failed to load properties: ${error.message}`,
@@ -60,7 +63,7 @@ export default function PropertyManager() {
         description: `Failed to update property: ${error.message}`,
         variant: "destructive"
       });
-      throw error; // Re-throw to let the component handle it
+      throw error;
     }
   };
   
@@ -83,13 +86,12 @@ export default function PropertyManager() {
         description: `Failed to delete property: ${error.message}`,
         variant: "destructive"
       });
-      throw error; // Re-throw to let the component handle it
+      throw error;
     }
   };
   
   const handleFileAdded = (propertyId, fileData) => {
     console.log("File added to property:", propertyId, fileData);
-    // Update the local state to include the new file
     setProperties(prev => prev.map(p => {
       if (p.id !== propertyId) return p;
       
@@ -102,7 +104,6 @@ export default function PropertyManager() {
   
   const handleFileDeleted = (propertyId, filePath) => {
     console.log("File deleted from property:", propertyId, filePath);
-    // Update the local state to remove the deleted file
     setProperties(prev => prev.map(p => {
       if (p.id !== propertyId) return p;
       
@@ -115,7 +116,6 @@ export default function PropertyManager() {
   
   const handleMessagesAdded = (propertyId, messages) => {
     console.log("Messages added to property:", propertyId, messages);
-    // Update the local state to include the new messages
     setProperties(prev => prev.map(p => {
       if (p.id !== propertyId) return p;
       
@@ -125,6 +125,8 @@ export default function PropertyManager() {
       };
     }));
   };
+
+  console.log("PropertyManager render - loading:", loading, "error:", error, "properties count:", properties.length);
 
   if (loading) {
     return (
@@ -166,7 +168,7 @@ export default function PropertyManager() {
   return (
     <div className="container mx-auto p-4">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-primary">Manage Properties</h1>
+        <h1 className="text-2xl font-bold text-primary">Manage Properties ({properties.length})</h1>
         <Link 
           to="/dashboard/add-property" 
           className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg shadow hover:bg-primary/90 transition"
@@ -178,17 +180,19 @@ export default function PropertyManager() {
       {properties.length === 0 ? (
         <EmptyProperties />
       ) : (
-        properties.map((property) => (
-          <PropertyCard
-            key={property.id}
-            property={property}
-            onUpdate={handlePropertyUpdate}
-            onDelete={handlePropertyDelete}
-            onFileAdded={handleFileAdded}
-            onFileDeleted={handleFileDeleted}
-            onMessagesAdded={handleMessagesAdded}
-          />
-        ))
+        <div className="space-y-4">
+          {properties.map((property) => (
+            <PropertyCard
+              key={property.id}
+              property={property}
+              onUpdate={handlePropertyUpdate}
+              onDelete={handlePropertyDelete}
+              onFileAdded={handleFileAdded}
+              onFileDeleted={handleFileDeleted}
+              onMessagesAdded={handleMessagesAdded}
+            />
+          ))}
+        </div>
       )}
     </div>
   );
