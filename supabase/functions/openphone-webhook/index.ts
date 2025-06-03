@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -9,44 +8,90 @@ const corsHeaders = {
 
 console.log("OpenPhone webhook function starting up...")
 
-// Webhook signature verification
+// Enhanced webhook signature verification with multiple approaches
 async function verifyWebhookSignature(body: string, signature: string, secret: string): Promise<boolean> {
   try {
+    console.log('Signature verification details:');
+    console.log('- Body length:', body.length);
+    console.log('- Signature header:', signature);
+    console.log('- Secret length:', secret.length);
+    
     const encoder = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-      'raw',
-      encoder.encode(secret),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['verify']
-    );
-
-    // Extract the actual signature from the header (format: "hmac;1;timestamp;signature")
+    
+    // Extract the signature components (format: "hmac;1;timestamp;signature")
     const parts = signature.split(';');
     if (parts.length !== 4 || parts[0] !== 'hmac') {
-      console.error('Invalid signature format');
+      console.error('Invalid signature format. Expected: hmac;1;timestamp;signature');
       return false;
     }
 
     const timestamp = parts[2];
     const providedSignature = parts[3];
     
-    // Create the payload that was signed: timestamp + body
-    const payload = timestamp + body;
-    
-    // Verify the signature
-    const signatureBuffer = Uint8Array.from(atob(providedSignature), c => c.charCodeAt(0));
-    const isValid = await crypto.subtle.verify(
-      'HMAC',
-      key,
-      signatureBuffer,
-      encoder.encode(payload)
-    );
+    console.log('- Timestamp:', timestamp);
+    console.log('- Provided signature:', providedSignature);
 
-    console.log('Signature verification result:', isValid);
-    return isValid;
+    // Try multiple approaches to find the correct one
+    const approaches = [
+      {
+        name: 'Raw body only',
+        payload: body,
+        secret: secret
+      },
+      {
+        name: 'Timestamp + body',
+        payload: timestamp + body,
+        secret: secret
+      },
+      {
+        name: 'Raw body with base64 decoded secret',
+        payload: body,
+        secret: atob(secret)
+      },
+      {
+        name: 'Timestamp + body with base64 decoded secret',
+        payload: timestamp + body,
+        secret: atob(secret)
+      }
+    ];
+
+    for (const approach of approaches) {
+      try {
+        console.log(`Trying approach: ${approach.name}`);
+        
+        const key = await crypto.subtle.importKey(
+          'raw',
+          encoder.encode(approach.secret),
+          { name: 'HMAC', hash: 'SHA-256' },
+          false,
+          ['verify']
+        );
+        
+        // Verify the signature
+        const signatureBuffer = Uint8Array.from(atob(providedSignature), c => c.charCodeAt(0));
+        const isValid = await crypto.subtle.verify(
+          'HMAC',
+          key,
+          signatureBuffer,
+          encoder.encode(approach.payload)
+        );
+
+        console.log(`- ${approach.name} result:`, isValid);
+        
+        if (isValid) {
+          console.log(`✅ Signature verification successful with approach: ${approach.name}`);
+          return true;
+        }
+      } catch (approachError) {
+        console.log(`- ${approach.name} failed:`, approachError.message);
+      }
+    }
+
+    console.error('❌ All signature verification approaches failed');
+    return false;
+    
   } catch (error) {
-    console.error('Error verifying webhook signature:', error);
+    console.error('Error in signature verification:', error);
     return false;
   }
 }
@@ -315,11 +360,11 @@ serve(async (req) => {
       const signature = req.headers.get('openphone-signature');
       
       if (webhookSecret && signature) {
-        console.log('Verifying webhook signature...');
+        console.log('🔐 Verifying webhook signature...');
         const isValidSignature = await verifyWebhookSignature(body, signature, webhookSecret);
         
         if (!isValidSignature) {
-          console.error('Invalid webhook signature');
+          console.error('❌ Invalid webhook signature - rejecting request');
           return new Response(
             JSON.stringify({ error: 'Invalid signature' }),
             {
@@ -328,9 +373,15 @@ serve(async (req) => {
             }
           );
         }
-        console.log('Webhook signature verified successfully');
+        console.log('✅ Webhook signature verified successfully');
       } else {
-        console.log('No webhook secret configured, skipping signature verification');
+        console.log('⚠️  No webhook secret configured, skipping signature verification');
+        if (!webhookSecret) {
+          console.log('   Missing OPENPHONE_WEBHOOK_SECRET environment variable');
+        }
+        if (!signature) {
+          console.log('   Missing openphone-signature header');
+        }
       }
       
       let payload;
