@@ -215,15 +215,45 @@ serve(async (req) => {
       if (message.direction === 'incoming') {
         console.log('Processing incoming SMS:', message)
         
-        // Generate a UUID for the conversation_id using the OpenPhone conversationId
-        const conversationUuid = crypto.randomUUID()
+        // Create or get conversation record first
+        let conversationId;
         
-        // Store the raw message with generated UUID
+        // Try to find existing conversation by OpenPhone conversation ID
+        const { data: existingConversation } = await supabase
+          .from('conversations')
+          .select('id')
+          .eq('id', message.conversationId)
+          .maybeSingle();
+
+        if (existingConversation) {
+          conversationId = existingConversation.id;
+        } else {
+          // Create new conversation record
+          const { data: newConversation, error: convError } = await supabase
+            .from('conversations')
+            .insert({
+              id: message.conversationId, // Use OpenPhone conversation ID
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .select('id')
+            .single();
+
+          if (convError) {
+            console.error('Error creating conversation:', convError);
+            // If conversation creation fails, use a generated UUID
+            conversationId = crypto.randomUUID();
+          } else {
+            conversationId = newConversation.id;
+          }
+        }
+        
+        // Store the raw message with valid conversation ID
         const { error: insertError } = await supabase
           .from('conversation_messages')
           .insert({
-            id: crypto.randomUUID(), // Generate UUID for message ID
-            conversation_id: conversationUuid,
+            id: crypto.randomUUID(),
+            conversation_id: conversationId,
             role: 'user',
             content: message.body || message.text,
             timestamp: new Date(message.createdAt).toISOString()
@@ -252,7 +282,7 @@ serve(async (req) => {
               return new Response('API key not configured', { status: 500 })
             }
 
-            console.log('Sending SMS response with API key length:', apiKey?.length)
+            console.log('Sending SMS response...')
 
             const smsResponse = await fetch('https://api.openphone.com/v1/messages', {
               method: 'POST',
@@ -274,14 +304,14 @@ serve(async (req) => {
               console.error('Response status:', smsResponse.status)
               console.error('Response headers:', Object.fromEntries(smsResponse.headers.entries()))
             } else {
-              console.log('Automated SMS response sent:', responseData)
+              console.log('Automated SMS response sent successfully:', responseData)
               
-              // Store the automated response with generated UUID
+              // Store the automated response
               await supabase
                 .from('conversation_messages')
                 .insert({
-                  id: crypto.randomUUID(), // Generate UUID for response message ID
-                  conversation_id: conversationUuid,
+                  id: crypto.randomUUID(),
+                  conversation_id: conversationId,
                   role: 'assistant',
                   content: result.response,
                   timestamp: new Date().toISOString()
@@ -295,18 +325,22 @@ serve(async (req) => {
           // Send fallback message
           const apiKey = Deno.env.get('OPENPHONE_API_KEY')
           if (apiKey) {
-            await fetch('https://api.openphone.com/v1/messages', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${apiKey}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                to: [message.from],
-                text: "Sorry, I'm having trouble processing your message right now. Please try again or contact us directly.",
-                from: message.to
+            try {
+              await fetch('https://api.openphone.com/v1/messages', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  to: [message.from],
+                  text: "Sorry, I'm having trouble processing your message right now. Please try again or contact us directly.",
+                  from: message.to
+                })
               })
-            })
+            } catch (fallbackError) {
+              console.error('Error sending fallback message:', fallbackError)
+            }
           }
         }
       }
