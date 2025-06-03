@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -7,8 +6,10 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import GmailIntegration from '../components/GmailIntegration';
 import EmailDraftGenerator from '../components/EmailDraftGenerator';
+import SmsIntegration from '../components/SmsIntegration';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, MessageSquare, Mail } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Search, MessageSquare, Mail, MessageCircle } from "lucide-react";
 
 export default function EmailManagement() {
   const { toast } = useToast();
@@ -131,14 +132,27 @@ export default function EmailManagement() {
     setFilteredMessages(prev => [...newMessages, ...prev]);
   };
 
+  const getMessageIcon = (source) => {
+    switch(source) {
+      case 'sms':
+      case 'openphone':
+        return <MessageCircle className="h-4 w-4 text-green-600" />;
+      case 'email':
+      case 'gmail':
+        return <Mail className="h-4 w-4 text-blue-600" />;
+      default:
+        return <MessageSquare className="h-4 w-4 text-gray-600" />;
+    }
+  };
+
   return (
     <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold text-primary mb-6">Email Management</h1>
+      <h1 className="text-2xl font-bold text-primary mb-6">Communication Management</h1>
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="col-span-1">
           <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
-            <h2 className="text-lg font-semibold mb-4">Gmail Integration</h2>
+            <h2 className="text-lg font-semibold mb-4">Property Selection</h2>
             <Select 
               value={selectedPropertyId} 
               onValueChange={handlePropertyChange}
@@ -156,10 +170,21 @@ export default function EmailManagement() {
             </Select>
             
             {selectedPropertyId && (
-              <GmailIntegration 
-                propertyId={selectedPropertyId}
-                onMessagesImported={handleMessagesImported}
-              />
+              <Tabs defaultValue="email" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="email">Email</TabsTrigger>
+                  <TabsTrigger value="sms">SMS</TabsTrigger>
+                </TabsList>
+                <TabsContent value="email">
+                  <GmailIntegration 
+                    propertyId={selectedPropertyId}
+                    onMessagesImported={handleMessagesImported}
+                  />
+                </TabsContent>
+                <TabsContent value="sms">
+                  <SmsIntegration propertyId={selectedPropertyId} />
+                </TabsContent>
+              </Tabs>
             )}
           </div>
         </div>
@@ -197,8 +222,11 @@ export default function EmailManagement() {
                       className={`border rounded p-3 hover:bg-gray-50 cursor-pointer transition-colors ${selectedMessage === message ? 'border-primary bg-primary/5' : ''}`}
                       onClick={() => handleMessageSelect(message)}
                     >
-                      <div className="flex justify-between">
-                        <p className="font-medium text-sm">{message.sender}</p>
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-center gap-2">
+                          {getMessageIcon(message.source)}
+                          <p className="font-medium text-sm">{message.sender}</p>
+                        </div>
                         <span className="text-xs text-gray-500">
                           {new Date(message.timestamp?.seconds * 1000 || Date.parse(message.timestamp) || Date.now()).toLocaleDateString()}
                         </span>
@@ -206,6 +234,11 @@ export default function EmailManagement() {
                       <p className="text-sm line-clamp-2 text-gray-700 mt-1">
                         {message.content}
                       </p>
+                      <div className="flex justify-between items-center mt-2">
+                        <span className="text-xs bg-gray-100 px-2 py-1 rounded">
+                          {message.source === 'sms' || message.source === 'openphone' ? 'SMS' : 'Email'}
+                        </span>
+                      </div>
                     </div>
                   ))
                 )}
