@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+
+import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
@@ -13,50 +14,50 @@ export default function PropertyManager() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const loadProperties = useCallback(async () => {
+    try {
+      console.log("Setting loading to true and clearing error");
+      setLoading(true);
+      setError(null);
+      
+      console.log("About to call fetchProperties...");
+      const startTime = Date.now();
+      const propertiesData = await fetchProperties();
+      const endTime = Date.now();
+      
+      console.log(`fetchProperties completed in ${endTime - startTime}ms`);
+      console.log("Raw properties data received:", propertiesData);
+      console.log("Properties data type:", typeof propertiesData);
+      console.log("Properties data length:", propertiesData?.length);
+      
+      if (Array.isArray(propertiesData)) {
+        console.log("Setting properties array with", propertiesData.length, "items");
+        setProperties(propertiesData);
+      } else {
+        console.log("Properties data is not an array, setting empty array");
+        setProperties([]);
+      }
+      
+      console.log("Successfully completed property loading");
+    } catch (error) {
+      console.error("Error in loadProperties:", error);
+      console.error("Error stack:", error.stack);
+      console.error("Error message:", error.message);
+      setError(error.message);
+      setProperties([]);
+      toast({
+        title: "Error",
+        description: `Failed to load properties: ${error.message}`,
+        variant: "destructive"
+      });
+    } finally {
+      console.log("Setting loading to false");
+      setLoading(false);
+    }
+  }, [toast]);
+
   useEffect(() => {
     console.log("PropertyManager component mounted - starting data fetch");
-    
-    const loadProperties = async () => {
-      try {
-        console.log("Setting loading to true and clearing error");
-        setLoading(true);
-        setError(null);
-        
-        console.log("About to call fetchProperties...");
-        const startTime = Date.now();
-        const propertiesData = await fetchProperties();
-        const endTime = Date.now();
-        
-        console.log(`fetchProperties completed in ${endTime - startTime}ms`);
-        console.log("Raw properties data received:", propertiesData);
-        console.log("Properties data type:", typeof propertiesData);
-        console.log("Properties data length:", propertiesData?.length);
-        
-        if (Array.isArray(propertiesData)) {
-          console.log("Setting properties array with", propertiesData.length, "items");
-          setProperties(propertiesData);
-        } else {
-          console.log("Properties data is not an array, setting empty array");
-          setProperties([]);
-        }
-        
-        console.log("Successfully completed property loading");
-      } catch (error) {
-        console.error("Error in loadProperties:", error);
-        console.error("Error stack:", error.stack);
-        console.error("Error message:", error.message);
-        setError(error.message);
-        setProperties([]);
-        toast({
-          title: "Error",
-          description: `Failed to load properties: ${error.message}`,
-          variant: "destructive"
-        });
-      } finally {
-        console.log("Setting loading to false");
-        setLoading(false);
-      }
-    };
     
     // Add a timeout to prevent infinite loading
     const timeoutId = setTimeout(() => {
@@ -68,7 +69,11 @@ export default function PropertyManager() {
     loadProperties().finally(() => {
       clearTimeout(timeoutId);
     });
-  }, [toast]);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [loadProperties]);
 
   const handlePropertyUpdate = async (propertyId, updatedData) => {
     try {
@@ -118,7 +123,7 @@ export default function PropertyManager() {
     }
   };
   
-  const handleFileAdded = (propertyId, fileData) => {
+  const handleFileAdded = useCallback((propertyId, fileData) => {
     console.log("File added to property:", propertyId, fileData);
     setProperties(prev => prev.map(p => {
       if (p.id !== propertyId) return p;
@@ -128,9 +133,9 @@ export default function PropertyManager() {
         files: [...(p.files || []), fileData]
       };
     }));
-  };
+  }, []);
   
-  const handleFileDeleted = (propertyId, filePath) => {
+  const handleFileDeleted = useCallback((propertyId, filePath) => {
     console.log("File deleted from property:", propertyId, filePath);
     setProperties(prev => prev.map(p => {
       if (p.id !== propertyId) return p;
@@ -140,9 +145,9 @@ export default function PropertyManager() {
         files: (p.files || []).filter(file => file.path !== filePath)
       };
     }));
-  };
+  }, []);
   
-  const handleMessagesAdded = (propertyId, messages) => {
+  const handleMessagesAdded = useCallback((propertyId, messages) => {
     console.log("Messages added to property:", propertyId, messages);
     setProperties(prev => prev.map(p => {
       if (p.id !== propertyId) return p;
@@ -152,7 +157,7 @@ export default function PropertyManager() {
         messages: [...(p.messages || []), ...messages]
       };
     }));
-  };
+  }, []);
 
   console.log("PropertyManager render state:", { 
     loading, 
