@@ -251,6 +251,41 @@ export type Database = {
         }
         Relationships: []
       }
+      sms_conversation_messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          role: string
+          sms_conversation_id: string
+          timestamp: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          role: string
+          sms_conversation_id: string
+          timestamp?: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          role?: string
+          sms_conversation_id?: string
+          timestamp?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sms_conversation_messages_sms_conversation_id_fkey"
+            columns: ["sms_conversation_id"]
+            isOneToOne: false
+            referencedRelation: "sms_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sms_conversations: {
         Row: {
           conversation_state: string

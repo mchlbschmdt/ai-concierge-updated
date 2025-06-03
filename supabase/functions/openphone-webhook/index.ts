@@ -304,13 +304,13 @@ serve(async (req) => {
             smsConversation = null;
           }
           
-          // Store the message in conversation_messages table (if we have a conversation)
+          // Store the message in sms_conversation_messages table (if we have a conversation)
           if (smsConversation) {
             const { error: storeError } = await supabase
-              .from('conversation_messages')
+              .from('sms_conversation_messages')
               .insert({
                 id: crypto.randomUUID(),
-                conversation_id: smsConversation.id,
+                sms_conversation_id: smsConversation.id,
                 role: 'user',
                 content: message.body || message.text || '',
                 timestamp: new Date().toISOString()
@@ -319,7 +319,7 @@ serve(async (req) => {
             if (storeError) {
               console.error('Error storing message:', storeError)
             } else {
-              console.log('Message stored successfully in database');
+              console.log('Message stored successfully in sms_conversation_messages table');
             }
           }
 
@@ -385,13 +385,13 @@ serve(async (req) => {
                 if (smsResponse.ok) {
                   console.log('Automated response sent successfully');
                   
-                  // Store the bot response in conversation_messages (if we have a conversation)
+                  // Store the bot response in sms_conversation_messages (if we have a conversation)
                   if (smsConversation) {
                     const { error: botStoreError } = await supabase
-                      .from('conversation_messages')
+                      .from('sms_conversation_messages')
                       .insert({
                         id: crypto.randomUUID(),
-                        conversation_id: smsConversation.id,
+                        sms_conversation_id: smsConversation.id,
                         role: 'assistant',
                         content: result.response,
                         timestamp: new Date().toISOString()
@@ -399,6 +399,8 @@ serve(async (req) => {
                       
                     if (botStoreError) {
                       console.error('Error storing bot response:', botStoreError);
+                    } else {
+                      console.log('Bot response stored successfully in sms_conversation_messages table');
                     }
                   }
                     
