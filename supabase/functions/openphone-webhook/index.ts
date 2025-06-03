@@ -23,7 +23,12 @@ class SmsConversationService {
       .eq('phone_number', phoneNumber)
       .maybeSingle();
 
+    if (error) {
+      console.error('Error fetching conversation:', error);
+    }
+
     if (existing) {
+      console.log('Found existing conversation:', existing);
       return existing;
     }
 
@@ -38,9 +43,11 @@ class SmsConversationService {
       .single();
 
     if (createError) {
+      console.error('Failed to create conversation:', createError);
       throw new Error(`Failed to create conversation: ${createError.message}`);
     }
 
+    console.log('Created new conversation:', newConversation);
     return newConversation;
   }
 
@@ -56,13 +63,17 @@ class SmsConversationService {
       .single();
 
     if (error) {
+      console.error('Failed to update conversation:', error);
       throw new Error(`Failed to update conversation: ${error.message}`);
     }
 
+    console.log('Updated conversation:', data);
     return data;
   }
 
   async findPropertyByCode(code) {
+    console.log('Looking up property code:', code);
+    
     // First try the properties table
     const { data: property, error } = await this.supabase
       .from('properties')
@@ -70,11 +81,13 @@ class SmsConversationService {
       .eq('code', code.toString())
       .maybeSingle();
 
-    if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+    if (error && error.code !== 'PGRST116') {
+      console.error('Database error in properties table:', error);
       throw new Error(`Database error: ${error.message}`);
     }
 
     if (property) {
+      console.log('Found property in properties table:', property);
       return {
         property_id: property.id,
         property_name: property.property_name,
@@ -94,15 +107,26 @@ class SmsConversationService {
       .maybeSingle();
 
     if (codeError && codeError.code !== 'PGRST116') {
+      console.error('Database error in property_codes table:', codeError);
       throw new Error(`Database error: ${codeError.message}`);
+    }
+
+    if (propertyCode) {
+      console.log('Found property in property_codes table:', propertyCode);
+    } else {
+      console.log('Property code not found in either table');
     }
 
     return propertyCode;
   }
 
   async processMessage(phoneNumber, messageBody) {
+    console.log('Processing message from:', phoneNumber, 'Message:', messageBody);
+    
     const conversation = await this.getOrCreateConversation(phoneNumber);
     const cleanMessage = messageBody.trim().toLowerCase();
+
+    console.log('Current conversation state:', conversation.conversation_state);
 
     switch (conversation.conversation_state) {
       case 'awaiting_property_id':
@@ -129,6 +153,8 @@ class SmsConversationService {
         shouldUpdateState: false
       };
     }
+
+    console.log('Extracted property code:', propertyCode);
 
     const property = await this.findPropertyByCode(propertyCode);
     
@@ -266,21 +292,35 @@ serve(async (req) => {
         if (message.direction === 'incoming') {
           console.log('Processing incoming message from:', message.from);
           
-          // Store the message in conversation_messages table
-          const { error: storeError } = await supabase
-            .from('conversation_messages')
-            .insert({
-              id: crypto.randomUUID(),
-              conversation_id: crypto.randomUUID(), // Generate a proper UUID for conversation_id
-              role: 'user',
-              content: message.body || message.text || '',
-              timestamp: new Date().toISOString()
-            })
+          // Get or create SMS conversation first
+          const conversationService = new SmsConversationService(supabase);
+          let smsConversation;
+          
+          try {
+            smsConversation = await conversationService.getOrCreateConversation(message.from);
+            console.log('Got SMS conversation:', smsConversation);
+          } catch (convError) {
+            console.error('Error getting SMS conversation:', convError);
+            smsConversation = null;
+          }
+          
+          // Store the message in conversation_messages table (if we have a conversation)
+          if (smsConversation) {
+            const { error: storeError } = await supabase
+              .from('conversation_messages')
+              .insert({
+                id: crypto.randomUUID(),
+                conversation_id: smsConversation.id, // Use the actual SMS conversation ID
+                role: 'user',
+                content: message.body || message.text || '',
+                timestamp: new Date().toISOString()
+              })
 
-          if (storeError) {
-            console.error('Error storing message:', storeError)
-          } else {
-            console.log('Message stored successfully in database');
+            if (storeError) {
+              console.error('Error storing message:', storeError)
+            } else {
+              console.log('Message stored successfully in database');
+            }
           }
 
           // Process the message using the conversation service
@@ -289,12 +329,12 @@ serve(async (req) => {
           
           console.log('Message text:', messageText);
           console.log('API key exists:', !!apiKey);
+          console.log('API key length:', apiKey ? apiKey.length : 0);
           
           if (apiKey && messageText) {
             console.log('Processing message with conversation service...');
             
             try {
-              const conversationService = new SmsConversationService(supabase);
               const result = await conversationService.processMessage(message.from, messageText);
               
               console.log('Conversation service result:', result);
@@ -302,38 +342,53 @@ serve(async (req) => {
               if (result.response) {
                 console.log('Sending automated response:', result.response);
                 
+                // Prepare the OpenPhone API request
+                const smsPayload = {
+                  to: [message.from],
+                  text: result.response,
+                  from: message.to
+                };
+                
+                console.log('SMS payload:', JSON.stringify(smsPayload, null, 2));
+                console.log('Using API key (first 10 chars):', apiKey.substring(0, 10) + '...');
+                
                 const smsResponse = await fetch('https://api.openphone.com/v1/messages', {
                   method: 'POST',
                   headers: {
                     'Authorization': `Bearer ${apiKey}`,
                     'Content-Type': 'application/json',
                   },
-                  body: JSON.stringify({
-                    to: [message.from],
-                    text: result.response,
-                    from: message.to
-                  })
+                  body: JSON.stringify(smsPayload)
                 });
 
                 const smsResult = await smsResponse.json();
+                console.log('OpenPhone API response status:', smsResponse.status);
                 console.log('OpenPhone API response:', smsResult);
                 
                 if (smsResponse.ok) {
                   console.log('Automated response sent successfully');
                   
-                  // Store the bot response in conversation_messages
-                  await supabase
-                    .from('conversation_messages')
-                    .insert({
-                      id: crypto.randomUUID(),
-                      conversation_id: crypto.randomUUID(),
-                      role: 'assistant',
-                      content: result.response,
-                      timestamp: new Date().toISOString()
-                    });
+                  // Store the bot response in conversation_messages (if we have a conversation)
+                  if (smsConversation) {
+                    const { error: botStoreError } = await supabase
+                      .from('conversation_messages')
+                      .insert({
+                        id: crypto.randomUUID(),
+                        conversation_id: smsConversation.id, // Use the actual SMS conversation ID
+                        role: 'assistant',
+                        content: result.response,
+                        timestamp: new Date().toISOString()
+                      });
+                      
+                    if (botStoreError) {
+                      console.error('Error storing bot response:', botStoreError);
+                    }
+                  }
                     
                 } else {
                   console.error('Failed to send automated response:', smsResult);
+                  console.error('Response status:', smsResponse.status);
+                  console.error('Response headers:', Object.fromEntries(smsResponse.headers.entries()));
                 }
               }
             } catch (conversationError) {
@@ -356,10 +411,20 @@ serve(async (req) => {
                 
                 if (fallbackResponse.ok) {
                   console.log('Fallback message sent successfully');
+                } else {
+                  const fallbackResult = await fallbackResponse.json();
+                  console.error('Failed to send fallback message:', fallbackResult);
                 }
               } catch (fallbackError) {
                 console.error('Failed to send fallback message:', fallbackError);
               }
+            }
+          } else {
+            if (!apiKey) {
+              console.error('OPENPHONE_API_KEY not found in environment variables');
+            }
+            if (!messageText) {
+              console.error('No message text to process');
             }
           }
         }
