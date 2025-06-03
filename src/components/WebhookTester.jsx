@@ -15,7 +15,7 @@ export default function WebhookTester() {
       console.log('Testing webhook endpoint...');
       
       const response = await fetch(
-        'https://tulhwmzrvbzzacphunes.supabase.co/functions/v1/openphone-webhook',
+        'https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openphone-webhook',
         { 
           method: 'GET',
           headers: {
@@ -74,7 +74,7 @@ export default function WebhookTester() {
       };
 
       const response = await fetch(
-        'https://tulhwmzrvbzzacphunes.supabase.co/functions/v1/openphone-webhook',
+        'https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openphone-webhook',
         {
           method: 'POST',
           headers: {
@@ -175,10 +175,13 @@ export default function WebhookTester() {
       )}
 
       <div className="mt-4 p-3 bg-gray-50 rounded text-sm">
-        <p className="font-medium mb-1">Webhook URL:</p>
+        <p className="font-medium mb-1">Current Webhook URL:</p>
         <code className="text-xs break-all">
-          https://tulhwmzrvbzzacphunes.supabase.co/functions/v1/openphone-webhook
+          https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openphone-webhook
         </code>
+        <p className="mt-2 text-xs text-gray-600">
+          Note: The URL has been updated to use the correct project ID (zutwyyepahbbvrcbsbke)
+        </p>
       </div>
     </div>
   );

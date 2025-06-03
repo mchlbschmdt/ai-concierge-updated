@@ -7,10 +7,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+console.log("OpenPhone webhook function starting up...")
+
 serve(async (req) => {
   console.log(`=== OpenPhone Webhook Request ===`);
   console.log(`Method: ${req.method}`);
   console.log(`URL: ${req.url}`);
+  console.log(`Headers:`, Object.fromEntries(req.headers.entries()));
 
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -48,7 +51,20 @@ serve(async (req) => {
       const body = await req.text()
       console.log('Received webhook body:', body);
       
-      const payload = JSON.parse(body)
+      let payload;
+      try {
+        payload = JSON.parse(body);
+      } catch (parseError) {
+        console.error('Failed to parse JSON:', parseError);
+        return new Response(
+          JSON.stringify({ error: 'Invalid JSON' }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 400
+          }
+        )
+      }
+      
       console.log('Parsed webhook payload:', JSON.stringify(payload, null, 2));
 
       // Process message.received events
@@ -79,6 +95,9 @@ serve(async (req) => {
           // Check if this is a property code inquiry
           const messageText = (message.body || message.text || '').trim();
           const apiKey = Deno.env.get('OPENPHONE_API_KEY');
+          
+          console.log('Message text:', messageText);
+          console.log('API key exists:', !!apiKey);
           
           if (apiKey && messageText === '1001') {
             console.log('Sending automated response for property code 1001...');
@@ -150,3 +169,5 @@ serve(async (req) => {
     }
   )
 })
+
+console.log("OpenPhone webhook function is ready to serve requests")
