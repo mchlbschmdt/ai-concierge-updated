@@ -1,23 +1,54 @@
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Link, useNavigate } from "react-router-dom";
 import { Plus, Users, Home as HomeIcon, MessageSquare, BarChart3, FileText, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/use-toast";
 import KnowledgeBaseUploader from "../components/KnowledgeBaseUploader";
 import GmailIntegration from "../components/GmailIntegration";
+import { fetchProperties } from "../services/propertyService";
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const [properties, setProperties] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        const propertiesData = await fetchProperties();
+        setProperties(propertiesData || []);
+      } catch (error) {
+        console.error("Error loading dashboard data:", error);
+        toast({
+          title: "Warning",
+          description: "Could not load some dashboard data",
+          variant: "default"
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadStats();
+  }, [toast]);
   
   const handleFileAdded = (fileData) => {
     console.log("File added:", fileData);
-    // This would update state in a real implementation
+    toast({
+      title: "Success",
+      description: "File uploaded successfully"
+    });
   };
 
   const handleMessagesImported = (messages) => {
     console.log("Messages imported:", messages);
-    // This would update state in a real implementation
+    toast({
+      title: "Success", 
+      description: `${messages.length} messages imported`
+    });
   };
   
   const handleAddProperty = () => {
@@ -25,10 +56,30 @@ export default function Dashboard() {
   };
 
   const stats = [
-    { label: "Properties", value: 8, icon: HomeIcon, color: "bg-blue-500" },
-    { label: "Guests", value: 24, icon: Users, color: "bg-green-500" },
-    { label: "Messages", value: 156, icon: MessageSquare, color: "bg-purple-500" },
-    { label: "Analytics", value: "12%+", icon: BarChart3, color: "bg-amber-500" },
+    { 
+      label: "Properties", 
+      value: loading ? "..." : properties.length, 
+      icon: HomeIcon, 
+      color: "bg-blue-500" 
+    },
+    { 
+      label: "Guests", 
+      value: "0", 
+      icon: Users, 
+      color: "bg-green-500" 
+    },
+    { 
+      label: "Messages", 
+      value: "0", 
+      icon: MessageSquare, 
+      color: "bg-purple-500" 
+    },
+    { 
+      label: "Analytics", 
+      value: "Ready", 
+      icon: BarChart3, 
+      color: "bg-amber-500" 
+    },
   ];
 
   const navCards = [

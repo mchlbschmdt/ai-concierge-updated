@@ -15,7 +15,6 @@ import EmailManagement from './pages/EmailManagement';
 import Layout from "./components/Layout";
 import GoogleAuthCallback from "./pages/GoogleAuthCallback";
 import { Toaster } from "@/components/ui/toaster";
-import Login from "./Login";
 
 export default function App() {
   console.log("App component rendering with routes");
@@ -25,7 +24,6 @@ export default function App() {
       <Toaster />
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/login" element={<Login />} />
         <Route path="/dashboard" element={<Layout><Dashboard /></Layout>} />
         <Route path="/dashboard/guests-manager" element={<Layout><GuestManager /></Layout>} />
         <Route path="/dashboard/properties-manager" element={<Layout><PropertyManager /></Layout>} />
