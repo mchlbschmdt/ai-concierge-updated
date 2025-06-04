@@ -1,4 +1,3 @@
-
 // SMS Conversation Service - handles the logic for property identification flow
 export class SmsConversationService {
   constructor(supabase) {
@@ -224,15 +223,13 @@ export class SmsConversationService {
 
   async handleConfirmation(conversation, input) {
     console.log('Handling confirmation with input:', input);
-    console.log('Input type:', typeof input);
-    console.log('Input length:', input.length);
     
     // Normalize input for comparison
     const normalizedInput = input.toLowerCase().trim();
     console.log('Normalized input:', normalizedInput);
     
-    const isYes = ['y', 'yes', 'yeah', 'yep', 'correct', 'right', 'true', '1', 'ok', 'okay'].includes(normalizedInput);
-    const isNo = ['n', 'no', 'nope', 'wrong', 'incorrect', 'false', '0', 'nah'].includes(normalizedInput);
+    const isYes = ['y', 'yes', 'yeah', 'yep', 'correct', 'right', 'true', '1', 'ok', 'okay', 'yup', 'sure', 'absolutely', 'definitely'].includes(normalizedInput);
+    const isNo = ['n', 'no', 'nope', 'wrong', 'incorrect', 'false', '0', 'nah', 'negative'].includes(normalizedInput);
 
     console.log('Is yes?', isYes);
     console.log('Is no?', isNo);
