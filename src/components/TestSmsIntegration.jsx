@@ -1,17 +1,15 @@
-
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { addTestPropertyCodes, checkPropertyCodes } from "@/utils/addTestPropertyCodes";
 import OpenPhoneApiKeyForm from './OpenPhoneApiKeyForm';
-import { AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
+import { AlertCircle, CheckCircle, RefreshCw, Phone, MessageSquare } from 'lucide-react';
 
 export default function TestSmsIntegration() {
   const [loading, setLoading] = useState(false);
   const [checkingCodes, setCheckingCodes] = useState(false);
   const [propertyCodes, setPropertyCodes] = useState([]);
-  const [fetchingLogs, setFetchingLogs] = useState(false);
-  const [logs, setLogs] = useState([]);
+  const [testingResponse, setTestingResponse] = useState(false);
   const { toast } = useToast();
 
   const handleAddTestData = async () => {
@@ -70,6 +68,62 @@ export default function TestSmsIntegration() {
       });
     } finally {
       setCheckingCodes(false);
+    }
+  };
+
+  const testSmsResponseWorkflow = async () => {
+    setTestingResponse(true);
+    try {
+      console.log('🧪 TESTING SMS RESPONSE WORKFLOW');
+      console.log('This simulates receiving "1001" from a real phone number');
+      
+      const response = await fetch('https://tulhwmzrvbzzacphunes.supabase.co/functions/v1/openphone-webhook', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          type: 'message.received',
+          data: {
+            object: {
+              id: 'workflow-test-' + Date.now(),
+              conversationId: 'workflow-conversation-' + Date.now(),
+              direction: 'incoming',
+              from: '+15551234567', // Realistic test number
+              to: '+18333301032', // Your OpenPhone number
+              body: '1001',
+              text: '1001',
+              createdAt: new Date().toISOString()
+            }
+          }
+        })
+      });
+
+      const responseText = await response.text();
+      console.log('🔍 Webhook Response Status:', response.status);
+      console.log('🔍 Webhook Response Body:', responseText);
+
+      if (response.ok) {
+        toast({
+          title: "SMS Response Workflow Test Completed",
+          description: "Check the console and Supabase logs to see if SMS was sent successfully. If this works but you don't receive SMS, the issue is with OpenPhone API key or account permissions.",
+        });
+      } else {
+        toast({
+          title: "Webhook Test Failed",
+          description: `Status: ${response.status} - Check console for details`,
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('🔥 SMS workflow test error:', error);
+      toast({
+        title: "SMS Workflow Test Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setTestingResponse(false);
     }
   };
 
@@ -181,9 +235,56 @@ export default function TestSmsIntegration() {
         <h3 className="text-lg font-semibold mb-4">SMS Integration Test & Debug</h3>
         
         <div className="space-y-4">
+          {/* Priority Testing Section */}
+          <div className="p-4 bg-blue-50 rounded-lg border-l-4 border-blue-400">
+            <div className="flex items-start">
+              <MessageSquare className="h-5 w-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" />
+              <div className="flex-1">
+                <h4 className="font-medium text-blue-800 mb-2">🎯 PRIMARY TEST: SMS Response Workflow</h4>
+                <p className="text-sm text-blue-700 mb-3">
+                  This test simulates receiving "1001" from a real phone and checks if an automated response is sent back.
+                  Based on the logs, we know the webhook is working and responses are generated - this will test if SMS actually gets sent.
+                </p>
+                <Button 
+                  onClick={testSmsResponseWorkflow} 
+                  disabled={testingResponse}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {testingResponse ? (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      Testing SMS Response...
+                    </>
+                  ) : (
+                    <>
+                      <MessageSquare className="mr-2 h-4 w-4" />
+                      Test SMS Response Workflow
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Manual Testing Instructions */}
+          <div className="p-4 bg-green-50 rounded-lg border-l-4 border-green-400">
+            <div className="flex items-start">
+              <Phone className="h-5 w-5 text-green-600 mt-0.5 mr-3 flex-shrink-0" />
+              <div>
+                <h4 className="font-medium text-green-800 mb-2">📱 MANUAL TEST: Send Real SMS</h4>
+                <p className="text-sm text-green-700 mb-2">
+                  <strong>Text "1001" to +1 (833) 330-1032 from your phone right now</strong>
+                </p>
+                <p className="text-xs text-green-600">
+                  You should receive an automated reply within 10-30 seconds asking you to confirm the property.
+                  If you don't get a reply, the issue is with SMS sending (likely API key or account permissions).
+                </p>
+              </div>
+            </div>
+          </div>
+
           <div className="text-sm text-gray-600">
-            <p>To test the SMS integration, you'll need property codes in the database.</p>
-            <p className="mt-2">Property codes that will be added:</p>
+            <p>Property codes that will be added for testing:</p>
             <ul className="list-disc list-inside mt-1 text-xs">
               <li>1001 - Downtown Loft</li>
               <li>1002 - Beachfront Villa</li> 
@@ -192,8 +293,8 @@ export default function TestSmsIntegration() {
             </ul>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
-            <Button onClick={handleAddTestData} disabled={loading}>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <Button onClick={handleAddTestData} disabled={loading} variant="outline">
               {loading ? "Adding..." : "Add Test Property Codes"}
             </Button>
 
@@ -202,11 +303,7 @@ export default function TestSmsIntegration() {
             </Button>
 
             <Button onClick={testWebhook} variant="outline">
-              Test Webhook
-            </Button>
-
-            <Button onClick={testSmsToYourNumber} variant="default" className="bg-green-600 hover:bg-green-700">
-              Test Live SMS Flow
+              Test Webhook Health
             </Button>
           </div>
 
@@ -225,28 +322,17 @@ export default function TestSmsIntegration() {
             </div>
           )}
 
-          <div className="mt-4 p-3 bg-blue-50 rounded text-sm">
-            <p className="font-medium">Step-by-Step Testing Instructions:</p>
-            <ol className="list-decimal list-inside mt-1 space-y-1 text-xs">
-              <li><strong>First:</strong> Test your OpenPhone API key in the form above ↑</li>
-              <li><strong>Then:</strong> Click "Add Test Property Codes" to ensure codes exist</li>
-              <li><strong>Next:</strong> Click "Test Live SMS Flow" to simulate a real message</li>
-              <li><strong>Check:</strong> Webhook logs in Supabase for SMS sending results</li>
-              <li><strong>Finally:</strong> Send a real SMS to your OpenPhone number with "1001"</li>
-            </ol>
-          </div>
-
           <div className="mt-4 p-3 bg-amber-50 rounded text-sm border-l-4 border-amber-400">
             <div className="flex items-start">
               <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 mr-2 flex-shrink-0" />
               <div>
-                <p className="font-medium text-amber-800">Debugging Checklist:</p>
+                <p className="font-medium text-amber-800">🔍 Current Status Analysis:</p>
                 <ul className="list-disc list-inside mt-1 space-y-1 text-xs text-amber-700">
-                  <li>Ensure your OpenPhone API key is valid and has SMS permissions</li>
-                  <li>Check your OpenPhone account has sufficient credits</li>
-                  <li>Verify webhook URL is correctly set in OpenPhone dashboard</li>
-                  <li>Check Supabase Edge Function logs for detailed error messages</li>
-                  <li>Confirm the OPENPHONE_API_KEY secret is updated in Supabase</li>
+                  <li><strong>✅ Webhook Processing:</strong> Working - messages are being received and processed</li>
+                  <li><strong>✅ Database Storage:</strong> Working - conversations and responses are stored</li>
+                  <li><strong>✅ Response Generation:</strong> Working - automated responses are generated</li>
+                  <li><strong>❓ SMS Sending:</strong> Unknown - this is what we're testing now</li>
+                  <li><strong>🔑 Most Likely Issue:</strong> OpenPhone API key authentication or account permissions</li>
                 </ul>
               </div>
             </div>
@@ -255,9 +341,9 @@ export default function TestSmsIntegration() {
           <div className="mt-4 p-3 bg-gray-50 rounded text-sm">
             <p className="font-medium">Quick Links:</p>
             <div className="mt-1 space-y-1 text-xs">
-              <div>• Supabase Edge Functions: <code className="bg-gray-200 px-1 rounded">https://supabase.com/dashboard/project/zutwyyepahbbvrcbsbke/functions</code></div>
-              <div>• OpenPhone Webhook URL: <code className="bg-gray-200 px-1 rounded">https://tulhwmzrvbzzacphunes.supabase.co/functions/v1/openphone-webhook</code></div>
+              <div>• Supabase Edge Function Logs: <code className="bg-gray-200 px-1 rounded">https://supabase.com/dashboard/project/zutwyyepahbbvrcbsbke/functions/openphone-webhook/logs</code></div>
               <div>• OpenPhone Dashboard: <code className="bg-gray-200 px-1 rounded">https://openphone.com/dashboard</code></div>
+              <div>• Your OpenPhone Number: <code className="bg-gray-200 px-1 rounded">+1 (833) 330-1032</code></div>
             </div>
           </div>
         </div>
