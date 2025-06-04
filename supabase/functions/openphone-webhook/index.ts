@@ -405,11 +405,59 @@ class SmsConversationService {
   }
 }
 
+async function validateOpenPhoneApiKey(apiKey: string) {
+  console.log('🔑 Validating OpenPhone API key...');
+  console.log('- API key exists:', !!apiKey);
+  console.log('- API key length:', apiKey ? apiKey.length : 0);
+  console.log('- API key starts with expected prefix:', apiKey ? apiKey.startsWith('sk_') : false);
+  
+  if (!apiKey || apiKey.trim().length === 0) {
+    console.error('❌ API key is empty or undefined');
+    return false;
+  }
+  
+  try {
+    // Test the API key with a simple GET request to the OpenPhone API
+    const testResponse = await fetch('https://api.openphone.com/v1/phone-numbers', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey.trim()}`,
+        'Content-Type': 'application/json',
+      }
+    });
+    
+    console.log('🧪 API key test response status:', testResponse.status);
+    
+    if (testResponse.ok) {
+      console.log('✅ API key validation successful');
+      return true;
+    } else {
+      const errorText = await testResponse.text();
+      console.error('❌ API key validation failed:', errorText);
+      return false;
+    }
+  } catch (error) {
+    console.error('❌ Error validating API key:', error);
+    return false;
+  }
+}
+
 async function sendSmsResponse(apiKey: string, toNumber: string, fromNumber: string, message: string) {
   console.log('🚀 SENDING SMS RESPONSE');
   console.log('- To:', toNumber);
   console.log('- From:', fromNumber);
   console.log('- Message:', message);
+
+  // Validate API key first
+  const isValidKey = await validateOpenPhoneApiKey(apiKey);
+  if (!isValidKey) {
+    console.error('❌ API key validation failed, aborting SMS send');
+    return { 
+      success: false, 
+      error: 'Invalid or expired API key',
+      details: 'API key failed validation test'
+    };
+  }
 
   const smsPayload = {
     to: [toNumber],
@@ -431,6 +479,7 @@ async function sendSmsResponse(apiKey: string, toNumber: string, fromNumber: str
 
     const responseText = await response.text();
     console.log('📊 OpenPhone API response status:', response.status);
+    console.log('📊 OpenPhone API response headers:', Object.fromEntries(response.headers.entries()));
     console.log('📊 OpenPhone API response text:', responseText);
 
     let result;
@@ -449,12 +498,18 @@ async function sendSmsResponse(apiKey: string, toNumber: string, fromNumber: str
       console.error('Status:', response.status);
       console.error('Error details:', result);
       
+      // Enhanced error logging based on status code
       if (response.status === 401) {
         console.error('🔑 AUTHENTICATION ERROR: Invalid or expired API key');
+        console.error('🔍 Check if the OPENPHONE_API_KEY secret is correct');
+        console.error('🔍 Verify the API key has SMS sending permissions');
       } else if (response.status === 400) {
         console.error('📋 BAD REQUEST: Check payload format');
+        console.error('🔍 Verify phone numbers are in correct format');
+        console.error('🔍 Check if the from number is valid for your account');
       } else if (response.status === 403) {
         console.error('🚫 FORBIDDEN: API key lacks permissions');
+        console.error('🔍 Check if the API key has messaging permissions');
       } else if (response.status === 429) {
         console.error('⏰ RATE LIMITED: Too many requests');
       }
@@ -510,7 +565,7 @@ serve(async (req) => {
       const body = await req.text()
       console.log('Received webhook body:', body);
 
-      // TEMPORARILY SKIP SIGNATURE VERIFICATION TO DEBUG
+      // Check bypass mode
       const bypassSignature = Deno.env.get('BYPASS_SIGNATURE_VERIFICATION') === 'true';
       console.log('🔐 Bypass signature verification:', bypassSignature);
 
@@ -587,7 +642,8 @@ serve(async (req) => {
           const apiKey = Deno.env.get('OPENPHONE_API_KEY');
           
           console.log('Message text:', messageText);
-          console.log('API key exists:', !!apiKey);
+          console.log('API key configured:', !!apiKey);
+          console.log('API key length:', apiKey ? apiKey.length : 0);
           
           if (apiKey && messageText) {
             console.log('🔄 Processing message with conversation service...');
@@ -630,20 +686,37 @@ serve(async (req) => {
                 } else {
                   console.error('❌ ❌ FAILED TO SEND AUTOMATED RESPONSE ❌ ❌');
                   console.error('Error:', smsResult.error);
+                  console.error('Status:', smsResult.status);
+                  console.error('Details:', smsResult.details);
                   
-                  // Send fallback message
+                  // Enhanced fallback based on error type
+                  let fallbackMessage = "I received your message but I'm having technical difficulties. Please try again or contact us directly if you need immediate assistance.";
+                  
+                  if (smsResult.status === 401) {
+                    console.log('🔄 API key issue detected, sending generic fallback...');
+                    fallbackMessage = "Thanks for your message! I'm experiencing authentication issues right now. Please contact the property directly for immediate assistance.";
+                  } else if (smsResult.status === 429) {
+                    console.log('🔄 Rate limit detected, sending rate limit message...');
+                    fallbackMessage = "Thanks for your message! I'm experiencing high volume right now. Please try again in a moment or contact the property directly.";
+                  }
+                  
                   console.log('🔄 Attempting to send fallback message...');
                   const fallbackResult = await sendSmsResponse(
                     apiKey, 
                     message.from, 
                     message.to,
-                    "I received your message but I'm having technical difficulties. Please try again or contact us directly if you need immediate assistance."
+                    fallbackMessage
                   );
                   
                   if (fallbackResult.success) {
                     console.log('✅ Fallback message sent successfully');
                   } else {
                     console.error('❌ Failed to send fallback message:', fallbackResult.error);
+                    
+                    // Log critical failure for monitoring
+                    console.error('🚨 CRITICAL: Complete SMS sending failure');
+                    console.error('🚨 Both primary and fallback SMS sending failed');
+                    console.error('🚨 This indicates a serious API configuration issue');
                   }
                 }
               } else {
@@ -654,7 +727,7 @@ serve(async (req) => {
               console.error('Error details:', conversationError);
               console.error('Stack trace:', conversationError.stack);
               
-              // Send fallback message
+              // Send fallback message for conversation errors
               if (apiKey && apiKey.trim().length > 0) {
                 console.log('🔄 Sending fallback message due to conversation error...');
                 const fallbackResult = await sendSmsResponse(
@@ -674,6 +747,7 @@ serve(async (req) => {
           } else {
             if (!apiKey) {
               console.error('❌ OPENPHONE_API_KEY not found in environment variables');
+              console.error('🔍 Please check Supabase secrets configuration');
             }
             if (!messageText) {
               console.error('❌ No message text to process');
