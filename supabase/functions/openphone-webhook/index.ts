@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -37,179 +36,83 @@ async function verifyWebhookSignature(body: string, signature: string, secret: s
     console.log('- Timestamp:', timestamp);
     console.log('- Provided signature:', providedSignature);
 
-    // Prepare different secret variations
-    const secretVariations = [
-      { name: 'original', value: secret },
-      { name: 'base64_decoded', value: (() => {
-        try {
-          return atob(secret);
-        } catch {
-          return secret;
-        }
-      })() },
-      { name: 'hex_decoded', value: (() => {
-        try {
-          // Try to decode as hex if it looks like hex
-          if (/^[0-9a-fA-F]+$/.test(secret) && secret.length % 2 === 0) {
-            return new TextDecoder().decode(
-              new Uint8Array(secret.match(/.{1,2}/g)?.map(byte => parseInt(byte, 16)) || [])
-            );
-          }
-          return secret;
-        } catch {
-          return secret;
-        }
-      })() },
-    ];
-
     // Try multiple verification approaches based on OpenPhone and common webhook patterns
     const approaches = [
-      // Standard approaches
-      {
-        name: 'Raw body + original secret',
-        payload: body,
-        secret: secret
-      },
-      {
-        name: 'Timestamp + body + original secret',
-        payload: timestamp + body,
-        secret: secret
-      },
-      {
-        name: 'Timestamp.body + original secret',
-        payload: timestamp + '.' + body,
-        secret: secret
-      },
-      
-      // OpenPhone specific patterns (based on their docs)
       {
         name: 'OpenPhone standard: timestamp + . + body',
         payload: timestamp + '.' + body,
         secret: secret
       },
       {
-        name: 'OpenPhone v2: version + timestamp + body',
-        payload: version + timestamp + body,
+        name: 'Raw body only',
+        payload: body,
         secret: secret
       },
       {
-        name: 'OpenPhone webhook URL + timestamp + body',
-        payload: req.url + timestamp + body,
+        name: 'Timestamp + body',
+        payload: timestamp + body,
         secret: secret
-      },
-      
-      // HTTP method variations
-      {
-        name: 'Method + URL + timestamp + body',
-        payload: req.method + req.url + timestamp + body,
-        secret: secret
-      },
-      {
-        name: 'Method + timestamp + body',
-        payload: req.method + timestamp + body,
-        secret: secret
-      },
-      
-      // Query string and path variations
-      {
-        name: 'Path + timestamp + body',
-        payload: new URL(req.url).pathname + timestamp + body,
-        secret: secret
-      },
-      
-      // Header-based approaches
-      {
-        name: 'Content-Type + timestamp + body',
-        payload: (req.headers.get('content-type') || '') + timestamp + body,
-        secret: secret
-      },
-      
-      // Different timestamp formats
-      {
-        name: 'Unix timestamp only',
-        payload: timestamp,
-        secret: secret
-      },
-      {
-        name: 'ISO timestamp + body',
-        payload: new Date(parseInt(timestamp)).toISOString() + body,
-        secret: secret
-      },
+      }
     ];
 
-    // Test each approach with each secret variation
-    for (const secretVar of secretVariations) {
-      console.log(`\n🔐 Testing with secret variation: ${secretVar.name}`);
-      console.log('Secret length:', secretVar.value.length);
-      
-      for (const approach of approaches) {
+    // Test each approach
+    for (const approach of approaches) {
+      try {
+        console.log(`\n🔍 Trying: ${approach.name}`);
+        console.log('- Payload length:', approach.payload.length);
+        console.log('- Payload (first 100 chars):', approach.payload.substring(0, 100));
+        
+        // Import the key for HMAC-SHA256
+        const key = await crypto.subtle.importKey(
+          'raw',
+          encoder.encode(approach.secret),
+          { name: 'HMAC', hash: 'SHA-256' },
+          false,
+          ['sign', 'verify']
+        );
+        
+        // Generate our signature
+        const signatureBuffer = await crypto.subtle.sign(
+          'HMAC',
+          key,
+          encoder.encode(approach.payload)
+        );
+        
+        // Convert to base64 for comparison
+        const ourSignature = btoa(String.fromCharCode(...new Uint8Array(signatureBuffer)));
+        console.log('- Our signature:', ourSignature);
+        console.log('- Expected signature:', providedSignature);
+        console.log('- Signatures match:', ourSignature === providedSignature);
+        
+        // Also try direct verification
+        let signatureToVerify;
         try {
-          console.log(`\n🔍 Trying: ${approach.name} (secret: ${secretVar.name})`);
-          console.log('- Payload length:', approach.payload.length);
-          console.log('- Payload (first 100 chars):', approach.payload.substring(0, 100));
-          
-          // Import the key for HMAC-SHA256
-          const key = await crypto.subtle.importKey(
-            'raw',
-            encoder.encode(secretVar.value),
-            { name: 'HMAC', hash: 'SHA-256' },
-            false,
-            ['sign', 'verify']
-          );
-          
-          // Generate our signature
-          const signatureBuffer = await crypto.subtle.sign(
-            'HMAC',
-            key,
-            encoder.encode(approach.payload)
-          );
-          
-          // Convert to base64 for comparison
-          const ourSignature = btoa(String.fromCharCode(...new Uint8Array(signatureBuffer)));
-          console.log('- Our signature:', ourSignature);
-          console.log('- Expected signature:', providedSignature);
-          console.log('- Signatures match:', ourSignature === providedSignature);
-          
-          // Also try direct verification
-          let signatureToVerify;
-          try {
-            signatureToVerify = Uint8Array.from(atob(providedSignature), c => c.charCodeAt(0));
-          } catch (e) {
-            console.log('- Failed to decode provided signature as base64:', e.message);
-            continue;
-          }
-          
-          const isValid = await crypto.subtle.verify(
-            'HMAC',
-            key,
-            signatureToVerify,
-            encoder.encode(approach.payload)
-          );
-
-          console.log(`- Verification result: ${isValid}`);
-          
-          if (isValid || ourSignature === providedSignature) {
-            console.log(`✅ SUCCESS! Signature verified with: ${approach.name} (secret: ${secretVar.name})`);
-            return true;
-          }
-          
-        } catch (error) {
-          console.log(`- Error with ${approach.name} (${secretVar.name}):`, error.message);
+          signatureToVerify = Uint8Array.from(atob(providedSignature), c => c.charCodeAt(0));
+        } catch (e) {
+          console.log('- Failed to decode provided signature as base64:', e.message);
+          continue;
         }
+        
+        const isValid = await crypto.subtle.verify(
+          'HMAC',
+          key,
+          signatureToVerify,
+          encoder.encode(approach.payload)
+        );
+
+        console.log(`- Verification result: ${isValid}`);
+        
+        if (isValid || ourSignature === providedSignature) {
+          console.log(`✅ SUCCESS! Signature verified with: ${approach.name}`);
+          return true;
+        }
+        
+      } catch (error) {
+        console.log(`- Error with ${approach.name}:`, error.message);
       }
     }
 
     console.log('❌ All signature verification approaches failed');
-    
-    // Log additional debug info
-    console.log('\n=== COMPREHENSIVE DEBUG INFO ===');
-    console.log('Raw signature header bytes:', Array.from(encoder.encode(signature)));
-    console.log('Raw secret bytes (first 50):', Array.from(encoder.encode(secret)).slice(0, 50));
-    console.log('Raw body bytes (first 50):', Array.from(encoder.encode(body)).slice(0, 50));
-    console.log('Body as hex:', Array.from(encoder.encode(body)).map(b => b.toString(16).padStart(2, '0')).join(''));
-    console.log('Timestamp as number:', parseInt(timestamp));
-    console.log('Timestamp as date:', new Date(parseInt(timestamp)));
-    
     return false;
     
   } catch (error) {
@@ -336,11 +239,16 @@ class SmsConversationService {
 
     if (propertyCode) {
       console.log('Found property in property_codes table:', propertyCode);
+      return {
+        property_id: propertyCode.property_id,
+        property_name: propertyCode.property_name,
+        address: propertyCode.address
+      };
     } else {
       console.log('Property code not found in either table');
     }
 
-    return propertyCode;
+    return null;
   }
 
   async processMessage(phoneNumber, messageBody) {
@@ -355,8 +263,9 @@ class SmsConversationService {
       console.log('Current conversation state:', conversation.conversation_state);
       console.log('Clean message:', cleanMessage);
 
-      // Handle reset commands
+      // Handle reset commands first
       if (cleanMessage === 'reset' || cleanMessage === 'restart' || cleanMessage === 'start over') {
+        console.log('Processing reset command');
         await this.resetConversation(phoneNumber);
         return {
           response: "I've reset our conversation. Please text me your property ID number to get started.",
@@ -415,6 +324,7 @@ class SmsConversationService {
         };
       }
 
+      console.log('Found property, updating conversation state to awaiting_confirmation');
       // Update conversation with property info and move to confirmation state
       await this.updateConversationState(conversation.phone_number, {
         property_id: property.property_id || property.id,
@@ -436,12 +346,21 @@ class SmsConversationService {
 
   async handleConfirmation(conversation, input) {
     console.log('Handling confirmation with input:', input);
+    console.log('Input type:', typeof input);
+    console.log('Input length:', input.length);
     
-    const isYes = ['y', 'yes', 'yeah', 'yep', 'correct', 'right', 'true', '1'].includes(input);
-    const isNo = ['n', 'no', 'nope', 'wrong', 'incorrect', 'false', '0'].includes(input);
+    // Normalize input for comparison
+    const normalizedInput = input.toLowerCase().trim();
+    console.log('Normalized input:', normalizedInput);
+    
+    const isYes = ['y', 'yes', 'yeah', 'yep', 'correct', 'right', 'true', '1', 'ok', 'okay'].includes(normalizedInput);
+    const isNo = ['n', 'no', 'nope', 'wrong', 'incorrect', 'false', '0', 'nah'].includes(normalizedInput);
+
+    console.log('Is yes?', isYes);
+    console.log('Is no?', isNo);
 
     if (isYes) {
-      console.log('User confirmed property');
+      console.log('User confirmed property - updating to confirmed state');
       await this.updateConversationState(conversation.phone_number, {
         property_confirmed: true,
         conversation_state: 'confirmed'
@@ -452,7 +371,7 @@ class SmsConversationService {
         shouldUpdateState: true
       };
     } else if (isNo) {
-      console.log('User rejected property');
+      console.log('User rejected property - resetting to awaiting_property_id');
       await this.updateConversationState(conversation.phone_number, {
         property_id: null,
         conversation_state: 'awaiting_property_id'
@@ -490,6 +409,70 @@ class SmsConversationService {
   }
 }
 
+async function sendSmsResponse(apiKey: string, toNumber: string, fromNumber: string, message: string) {
+  console.log('🚀 SENDING SMS RESPONSE');
+  console.log('- To:', toNumber);
+  console.log('- From:', fromNumber);
+  console.log('- Message:', message);
+  console.log('- API Key (first 10 chars):', apiKey.substring(0, 10) + '...');
+
+  const smsPayload = {
+    to: [toNumber],
+    text: message,
+    from: fromNumber
+  };
+
+  console.log('📋 SMS payload:', JSON.stringify(smsPayload, null, 2));
+
+  try {
+    const response = await fetch('https://api.openphone.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey.trim()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(smsPayload)
+    });
+
+    const responseText = await response.text();
+    console.log('📊 OpenPhone API response status:', response.status);
+    console.log('📊 OpenPhone API response text:', responseText);
+
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch (e) {
+      console.error('❌ Failed to parse response as JSON:', e);
+      result = { rawResponse: responseText };
+    }
+
+    if (response.ok) {
+      console.log('✅ ✅ SMS SENT SUCCESSFULLY! ✅ ✅');
+      return { success: true, data: result };
+    } else {
+      console.error('❌ SMS SEND FAILED');
+      console.error('Status:', response.status);
+      console.error('Error details:', result);
+      
+      // Detailed error analysis
+      if (response.status === 401) {
+        console.error('🔑 AUTHENTICATION ERROR: Invalid or expired API key');
+      } else if (response.status === 400) {
+        console.error('📋 BAD REQUEST: Check payload format');
+      } else if (response.status === 403) {
+        console.error('🚫 FORBIDDEN: API key lacks permissions');
+      } else if (response.status === 429) {
+        console.error('⏰ RATE LIMITED: Too many requests');
+      }
+
+      return { success: false, error: result, status: response.status };
+    }
+  } catch (error) {
+    console.error('❌ NETWORK ERROR sending SMS:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 serve(async (req) => {
   console.log(`=== OpenPhone Webhook Request ===`);
   console.log(`Method: ${req.method}`);
@@ -509,7 +492,7 @@ serve(async (req) => {
       JSON.stringify({ 
         status: 'healthy', 
         service: 'openphone-webhook',
-        message: 'OpenPhone webhook is running with comprehensive signature verification',
+        message: 'OpenPhone webhook is running',
         timestamp: new Date().toISOString(),
         bypass_mode: Deno.env.get('BYPASS_SIGNATURE_VERIFICATION') === 'true'
       }),
@@ -533,25 +516,21 @@ serve(async (req) => {
       const body = await req.text()
       console.log('Received webhook body:', body);
 
-      // Enhanced signature verification with comprehensive debugging
+      // Enhanced signature verification
       const webhookSecret = Deno.env.get('OPENPHONE_WEBHOOK_SECRET');
       const signature = req.headers.get('openphone-signature');
       const bypassSignature = Deno.env.get('BYPASS_SIGNATURE_VERIFICATION') === 'true';
       
       if (webhookSecret && signature && !bypassSignature) {
-        console.log('🔐 Starting comprehensive signature verification...');
+        console.log('🔐 Starting signature verification...');
         const isValidSignature = await verifyWebhookSignature(body, signature, webhookSecret, req);
         
         if (!isValidSignature) {
           console.error('❌ Signature verification failed - rejecting request');
-          console.log('💡 To temporarily bypass signature verification, set BYPASS_SIGNATURE_VERIFICATION=true');
-          console.log('📚 Check OpenPhone webhook documentation for exact signature format');
           return new Response(
             JSON.stringify({ 
               error: 'Invalid signature',
-              timestamp: new Date().toISOString(),
-              debug: 'Check function logs for comprehensive signature verification attempts',
-              suggestion: 'Set BYPASS_SIGNATURE_VERIFICATION=true to temporarily bypass verification'
+              timestamp: new Date().toISOString()
             }),
             {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -563,15 +542,8 @@ serve(async (req) => {
       } else {
         if (bypassSignature) {
           console.log('⚠️  BYPASSING signature verification (BYPASS_SIGNATURE_VERIFICATION=true)');
-          console.log('🔧 This is useful for debugging, but should be disabled in production');
         } else {
-          console.log('⚠️  Signature verification skipped:');
-          if (!webhookSecret) {
-            console.log('   - Missing OPENPHONE_WEBHOOK_SECRET');
-          }
-          if (!signature) {
-            console.log('   - Missing openphone-signature header');
-          }
+          console.log('⚠️  Signature verification skipped - missing secret or signature');
         }
       }
       
@@ -631,7 +603,7 @@ serve(async (req) => {
               if (storeError) {
                 console.error('❌ Error storing message:', storeError)
               } else {
-                console.log('✅ Message stored successfully in sms_conversation_messages table');
+                console.log('✅ Message stored successfully');
               }
             } catch (storeErr) {
               console.error('❌ Exception storing message:', storeErr);
@@ -644,7 +616,6 @@ serve(async (req) => {
           
           console.log('Message text:', messageText);
           console.log('API key exists:', !!apiKey);
-          console.log('API key length:', apiKey ? apiKey.length : 0);
           
           if (apiKey && messageText) {
             console.log('🔄 Processing message with conversation service...');
@@ -655,44 +626,11 @@ serve(async (req) => {
               console.log('✅ Conversation service result:', result);
               
               if (result && result.response) {
-                console.log('📤 Sending automated response:', result.response);
+                console.log('📤 Sending automated response...');
                 
-                // Prepare the OpenPhone API request
-                const smsPayload = {
-                  to: [message.from],
-                  text: result.response,
-                  from: message.to
-                };
+                const smsResult = await sendSmsResponse(apiKey, message.from, message.to, result.response);
                 
-                console.log('📋 SMS payload:', JSON.stringify(smsPayload, null, 2));
-                console.log('🔑 Using API key (first 10 chars):', apiKey.substring(0, 10) + '...');
-                console.log('🌐 OpenPhone API endpoint: https://api.openphone.com/v1/messages');
-                
-                const smsResponse = await fetch('https://api.openphone.com/v1/messages', {
-                  method: 'POST',
-                  headers: {
-                    'Authorization': `Bearer ${apiKey.trim()}`,
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify(smsPayload)
-                });
-
-                const responseText = await smsResponse.text();
-                console.log('📊 OpenPhone API response status:', smsResponse.status);
-                console.log('📊 OpenPhone API response headers:', Object.fromEntries(smsResponse.headers.entries()));
-                console.log('📊 OpenPhone API response text:', responseText);
-                
-                let smsResult;
-                try {
-                  smsResult = JSON.parse(responseText);
-                } catch (e) {
-                  console.error('❌ Failed to parse response as JSON:', e);
-                  smsResult = { rawResponse: responseText };
-                }
-                
-                console.log('📊 OpenPhone API parsed response:', smsResult);
-                
-                if (smsResponse.ok) {
+                if (smsResult.success) {
                   console.log('✅ ✅ AUTOMATED RESPONSE SENT SUCCESSFULLY! ✅ ✅');
                   
                   // Store the bot response in sms_conversation_messages (if we have a conversation)
@@ -711,55 +649,29 @@ serve(async (req) => {
                       if (botStoreError) {
                         console.error('❌ Error storing bot response:', botStoreError);
                       } else {
-                        console.log('✅ Bot response stored successfully in sms_conversation_messages table');
+                        console.log('✅ Bot response stored successfully');
                       }
                     } catch (botStoreErr) {
                       console.error('❌ Exception storing bot response:', botStoreErr);
                     }
                   }
-                    
                 } else {
                   console.error('❌ ❌ FAILED TO SEND AUTOMATED RESPONSE ❌ ❌');
-                  console.error('Status:', smsResponse.status);
-                  console.error('Error details:', smsResult);
+                  console.error('Error:', smsResult.error);
                   
-                  // Check if it's an authentication error
-                  if (smsResponse.status === 401) {
-                    console.error('🔑 AUTHENTICATION ERROR: The OpenPhone API key appears to be invalid or expired');
-                    console.error('Please check that the OPENPHONE_API_KEY secret is set correctly');
-                  } else if (smsResponse.status === 400) {
-                    console.error('📋 BAD REQUEST: Check the SMS payload format and required fields');
-                  } else if (smsResponse.status === 403) {
-                    console.error('🚫 FORBIDDEN: API key may not have permission to send messages');
-                  } else if (smsResponse.status === 429) {
-                    console.error('⏰ RATE LIMITED: Too many requests sent to OpenPhone API');
-                  }
-                  
-                  // Try to send a fallback message
+                  // Send fallback message
                   console.log('🔄 Attempting to send fallback message...');
-                  try {
-                    const fallbackResponse = await fetch('https://api.openphone.com/v1/messages', {
-                      method: 'POST',
-                      headers: {
-                        'Authorization': `Bearer ${apiKey.trim()}`,
-                        'Content-Type': 'application/json',
-                      },
-                      body: JSON.stringify({
-                        to: [message.from],
-                        text: "I received your message but I'm having technical difficulties. Please try again or contact us directly if you need immediate assistance.",
-                        from: message.to
-                      })
-                    });
-                    
-                    if (fallbackResponse.ok) {
-                      console.log('✅ Fallback message sent successfully');
-                    } else {
-                      const fallbackText = await fallbackResponse.text();
-                      console.error('❌ Failed to send fallback message. Status:', fallbackResponse.status);
-                      console.error('Fallback error:', fallbackText);
-                    }
-                  } catch (fallbackError) {
-                    console.error('❌ Exception sending fallback message:', fallbackError);
+                  const fallbackResult = await sendSmsResponse(
+                    apiKey, 
+                    message.from, 
+                    message.to,
+                    "I received your message but I'm having technical difficulties. Please try again or contact us directly if you need immediate assistance."
+                  );
+                  
+                  if (fallbackResult.success) {
+                    console.log('✅ Fallback message sent successfully');
+                  } else {
+                    console.error('❌ Failed to send fallback message:', fallbackResult.error);
                   }
                 }
               } else {
@@ -770,35 +682,21 @@ serve(async (req) => {
               console.error('Error details:', conversationError);
               console.error('Stack trace:', conversationError.stack);
               
-              // Send fallback message only if we have a valid API key
+              // Send fallback message
               if (apiKey && apiKey.trim().length > 0) {
-                try {
-                  console.log('🔄 Sending fallback message due to conversation error...');
-                  const fallbackResponse = await fetch('https://api.openphone.com/v1/messages', {
-                    method: 'POST',
-                    headers: {
-                      'Authorization': `Bearer ${apiKey.trim()}`,
-                      'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                      to: [message.from],
-                      text: "Thanks for your message! I'm experiencing some technical difficulties. Please try again in a moment or contact us directly if you need immediate assistance. You can also text 'reset' to restart our conversation.",
-                      from: message.to
-                    })
-                  });
-                  
-                  if (fallbackResponse.ok) {
-                    console.log('✅ Fallback message sent successfully');
-                  } else {
-                    const fallbackText = await fallbackResponse.text();
-                    console.error('❌ Failed to send fallback message. Status:', fallbackResponse.status);
-                    console.error('Fallback error:', fallbackText);
-                  }
-                } catch (fallbackError) {
-                  console.error('❌ Failed to send fallback message:', fallbackError);
+                console.log('🔄 Sending fallback message due to conversation error...');
+                const fallbackResult = await sendSmsResponse(
+                  apiKey,
+                  message.from,
+                  message.to,
+                  "Thanks for your message! I'm experiencing some technical difficulties. Please try again in a moment or contact us directly if you need immediate assistance."
+                );
+                
+                if (fallbackResult.success) {
+                  console.log('✅ Fallback message sent successfully');
+                } else {
+                  console.error('❌ Failed to send fallback message:', fallbackResult.error);
                 }
-              } else {
-                console.error('Cannot send fallback message: API key is missing or invalid');
               }
             }
           } else {
@@ -816,8 +714,7 @@ serve(async (req) => {
         JSON.stringify({ 
           success: true, 
           received: true,
-          processed_at: new Date().toISOString(),
-          bypass_mode: bypassSignature
+          processed_at: new Date().toISOString()
         }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },

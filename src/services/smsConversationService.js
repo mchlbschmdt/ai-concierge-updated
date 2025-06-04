@@ -117,11 +117,16 @@ export class SmsConversationService {
 
     if (propertyCode) {
       console.log('Found property in property_codes table:', propertyCode);
+      return {
+        property_id: propertyCode.property_id,
+        property_name: propertyCode.property_name,
+        address: propertyCode.address
+      };
     } else {
       console.log('Property code not found in either table');
     }
 
-    return propertyCode;
+    return null;
   }
 
   async processMessage(phoneNumber, messageBody) {
@@ -136,8 +141,9 @@ export class SmsConversationService {
       console.log('Current conversation state:', conversation.conversation_state);
       console.log('Clean message:', cleanMessage);
 
-      // Handle reset commands
+      // Handle reset commands first
       if (cleanMessage === 'reset' || cleanMessage === 'restart' || cleanMessage === 'start over') {
+        console.log('Processing reset command');
         await this.resetConversation(phoneNumber);
         return {
           response: "I've reset our conversation. Please text me your property ID number to get started.",
@@ -196,6 +202,7 @@ export class SmsConversationService {
         };
       }
 
+      console.log('Found property, updating conversation state to awaiting_confirmation');
       // Update conversation with property info and move to confirmation state
       await this.updateConversationState(conversation.phone_number, {
         property_id: property.property_id || property.id,
@@ -217,12 +224,21 @@ export class SmsConversationService {
 
   async handleConfirmation(conversation, input) {
     console.log('Handling confirmation with input:', input);
+    console.log('Input type:', typeof input);
+    console.log('Input length:', input.length);
     
-    const isYes = ['y', 'yes', 'yeah', 'yep', 'correct', 'right', 'true', '1'].includes(input);
-    const isNo = ['n', 'no', 'nope', 'wrong', 'incorrect', 'false', '0'].includes(input);
+    // Normalize input for comparison
+    const normalizedInput = input.toLowerCase().trim();
+    console.log('Normalized input:', normalizedInput);
+    
+    const isYes = ['y', 'yes', 'yeah', 'yep', 'correct', 'right', 'true', '1', 'ok', 'okay'].includes(normalizedInput);
+    const isNo = ['n', 'no', 'nope', 'wrong', 'incorrect', 'false', '0', 'nah'].includes(normalizedInput);
+
+    console.log('Is yes?', isYes);
+    console.log('Is no?', isNo);
 
     if (isYes) {
-      console.log('User confirmed property');
+      console.log('User confirmed property - updating to confirmed state');
       await this.updateConversationState(conversation.phone_number, {
         property_confirmed: true,
         conversation_state: 'confirmed'
@@ -233,7 +249,7 @@ export class SmsConversationService {
         shouldUpdateState: true
       };
     } else if (isNo) {
-      console.log('User rejected property');
+      console.log('User rejected property - resetting to awaiting_property_id');
       await this.updateConversationState(conversation.phone_number, {
         property_id: null,
         conversation_state: 'awaiting_property_id'
