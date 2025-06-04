@@ -225,6 +225,8 @@ class SmsConversationService {
   }
 
   async getOrCreateConversation(phoneNumber) {
+    console.log('Getting or creating conversation for:', phoneNumber);
+    
     // Try to get existing conversation
     const { data: existing, error } = await this.supabase
       .from('sms_conversations')
@@ -261,6 +263,8 @@ class SmsConversationService {
   }
 
   async updateConversationState(phoneNumber, updates) {
+    console.log('Updating conversation state for:', phoneNumber, 'with:', updates);
+    
     const { data, error } = await this.supabase
       .from('sms_conversations')
       .update({
@@ -276,8 +280,18 @@ class SmsConversationService {
       throw new Error(`Failed to update conversation: ${error.message}`);
     }
 
-    console.log('Updated conversation:', data);
+    console.log('Updated conversation successfully:', data);
     return data;
+  }
+
+  async resetConversation(phoneNumber) {
+    console.log('Resetting conversation for:', phoneNumber);
+    
+    return await this.updateConversationState(phoneNumber, {
+      conversation_state: 'awaiting_property_id',
+      property_id: null,
+      property_confirmed: false
+    });
   }
 
   async findPropertyByCode(code) {
@@ -330,77 +344,115 @@ class SmsConversationService {
   }
 
   async processMessage(phoneNumber, messageBody) {
-    console.log('Processing message from:', phoneNumber, 'Message:', messageBody);
+    console.log('=== PROCESSING MESSAGE ===');
+    console.log('Phone:', phoneNumber);
+    console.log('Message:', messageBody);
     
-    const conversation = await this.getOrCreateConversation(phoneNumber);
-    const cleanMessage = messageBody.trim().toLowerCase();
+    try {
+      const conversation = await this.getOrCreateConversation(phoneNumber);
+      const cleanMessage = messageBody.trim().toLowerCase();
 
-    console.log('Current conversation state:', conversation.conversation_state);
+      console.log('Current conversation state:', conversation.conversation_state);
+      console.log('Clean message:', cleanMessage);
 
-    switch (conversation.conversation_state) {
-      case 'awaiting_property_id':
-        return await this.handlePropertyIdInput(conversation, cleanMessage);
-      
-      case 'awaiting_confirmation':
-        return await this.handleConfirmation(conversation, cleanMessage);
-      
-      case 'confirmed':
-        return await this.handleGeneralInquiry(conversation, messageBody);
-      
-      default:
-        return this.getWelcomeMessage();
+      // Handle reset commands
+      if (cleanMessage === 'reset' || cleanMessage === 'restart' || cleanMessage === 'start over') {
+        await this.resetConversation(phoneNumber);
+        return {
+          response: "I've reset our conversation. Please text me your property ID number to get started.",
+          shouldUpdateState: true
+        };
+      }
+
+      switch (conversation.conversation_state) {
+        case 'awaiting_property_id':
+          return await this.handlePropertyIdInput(conversation, cleanMessage);
+        
+        case 'awaiting_confirmation':
+          return await this.handleConfirmation(conversation, cleanMessage);
+        
+        case 'confirmed':
+          return await this.handleGeneralInquiry(conversation, messageBody);
+        
+        default:
+          console.log('Unknown conversation state, resetting to awaiting_property_id');
+          await this.resetConversation(phoneNumber);
+          return this.getWelcomeMessage();
+      }
+    } catch (error) {
+      console.error('Error processing message:', error);
+      return {
+        response: "I'm sorry, I encountered an error. Please try again or text 'reset' to start over.",
+        shouldUpdateState: false
+      };
     }
   }
 
   async handlePropertyIdInput(conversation, input) {
+    console.log('Handling property ID input:', input);
+    
     // Extract numbers from the message (in case they type "Property 1234" or "1234")
     const propertyCode = input.match(/\d+/)?.[0];
     
     if (!propertyCode) {
+      console.log('No property code found in input');
       return {
-        response: "Hi! To get started, please text me your property ID number. You should have received this in your booking confirmation.",
+        response: "Hi! To get started, please text me your property ID number. You should have received this in your booking confirmation. If you need help, text 'reset' to start over.",
         shouldUpdateState: false
       };
     }
 
     console.log('Extracted property code:', propertyCode);
 
-    const property = await this.findPropertyByCode(propertyCode);
-    
-    if (!property) {
+    try {
+      const property = await this.findPropertyByCode(propertyCode);
+      
+      if (!property) {
+        console.log('Property not found for code:', propertyCode);
+        return {
+          response: `I couldn't find a property with ID ${propertyCode}. Please check your booking confirmation and try again with the correct property ID. You can also text 'reset' to start over.`,
+          shouldUpdateState: false
+        };
+      }
+
+      // Update conversation with property info and move to confirmation state
+      await this.updateConversationState(conversation.phone_number, {
+        property_id: property.property_id || property.id,
+        conversation_state: 'awaiting_confirmation'
+      });
+
       return {
-        response: `I couldn't find a property with ID ${propertyCode}. Please check your booking confirmation and try again with the correct property ID.`,
+        response: `Great! It looks like you're staying at ${property.property_name} (${property.address}). Is this correct? Please reply Y for Yes or N for No.`,
+        shouldUpdateState: true
+      };
+    } catch (error) {
+      console.error('Error finding property:', error);
+      return {
+        response: "I'm having trouble looking up that property ID. Please try again in a moment or text 'reset' to start over.",
         shouldUpdateState: false
       };
     }
-
-    // Update conversation with property info and move to confirmation state
-    await this.updateConversationState(conversation.phone_number, {
-      property_id: property.property_id || property.id,
-      conversation_state: 'awaiting_confirmation'
-    });
-
-    return {
-      response: `Great! It looks like you're staying at ${property.property_name} (${property.address}). Is this correct? Please reply Y for Yes or N for No.`,
-      shouldUpdateState: true
-    };
   }
 
   async handleConfirmation(conversation, input) {
-    const isYes = input === 'y' || input === 'yes' || input === 'yeah' || input === 'yep';
-    const isNo = input === 'n' || input === 'no' || input === 'nope';
+    console.log('Handling confirmation with input:', input);
+    
+    const isYes = ['y', 'yes', 'yeah', 'yep', 'correct', 'right', 'true', '1'].includes(input);
+    const isNo = ['n', 'no', 'nope', 'wrong', 'incorrect', 'false', '0'].includes(input);
 
     if (isYes) {
+      console.log('User confirmed property');
       await this.updateConversationState(conversation.phone_number, {
         property_confirmed: true,
         conversation_state: 'confirmed'
       });
 
       return {
-        response: "Perfect! How can I help you today? You can ask me about check-in/check-out times, WiFi, parking, amenities, or anything else about your stay.",
+        response: "Perfect! How can I help you today? You can ask me about check-in/check-out times, WiFi, parking, amenities, or anything else about your stay. You can also text 'reset' anytime to start over.",
         shouldUpdateState: true
       };
     } else if (isNo) {
+      console.log('User rejected property');
       await this.updateConversationState(conversation.phone_number, {
         property_id: null,
         conversation_state: 'awaiting_property_id'
@@ -411,25 +463,28 @@ class SmsConversationService {
         shouldUpdateState: true
       };
     } else {
+      console.log('Unclear confirmation response:', input);
       return {
-        response: "Please reply with Y for Yes or N for No to confirm if this is the correct property.",
+        response: "Please reply with Y for Yes or N for No to confirm if this is the correct property. You can also text 'reset' to start over.",
         shouldUpdateState: false
       };
     }
   }
 
   async handleGeneralInquiry(conversation, messageBody) {
-    // This is where you could integrate with AI/FAQ system
+    console.log('Handling general inquiry:', messageBody);
+    
     // For now, return a simple acknowledgment
+    // This is where you could integrate with AI/FAQ system
     return {
-      response: "Thanks for your message! I've received your inquiry and will get back to you shortly. If you have any urgent questions, please don't hesitate to call the property directly.",
+      response: "Thanks for your message! I've received your inquiry about your stay. For immediate assistance with urgent matters, please don't hesitate to call the property directly. You can text 'reset' anytime to restart our conversation.",
       shouldUpdateState: false
     };
   }
 
   getWelcomeMessage() {
     return {
-      response: "Welcome! To get started, please text me your property ID number. You should have received this in your booking confirmation.",
+      response: "Welcome! To get started, please text me your property ID number. You should have received this in your booking confirmation. Text 'reset' anytime to restart.",
       shouldUpdateState: false
     };
   }
@@ -542,7 +597,11 @@ serve(async (req) => {
         console.log('Processing message.received event:', message);
         
         if (message.direction === 'incoming') {
-          console.log('Processing incoming message from:', message.from);
+          console.log('=== PROCESSING INCOMING MESSAGE ===');
+          console.log('From:', message.from);
+          console.log('To:', message.to);
+          console.log('Body:', message.body || message.text || '');
+          console.log('Message ID:', message.id);
           
           // Get or create SMS conversation first
           const conversationService = new SmsConversationService(supabase);
@@ -550,28 +609,32 @@ serve(async (req) => {
           
           try {
             smsConversation = await conversationService.getOrCreateConversation(message.from);
-            console.log('Got SMS conversation:', smsConversation);
+            console.log('✅ Got SMS conversation:', smsConversation);
           } catch (convError) {
-            console.error('Error getting SMS conversation:', convError);
+            console.error('❌ Error getting SMS conversation:', convError);
             smsConversation = null;
           }
           
           // Store the message in sms_conversation_messages table (if we have a conversation)
           if (smsConversation) {
-            const { error: storeError } = await supabase
-              .from('sms_conversation_messages')
-              .insert({
-                id: crypto.randomUUID(),
-                sms_conversation_id: smsConversation.id,
-                role: 'user',
-                content: message.body || message.text || '',
-                timestamp: new Date().toISOString()
-              })
+            try {
+              const { error: storeError } = await supabase
+                .from('sms_conversation_messages')
+                .insert({
+                  id: crypto.randomUUID(),
+                  sms_conversation_id: smsConversation.id,
+                  role: 'user',
+                  content: message.body || message.text || '',
+                  timestamp: new Date().toISOString()
+                })
 
-            if (storeError) {
-              console.error('Error storing message:', storeError)
-            } else {
-              console.log('Message stored successfully in sms_conversation_messages table');
+              if (storeError) {
+                console.error('❌ Error storing message:', storeError)
+              } else {
+                console.log('✅ Message stored successfully in sms_conversation_messages table');
+              }
+            } catch (storeErr) {
+              console.error('❌ Exception storing message:', storeErr);
             }
           }
 
@@ -584,15 +647,15 @@ serve(async (req) => {
           console.log('API key length:', apiKey ? apiKey.length : 0);
           
           if (apiKey && messageText) {
-            console.log('Processing message with conversation service...');
+            console.log('🔄 Processing message with conversation service...');
             
             try {
               const result = await conversationService.processMessage(message.from, messageText);
               
-              console.log('Conversation service result:', result);
+              console.log('✅ Conversation service result:', result);
               
-              if (result.response) {
-                console.log('Sending automated response:', result.response);
+              if (result && result.response) {
+                console.log('📤 Sending automated response:', result.response);
                 
                 // Prepare the OpenPhone API request
                 const smsPayload = {
@@ -601,9 +664,9 @@ serve(async (req) => {
                   from: message.to
                 };
                 
-                console.log('SMS payload:', JSON.stringify(smsPayload, null, 2));
-                console.log('Using API key (first 10 chars):', apiKey.substring(0, 10) + '...');
-                console.log('OpenPhone API endpoint: https://api.openphone.com/v1/messages');
+                console.log('📋 SMS payload:', JSON.stringify(smsPayload, null, 2));
+                console.log('🔑 Using API key (first 10 chars):', apiKey.substring(0, 10) + '...');
+                console.log('🌐 OpenPhone API endpoint: https://api.openphone.com/v1/messages');
                 
                 const smsResponse = await fetch('https://api.openphone.com/v1/messages', {
                   method: 'POST',
@@ -615,44 +678,49 @@ serve(async (req) => {
                 });
 
                 const responseText = await smsResponse.text();
-                console.log('OpenPhone API response status:', smsResponse.status);
-                console.log('OpenPhone API response headers:', Object.fromEntries(smsResponse.headers.entries()));
-                console.log('OpenPhone API response text:', responseText);
+                console.log('📊 OpenPhone API response status:', smsResponse.status);
+                console.log('📊 OpenPhone API response headers:', Object.fromEntries(smsResponse.headers.entries()));
+                console.log('📊 OpenPhone API response text:', responseText);
                 
                 let smsResult;
                 try {
                   smsResult = JSON.parse(responseText);
                 } catch (e) {
-                  console.error('Failed to parse response as JSON:', e);
+                  console.error('❌ Failed to parse response as JSON:', e);
                   smsResult = { rawResponse: responseText };
                 }
                 
-                console.log('OpenPhone API parsed response:', smsResult);
+                console.log('📊 OpenPhone API parsed response:', smsResult);
                 
                 if (smsResponse.ok) {
-                  console.log('✅ Automated response sent successfully');
+                  console.log('✅ ✅ AUTOMATED RESPONSE SENT SUCCESSFULLY! ✅ ✅');
                   
                   // Store the bot response in sms_conversation_messages (if we have a conversation)
                   if (smsConversation) {
-                    const { error: botStoreError } = await supabase
-                      .from('sms_conversation_messages')
-                      .insert({
-                        id: crypto.randomUUID(),
-                        sms_conversation_id: smsConversation.id,
-                        role: 'assistant',
-                        content: result.response,
-                        timestamp: new Date().toISOString()
-                      });
-                      
-                    if (botStoreError) {
-                      console.error('Error storing bot response:', botStoreError);
-                    } else {
-                      console.log('Bot response stored successfully in sms_conversation_messages table');
+                    try {
+                      const { error: botStoreError } = await supabase
+                        .from('sms_conversation_messages')
+                        .insert({
+                          id: crypto.randomUUID(),
+                          sms_conversation_id: smsConversation.id,
+                          role: 'assistant',
+                          content: result.response,
+                          timestamp: new Date().toISOString()
+                        });
+                        
+                      if (botStoreError) {
+                        console.error('❌ Error storing bot response:', botStoreError);
+                      } else {
+                        console.log('✅ Bot response stored successfully in sms_conversation_messages table');
+                      }
+                    } catch (botStoreErr) {
+                      console.error('❌ Exception storing bot response:', botStoreErr);
                     }
                   }
                     
                 } else {
-                  console.error('❌ Failed to send automated response. Status:', smsResponse.status);
+                  console.error('❌ ❌ FAILED TO SEND AUTOMATED RESPONSE ❌ ❌');
+                  console.error('Status:', smsResponse.status);
                   console.error('Error details:', smsResult);
                   
                   // Check if it's an authentication error
@@ -666,15 +734,46 @@ serve(async (req) => {
                   } else if (smsResponse.status === 429) {
                     console.error('⏰ RATE LIMITED: Too many requests sent to OpenPhone API');
                   }
+                  
+                  // Try to send a fallback message
+                  console.log('🔄 Attempting to send fallback message...');
+                  try {
+                    const fallbackResponse = await fetch('https://api.openphone.com/v1/messages', {
+                      method: 'POST',
+                      headers: {
+                        'Authorization': `Bearer ${apiKey.trim()}`,
+                        'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify({
+                        to: [message.from],
+                        text: "I received your message but I'm having technical difficulties. Please try again or contact us directly if you need immediate assistance.",
+                        from: message.to
+                      })
+                    });
+                    
+                    if (fallbackResponse.ok) {
+                      console.log('✅ Fallback message sent successfully');
+                    } else {
+                      const fallbackText = await fallbackResponse.text();
+                      console.error('❌ Failed to send fallback message. Status:', fallbackResponse.status);
+                      console.error('Fallback error:', fallbackText);
+                    }
+                  } catch (fallbackError) {
+                    console.error('❌ Exception sending fallback message:', fallbackError);
+                  }
                 }
+              } else {
+                console.log('❌ No response generated from conversation service');
               }
             } catch (conversationError) {
-              console.error('❌ Error processing conversation:', conversationError);
+              console.error('❌ ❌ ERROR PROCESSING CONVERSATION ❌ ❌');
+              console.error('Error details:', conversationError);
+              console.error('Stack trace:', conversationError.stack);
               
               // Send fallback message only if we have a valid API key
               if (apiKey && apiKey.trim().length > 0) {
                 try {
-                  console.log('Sending fallback message...');
+                  console.log('🔄 Sending fallback message due to conversation error...');
                   const fallbackResponse = await fetch('https://api.openphone.com/v1/messages', {
                     method: 'POST',
                     headers: {
@@ -683,7 +782,7 @@ serve(async (req) => {
                     },
                     body: JSON.stringify({
                       to: [message.from],
-                      text: "Thanks for your message! I'm experiencing some technical difficulties. Please try again in a moment or contact us directly if you need immediate assistance.",
+                      text: "Thanks for your message! I'm experiencing some technical difficulties. Please try again in a moment or contact us directly if you need immediate assistance. You can also text 'reset' to restart our conversation.",
                       from: message.to
                     })
                   });
@@ -727,7 +826,9 @@ serve(async (req) => {
       )
 
     } catch (error) {
-      console.error('❌ Webhook processing error:', error);
+      console.error('❌ ❌ WEBHOOK PROCESSING ERROR ❌ ❌');
+      console.error('Error message:', error.message);
+      console.error('Stack trace:', error.stack);
       return new Response(
         JSON.stringify({ 
           error: 'Internal server error',
