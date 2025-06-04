@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -602,6 +603,7 @@ serve(async (req) => {
                 
                 console.log('SMS payload:', JSON.stringify(smsPayload, null, 2));
                 console.log('Using API key (first 10 chars):', apiKey.substring(0, 10) + '...');
+                console.log('OpenPhone API endpoint: https://api.openphone.com/v1/messages');
                 
                 const smsResponse = await fetch('https://api.openphone.com/v1/messages', {
                   method: 'POST',
@@ -614,6 +616,7 @@ serve(async (req) => {
 
                 const responseText = await smsResponse.text();
                 console.log('OpenPhone API response status:', smsResponse.status);
+                console.log('OpenPhone API response headers:', Object.fromEntries(smsResponse.headers.entries()));
                 console.log('OpenPhone API response text:', responseText);
                 
                 let smsResult;
@@ -627,7 +630,7 @@ serve(async (req) => {
                 console.log('OpenPhone API parsed response:', smsResult);
                 
                 if (smsResponse.ok) {
-                  console.log('Automated response sent successfully');
+                  console.log('✅ Automated response sent successfully');
                   
                   // Store the bot response in sms_conversation_messages (if we have a conversation)
                   if (smsConversation) {
@@ -649,22 +652,29 @@ serve(async (req) => {
                   }
                     
                 } else {
-                  console.error('Failed to send automated response. Status:', smsResponse.status);
+                  console.error('❌ Failed to send automated response. Status:', smsResponse.status);
                   console.error('Error details:', smsResult);
                   
                   // Check if it's an authentication error
                   if (smsResponse.status === 401) {
-                    console.error('AUTHENTICATION ERROR: The OpenPhone API key appears to be invalid or expired');
+                    console.error('🔑 AUTHENTICATION ERROR: The OpenPhone API key appears to be invalid or expired');
                     console.error('Please check that the OPENPHONE_API_KEY secret is set correctly');
+                  } else if (smsResponse.status === 400) {
+                    console.error('📋 BAD REQUEST: Check the SMS payload format and required fields');
+                  } else if (smsResponse.status === 403) {
+                    console.error('🚫 FORBIDDEN: API key may not have permission to send messages');
+                  } else if (smsResponse.status === 429) {
+                    console.error('⏰ RATE LIMITED: Too many requests sent to OpenPhone API');
                   }
                 }
               }
             } catch (conversationError) {
-              console.error('Error processing conversation:', conversationError);
+              console.error('❌ Error processing conversation:', conversationError);
               
               // Send fallback message only if we have a valid API key
               if (apiKey && apiKey.trim().length > 0) {
                 try {
+                  console.log('Sending fallback message...');
                   const fallbackResponse = await fetch('https://api.openphone.com/v1/messages', {
                     method: 'POST',
                     headers: {
@@ -679,14 +689,14 @@ serve(async (req) => {
                   });
                   
                   if (fallbackResponse.ok) {
-                    console.log('Fallback message sent successfully');
+                    console.log('✅ Fallback message sent successfully');
                   } else {
                     const fallbackText = await fallbackResponse.text();
-                    console.error('Failed to send fallback message. Status:', fallbackResponse.status);
+                    console.error('❌ Failed to send fallback message. Status:', fallbackResponse.status);
                     console.error('Fallback error:', fallbackText);
                   }
                 } catch (fallbackError) {
-                  console.error('Failed to send fallback message:', fallbackError);
+                  console.error('❌ Failed to send fallback message:', fallbackError);
                 }
               } else {
                 console.error('Cannot send fallback message: API key is missing or invalid');
@@ -694,10 +704,10 @@ serve(async (req) => {
             }
           } else {
             if (!apiKey) {
-              console.error('OPENPHONE_API_KEY not found in environment variables');
+              console.error('❌ OPENPHONE_API_KEY not found in environment variables');
             }
             if (!messageText) {
-              console.error('No message text to process');
+              console.error('❌ No message text to process');
             }
           }
         }
@@ -717,7 +727,7 @@ serve(async (req) => {
       )
 
     } catch (error) {
-      console.error('Webhook processing error:', error);
+      console.error('❌ Webhook processing error:', error);
       return new Response(
         JSON.stringify({ 
           error: 'Internal server error',
