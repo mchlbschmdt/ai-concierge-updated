@@ -9,14 +9,16 @@ const corsHeaders = {
 console.log("OpenPhone webhook function starting up...")
 
 // Enhanced webhook signature verification with comprehensive approaches
-async function verifyWebhookSignature(body: string, signature: string, secret: string): Promise<boolean> {
+async function verifyWebhookSignature(body: string, signature: string, secret: string, req: Request): Promise<boolean> {
   try {
-    console.log('=== SIGNATURE VERIFICATION DEBUG ===');
+    console.log('=== ENHANCED SIGNATURE VERIFICATION DEBUG ===');
     console.log('Body length:', body.length);
-    console.log('Body (first 100 chars):', body.substring(0, 100));
+    console.log('Body (first 200 chars):', body.substring(0, 200));
     console.log('Signature header:', signature);
     console.log('Secret length:', secret.length);
-    console.log('Secret (first 10 chars):', secret.substring(0, 10) + '...');
+    console.log('Request method:', req.method);
+    console.log('Request URL:', req.url);
+    console.log('Request headers:', Object.fromEntries(req.headers.entries()));
     
     const encoder = new TextEncoder();
     
@@ -34,128 +36,178 @@ async function verifyWebhookSignature(body: string, signature: string, secret: s
     console.log('- Timestamp:', timestamp);
     console.log('- Provided signature:', providedSignature);
 
-    // Try multiple verification approaches based on common webhook patterns
+    // Prepare different secret variations
+    const secretVariations = [
+      { name: 'original', value: secret },
+      { name: 'base64_decoded', value: (() => {
+        try {
+          return atob(secret);
+        } catch {
+          return secret;
+        }
+      })() },
+      { name: 'hex_decoded', value: (() => {
+        try {
+          // Try to decode as hex if it looks like hex
+          if (/^[0-9a-fA-F]+$/.test(secret) && secret.length % 2 === 0) {
+            return new TextDecoder().decode(
+              new Uint8Array(secret.match(/.{1,2}/g)?.map(byte => parseInt(byte, 16)) || [])
+            );
+          }
+          return secret;
+        } catch {
+          return secret;
+        }
+      })() },
+    ];
+
+    // Try multiple verification approaches based on OpenPhone and common webhook patterns
     const approaches = [
-      // Approach 1: Raw body with original secret
+      // Standard approaches
       {
         name: 'Raw body + original secret',
         payload: body,
         secret: secret
       },
-      // Approach 2: Timestamp + body with original secret
       {
         name: 'Timestamp + body + original secret',
         payload: timestamp + body,
         secret: secret
       },
-      // Approach 3: Timestamp.body format
       {
         name: 'Timestamp.body + original secret',
         payload: timestamp + '.' + body,
         secret: secret
       },
-      // Approach 4: Raw body with base64 decoded secret
+      
+      // OpenPhone specific patterns (based on their docs)
       {
-        name: 'Raw body + base64 decoded secret',
-        payload: body,
-        secret: (() => {
-          try {
-            return atob(secret);
-          } catch {
-            return secret;
-          }
-        })()
+        name: 'OpenPhone standard: timestamp + . + body',
+        payload: timestamp + '.' + body,
+        secret: secret
       },
-      // Approach 5: Timestamp + body with base64 decoded secret
       {
-        name: 'Timestamp + body + base64 decoded secret',
-        payload: timestamp + body,
-        secret: (() => {
-          try {
-            return atob(secret);
-          } catch {
-            return secret;
-          }
-        })()
-      },
-      // Approach 6: Version + timestamp + body (some webhooks include version)
-      {
-        name: 'Version + timestamp + body + original secret',
+        name: 'OpenPhone v2: version + timestamp + body',
         payload: version + timestamp + body,
         secret: secret
       },
-      // Approach 7: Just timestamp (in case body is not part of signature)
       {
-        name: 'Timestamp only + original secret',
+        name: 'OpenPhone webhook URL + timestamp + body',
+        payload: req.url + timestamp + body,
+        secret: secret
+      },
+      
+      // HTTP method variations
+      {
+        name: 'Method + URL + timestamp + body',
+        payload: req.method + req.url + timestamp + body,
+        secret: secret
+      },
+      {
+        name: 'Method + timestamp + body',
+        payload: req.method + timestamp + body,
+        secret: secret
+      },
+      
+      // Query string and path variations
+      {
+        name: 'Path + timestamp + body',
+        payload: new URL(req.url).pathname + timestamp + body,
+        secret: secret
+      },
+      
+      // Header-based approaches
+      {
+        name: 'Content-Type + timestamp + body',
+        payload: (req.headers.get('content-type') || '') + timestamp + body,
+        secret: secret
+      },
+      
+      // Different timestamp formats
+      {
+        name: 'Unix timestamp only',
         payload: timestamp,
         secret: secret
-      }
+      },
+      {
+        name: 'ISO timestamp + body',
+        payload: new Date(parseInt(timestamp)).toISOString() + body,
+        secret: secret
+      },
     ];
 
-    for (const approach of approaches) {
-      try {
-        console.log(`\n🔍 Trying: ${approach.name}`);
-        console.log('- Payload length:', approach.payload.length);
-        console.log('- Payload (first 50 chars):', approach.payload.substring(0, 50));
-        console.log('- Secret length:', approach.secret.length);
-        
-        // Import the key for HMAC-SHA256
-        const key = await crypto.subtle.importKey(
-          'raw',
-          encoder.encode(approach.secret),
-          { name: 'HMAC', hash: 'SHA-256' },
-          false,
-          ['sign', 'verify']
-        );
-        
-        // Generate our signature
-        const signatureBuffer = await crypto.subtle.sign(
-          'HMAC',
-          key,
-          encoder.encode(approach.payload)
-        );
-        
-        // Convert to base64 for comparison
-        const ourSignature = btoa(String.fromCharCode(...new Uint8Array(signatureBuffer)));
-        console.log('- Our signature:', ourSignature);
-        console.log('- Expected signature:', providedSignature);
-        console.log('- Signatures match:', ourSignature === providedSignature);
-        
-        // Also try direct verification
-        let signatureToVerify;
+    // Test each approach with each secret variation
+    for (const secretVar of secretVariations) {
+      console.log(`\n🔐 Testing with secret variation: ${secretVar.name}`);
+      console.log('Secret length:', secretVar.value.length);
+      
+      for (const approach of approaches) {
         try {
-          signatureToVerify = Uint8Array.from(atob(providedSignature), c => c.charCodeAt(0));
-        } catch (e) {
-          console.log('- Failed to decode provided signature as base64:', e.message);
-          continue;
-        }
-        
-        const isValid = await crypto.subtle.verify(
-          'HMAC',
-          key,
-          signatureToVerify,
-          encoder.encode(approach.payload)
-        );
+          console.log(`\n🔍 Trying: ${approach.name} (secret: ${secretVar.name})`);
+          console.log('- Payload length:', approach.payload.length);
+          console.log('- Payload (first 100 chars):', approach.payload.substring(0, 100));
+          
+          // Import the key for HMAC-SHA256
+          const key = await crypto.subtle.importKey(
+            'raw',
+            encoder.encode(secretVar.value),
+            { name: 'HMAC', hash: 'SHA-256' },
+            false,
+            ['sign', 'verify']
+          );
+          
+          // Generate our signature
+          const signatureBuffer = await crypto.subtle.sign(
+            'HMAC',
+            key,
+            encoder.encode(approach.payload)
+          );
+          
+          // Convert to base64 for comparison
+          const ourSignature = btoa(String.fromCharCode(...new Uint8Array(signatureBuffer)));
+          console.log('- Our signature:', ourSignature);
+          console.log('- Expected signature:', providedSignature);
+          console.log('- Signatures match:', ourSignature === providedSignature);
+          
+          // Also try direct verification
+          let signatureToVerify;
+          try {
+            signatureToVerify = Uint8Array.from(atob(providedSignature), c => c.charCodeAt(0));
+          } catch (e) {
+            console.log('- Failed to decode provided signature as base64:', e.message);
+            continue;
+          }
+          
+          const isValid = await crypto.subtle.verify(
+            'HMAC',
+            key,
+            signatureToVerify,
+            encoder.encode(approach.payload)
+          );
 
-        console.log(`- Verification result: ${isValid}`);
-        
-        if (isValid || ourSignature === providedSignature) {
-          console.log(`✅ SUCCESS! Signature verified with: ${approach.name}`);
-          return true;
+          console.log(`- Verification result: ${isValid}`);
+          
+          if (isValid || ourSignature === providedSignature) {
+            console.log(`✅ SUCCESS! Signature verified with: ${approach.name} (secret: ${secretVar.name})`);
+            return true;
+          }
+          
+        } catch (error) {
+          console.log(`- Error with ${approach.name} (${secretVar.name}):`, error.message);
         }
-        
-      } catch (error) {
-        console.log(`- Error with ${approach.name}:`, error.message);
       }
     }
 
     console.log('❌ All signature verification approaches failed');
     
     // Log additional debug info
-    console.log('\n=== ADDITIONAL DEBUG INFO ===');
+    console.log('\n=== COMPREHENSIVE DEBUG INFO ===');
     console.log('Raw signature header bytes:', Array.from(encoder.encode(signature)));
-    console.log('Raw secret bytes (first 20):', Array.from(encoder.encode(secret)).slice(0, 20));
-    console.log('Raw body bytes (first 20):', Array.from(encoder.encode(body)).slice(0, 20));
+    console.log('Raw secret bytes (first 50):', Array.from(encoder.encode(secret)).slice(0, 50));
+    console.log('Raw body bytes (first 50):', Array.from(encoder.encode(body)).slice(0, 50));
+    console.log('Body as hex:', Array.from(encoder.encode(body)).map(b => b.toString(16).padStart(2, '0')).join(''));
+    console.log('Timestamp as number:', parseInt(timestamp));
+    console.log('Timestamp as date:', new Date(parseInt(timestamp)));
     
     return false;
     
@@ -401,8 +453,9 @@ serve(async (req) => {
       JSON.stringify({ 
         status: 'healthy', 
         service: 'openphone-webhook',
-        message: 'OpenPhone webhook is running with enhanced signature verification',
-        timestamp: new Date().toISOString()
+        message: 'OpenPhone webhook is running with comprehensive signature verification',
+        timestamp: new Date().toISOString(),
+        bypass_mode: Deno.env.get('BYPASS_SIGNATURE_VERIFICATION') === 'true'
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -424,23 +477,25 @@ serve(async (req) => {
       const body = await req.text()
       console.log('Received webhook body:', body);
 
-      // Enhanced signature verification with fallback
+      // Enhanced signature verification with comprehensive debugging
       const webhookSecret = Deno.env.get('OPENPHONE_WEBHOOK_SECRET');
       const signature = req.headers.get('openphone-signature');
       const bypassSignature = Deno.env.get('BYPASS_SIGNATURE_VERIFICATION') === 'true';
       
       if (webhookSecret && signature && !bypassSignature) {
-        console.log('🔐 Starting enhanced signature verification...');
-        const isValidSignature = await verifyWebhookSignature(body, signature, webhookSecret);
+        console.log('🔐 Starting comprehensive signature verification...');
+        const isValidSignature = await verifyWebhookSignature(body, signature, webhookSecret, req);
         
         if (!isValidSignature) {
           console.error('❌ Signature verification failed - rejecting request');
           console.log('💡 To temporarily bypass signature verification, set BYPASS_SIGNATURE_VERIFICATION=true');
+          console.log('📚 Check OpenPhone webhook documentation for exact signature format');
           return new Response(
             JSON.stringify({ 
               error: 'Invalid signature',
               timestamp: new Date().toISOString(),
-              debug: 'Check function logs for detailed signature verification attempts'
+              debug: 'Check function logs for comprehensive signature verification attempts',
+              suggestion: 'Set BYPASS_SIGNATURE_VERIFICATION=true to temporarily bypass verification'
             }),
             {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -452,6 +507,7 @@ serve(async (req) => {
       } else {
         if (bypassSignature) {
           console.log('⚠️  BYPASSING signature verification (BYPASS_SIGNATURE_VERIFICATION=true)');
+          console.log('🔧 This is useful for debugging, but should be disabled in production');
         } else {
           console.log('⚠️  Signature verification skipped:');
           if (!webhookSecret) {
@@ -651,7 +707,8 @@ serve(async (req) => {
         JSON.stringify({ 
           success: true, 
           received: true,
-          processed_at: new Date().toISOString()
+          processed_at: new Date().toISOString(),
+          bypass_mode: bypassSignature
         }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
