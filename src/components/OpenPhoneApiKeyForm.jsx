@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,9 +28,9 @@ export default function OpenPhoneApiKeyForm() {
     setHealthResult(null);
 
     const functionTests = [
-      { name: 'health-check', url: 'https://tulhwmzrvbzzacphunes.supabase.co/functions/v1/health-check' },
-      { name: 'test-openphone-key', url: 'https://tulhwmzrvbzzacphunes.supabase.co/functions/v1/test-openphone-key' },
-      { name: 'send-sms-with-test', url: 'https://tulhwmzrvbzzacphunes.supabase.co/functions/v1/send-sms-with-test' }
+      { name: 'health-check', url: 'https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/health-check' },
+      { name: 'test-openphone-key', url: 'https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/test-openphone-key' },
+      { name: 'send-sms-with-test', url: 'https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/send-sms-with-test' }
     ];
 
     const results = [];
