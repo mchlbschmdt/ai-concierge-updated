@@ -1,9 +1,8 @@
-
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
-import { Key, ExternalLink, CheckCircle, AlertCircle, RefreshCw, Copy, Phone, MessageSquare, Database } from "lucide-react";
+import { Key, ExternalLink, CheckCircle, AlertCircle, RefreshCw, Copy, Phone, MessageSquare, Database, Activity } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 export default function OpenPhoneApiKeyForm() {
@@ -15,7 +14,78 @@ export default function OpenPhoneApiKeyForm() {
   const [currentKeyResult, setCurrentKeyResult] = useState(null);
   const [sendingSms, setSendingSms] = useState(false);
   const [smsResult, setSmsResult] = useState(null);
+  const [healthChecking, setHealthChecking] = useState(false);
+  const [healthResult, setHealthResult] = useState(null);
   const { toast } = useToast();
+
+  const testFunctionHealth = async () => {
+    setHealthChecking(true);
+    setHealthResult(null);
+
+    try {
+      console.log('🔍 Testing edge function health...');
+      
+      // First try a simple GET request to test connectivity
+      const response = await fetch('https://tulhwmzrvbzzacphunes.supabase.co/functions/v1/test-openphone-key', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      console.log('Health check response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Health check response:', data);
+        
+        setHealthResult({
+          success: true,
+          message: '✅ Edge function is deployed and accessible!',
+          details: data
+        });
+        
+        toast({
+          title: "Function Health Check Passed",
+          description: "The edge function is working properly",
+        });
+      } else {
+        const errorText = await response.text();
+        console.error('Health check failed:', response.status, errorText);
+        
+        setHealthResult({
+          success: false,
+          message: `❌ Function responded with status ${response.status}`,
+          details: errorText
+        });
+        
+        toast({
+          title: "Function Health Check Failed",
+          description: `Status: ${response.status}`,
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Health check error:', error);
+      setHealthResult({
+        success: false,
+        message: `❌ Cannot reach edge function: ${error.message}`,
+        details: {
+          error: error.toString(),
+          name: error.name,
+          suggestion: 'This indicates a deployment or connectivity issue with the edge function.'
+        }
+      });
+      
+      toast({
+        title: "Function Health Check Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setHealthChecking(false);
+    }
+  };
 
   const testCurrentApiKey = async () => {
     setTestingCurrent(true);
@@ -110,7 +180,7 @@ export default function OpenPhoneApiKeyForm() {
             errorName: error?.name,
             errorContext: error?.context,
             suggestion: error?.name === 'FunctionsFetchError' 
-              ? 'Edge function may be deploying or have connectivity issues. Try again in a moment.'
+              ? 'Edge function may be deploying or have connectivity issues. Try the health check first.'
               : 'Check the console logs for more details.'
           }
         });
@@ -153,7 +223,7 @@ export default function OpenPhoneApiKeyForm() {
         details: {
           error: error.toString(),
           stack: error.stack,
-          suggestion: 'This appears to be a network or function execution error. Please try again.'
+          suggestion: 'This appears to be a network or function execution error. Try the health check first.'
         }
       });
       toast({
@@ -294,6 +364,58 @@ export default function OpenPhoneApiKeyForm() {
       </h3>
       
       <div className="space-y-4">
+        {/* Health Check Section - NEW */}
+        <div className="bg-purple-50 p-3 rounded-lg border-l-4 border-purple-400">
+          <div className="flex items-center gap-2 mb-3">
+            <Activity className="h-4 w-4 text-purple-600" />
+            <span className="font-medium text-sm text-purple-800">Step 0: Function Health Check</span>
+          </div>
+          <p className="text-xs text-purple-700 mb-3">
+            First, verify that the edge function is deployed and accessible. This helps identify deployment issues.
+          </p>
+          <Button 
+            onClick={testFunctionHealth}
+            disabled={healthChecking}
+            className="w-full bg-purple-600 hover:bg-purple-700"
+          >
+            {healthChecking ? (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                Checking Function Health...
+              </>
+            ) : (
+              <>
+                <Activity className="mr-2 h-4 w-4" />
+                Test Edge Function Health
+              </>
+            )}
+          </Button>
+          
+          {healthResult && (
+            <div className={`mt-3 p-3 rounded border ${
+              healthResult.success 
+                ? 'bg-green-50 border-green-200' 
+                : 'bg-red-50 border-red-200'
+            }`}>
+              <div className="flex items-center gap-2 mb-2">
+                {healthResult.success ? (
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                ) : (
+                  <AlertCircle className="h-4 w-4 text-red-600" />
+                )}
+                <span className="font-medium text-xs">{healthResult.message}</span>
+              </div>
+              {healthResult.details && (
+                <pre className="text-xs bg-gray-100 p-2 rounded mt-2 overflow-x-auto">
+                  {typeof healthResult.details === 'string' 
+                    ? healthResult.details 
+                    : JSON.stringify(healthResult.details, null, 2)}
+                </pre>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Current Status Section */}
         <div className="bg-blue-50 p-3 rounded-lg border-l-4 border-blue-400">
           <div className="flex items-center gap-2 mb-3">

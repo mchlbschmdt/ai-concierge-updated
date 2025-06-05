@@ -7,20 +7,54 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
+  console.log(`🔍 test-openphone-key function called - Method: ${req.method}`)
+  console.log(`🔍 Request URL: ${req.url}`)
+
   if (req.method === 'OPTIONS') {
+    console.log('🔍 Handling CORS preflight request')
     return new Response(null, { headers: corsHeaders })
   }
 
+  // Add a health check endpoint
+  if (req.method === 'GET') {
+    console.log('🔍 Health check endpoint hit')
+    return new Response(
+      JSON.stringify({ 
+        status: 'healthy',
+        message: 'test-openphone-key function is deployed and accessible',
+        timestamp: new Date().toISOString()
+      }),
+      { 
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    )
+  }
+
   if (req.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 })
+    console.log(`🔍 Method ${req.method} not allowed`)
+    return new Response('Method not allowed', { 
+      status: 405,
+      headers: corsHeaders 
+    })
   }
 
   try {
-    const { apiKey, testType = 'validate' } = await req.json()
+    console.log('🔍 Processing POST request')
+    const requestBody = await req.text()
+    console.log('🔍 Request body:', requestBody)
 
-    if (!apiKey) {
+    let parsedBody
+    try {
+      parsedBody = JSON.parse(requestBody)
+    } catch (parseError) {
+      console.error('🔥 Failed to parse request body:', parseError)
       return new Response(
-        JSON.stringify({ error: 'API key is required' }),
+        JSON.stringify({ 
+          success: false,
+          error: 'Invalid JSON in request body',
+          details: parseError.message
+        }),
         { 
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -28,9 +62,28 @@ serve(async (req) => {
       )
     }
 
-    console.log(`Testing OpenPhone API key with type: ${testType}`)
+    const { apiKey, testType = 'validate' } = parsedBody
+    console.log(`🔍 Parsed request - testType: ${testType}, apiKey length: ${apiKey?.length || 0}`)
+
+    if (!apiKey) {
+      console.log('🔥 No API key provided')
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          error: 'API key is required' 
+        }),
+        { 
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
+    }
+
+    console.log(`🔍 Testing OpenPhone API key with type: ${testType}`)
 
     if (testType === 'validate') {
+      console.log('🔍 Validating API key by fetching phone numbers')
+      
       // Test API key by fetching phone numbers
       const response = await fetch('https://api.openphone.com/v1/phone-numbers', {
         method: 'GET',
@@ -40,9 +93,11 @@ serve(async (req) => {
         }
       })
 
+      console.log(`🔍 OpenPhone API response status: ${response.status}`)
+
       if (!response.ok) {
         const errorText = await response.text()
-        console.error('API key validation failed:', response.status, errorText)
+        console.error('🔥 API key validation failed:', response.status, errorText)
         return new Response(
           JSON.stringify({ 
             success: false,
@@ -57,7 +112,7 @@ serve(async (req) => {
       }
 
       const data = await response.json()
-      console.log('API key validation successful:', data)
+      console.log('✅ API key validation successful:', data)
       
       return new Response(
         JSON.stringify({ 
@@ -72,6 +127,8 @@ serve(async (req) => {
       )
 
     } else if (testType === 'sms') {
+      console.log('🔍 Testing SMS sending')
+      
       // Test SMS sending
       const response = await fetch('https://api.openphone.com/v1/messages', {
         method: 'POST',
@@ -86,9 +143,11 @@ serve(async (req) => {
         })
       })
 
+      console.log(`🔍 OpenPhone SMS API response status: ${response.status}`)
+
       if (!response.ok) {
         const errorText = await response.text()
-        console.error('SMS test failed:', response.status, errorText)
+        console.error('🔥 SMS test failed:', response.status, errorText)
         return new Response(
           JSON.stringify({ 
             success: false,
@@ -103,7 +162,7 @@ serve(async (req) => {
       }
 
       const responseData = await response.json()
-      console.log('SMS test successful:', responseData)
+      console.log('✅ SMS test successful:', responseData)
 
       return new Response(
         JSON.stringify({ 
@@ -119,8 +178,12 @@ serve(async (req) => {
       )
     }
 
+    console.log('🔥 Invalid test type provided')
     return new Response(
-      JSON.stringify({ error: 'Invalid test type' }),
+      JSON.stringify({ 
+        success: false,
+        error: 'Invalid test type. Use "validate" or "sms"' 
+      }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400
@@ -128,7 +191,7 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('Test OpenPhone key error:', error)
+    console.error('🔥 Test OpenPhone key error:', error)
     return new Response(
       JSON.stringify({ 
         success: false,
