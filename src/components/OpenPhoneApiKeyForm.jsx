@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +24,7 @@ export default function OpenPhoneApiKeyForm() {
       console.log('🔍 Testing current API key in Supabase...');
       
       // Test by calling our send-sms edge function with a test message
-      const testResponse = await fetch('https://tulhwmzrvbzzacphunes.supabase.co/functions/v1/send-sms', {
+      const testResponse = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/send-sms', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -32,11 +33,11 @@ export default function OpenPhoneApiKeyForm() {
         body: JSON.stringify({
           to: '+15551234567',
           message: 'API KEY TEST - Please ignore this message',
-          phoneNumberId: 'pn_test'
+          phoneNumberId: '+18333301032'
         })
       });
 
-      const responseData = await response.text();
+      const responseData = await testResponse.text();
       console.log('Current API key test response:', responseData);
 
       if (testResponse.ok) {
@@ -298,7 +299,9 @@ export default function OpenPhoneApiKeyForm() {
               </div>
               {currentKeyResult.details && (
                 <pre className="text-xs bg-gray-100 p-2 rounded mt-2 overflow-x-auto">
-                  {JSON.stringify(currentKeyResult.details, null, 2)}
+                  {typeof currentKeyResult.details === 'string' 
+                    ? currentKeyResult.details 
+                    : JSON.stringify(currentKeyResult.details, null, 2)}
                 </pre>
               )}
             </div>
@@ -440,7 +443,9 @@ export default function OpenPhoneApiKeyForm() {
             
             {smsResult.details && (
               <pre className="text-xs bg-gray-100 p-2 rounded mt-2 overflow-x-auto">
-                {JSON.stringify(smsResult.details, null, 2)}
+                {typeof smsResult.details === 'string' 
+                  ? smsResult.details 
+                  : JSON.stringify(smsResult.details, null, 2)}
               </pre>
             )}
           </div>
