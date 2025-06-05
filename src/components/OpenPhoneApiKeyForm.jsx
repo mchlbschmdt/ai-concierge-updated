@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
-import { Key, ExternalLink, CheckCircle, AlertCircle, RefreshCw, Copy, Phone, MessageSquare, Database, Activity } from "lucide-react";
+import { Key, ExternalLink, CheckCircle, AlertCircle, RefreshCw, Copy, Phone, MessageSquare, Database, Activity, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 export default function OpenPhoneApiKeyForm() {
@@ -16,74 +16,216 @@ export default function OpenPhoneApiKeyForm() {
   const [smsResult, setSmsResult] = useState(null);
   const [healthChecking, setHealthChecking] = useState(false);
   const [healthResult, setHealthResult] = useState(null);
+  const [testingFallback, setTestingFallback] = useState(false);
+  const [fallbackResult, setFallbackResult] = useState(null);
   const { toast } = useToast();
 
-  const testFunctionHealth = async () => {
+  const testMultipleFunctions = async () => {
     setHealthChecking(true);
     setHealthResult(null);
 
+    const functionTests = [
+      { name: 'health-check', url: 'https://tulhwmzrvbzzacphunes.supabase.co/functions/v1/health-check' },
+      { name: 'test-openphone-key', url: 'https://tulhwmzrvbzzacphunes.supabase.co/functions/v1/test-openphone-key' },
+      { name: 'send-sms-with-test', url: 'https://tulhwmzrvbzzacphunes.supabase.co/functions/v1/send-sms-with-test' }
+    ];
+
+    const results = [];
+
+    for (const func of functionTests) {
+      try {
+        console.log(`🔍 Testing ${func.name} function...`);
+        
+        const response = await fetch(func.url, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
+
+        console.log(`${func.name} response status:`, response.status);
+        
+        if (response.ok) {
+          const data = await response.json();
+          results.push({
+            name: func.name,
+            status: 'working',
+            data: data
+          });
+        } else {
+          const errorText = await response.text();
+          results.push({
+            name: func.name,
+            status: 'error',
+            error: `Status ${response.status}: ${errorText}`
+          });
+        }
+      } catch (error) {
+        console.error(`${func.name} test error:`, error);
+        results.push({
+          name: func.name,
+          status: 'failed',
+          error: error.message
+        });
+      }
+    }
+
+    const workingFunctions = results.filter(r => r.status === 'working');
+    
+    setHealthResult({
+      success: workingFunctions.length > 0,
+      message: `✅ Found ${workingFunctions.length}/3 working functions!`,
+      details: results
+    });
+
+    if (workingFunctions.length > 0) {
+      toast({
+        title: "Edge Functions Status",
+        description: `${workingFunctions.length} out of 3 functions are working`,
+      });
+    } else {
+      toast({
+        title: "Edge Functions Issue",
+        description: "No functions are responding - deployment issue",
+        variant: "destructive"
+      });
+    }
+
+    setHealthChecking(false);
+  };
+
+  const testFallbackFunction = async () => {
+    setTestingFallback(true);
+    setFallbackResult(null);
+
     try {
-      console.log('🔍 Testing edge function health...');
+      console.log('🔍 Testing fallback function...');
       
-      // First try a simple GET request to test connectivity
-      const response = await fetch('https://tulhwmzrvbzzacphunes.supabase.co/functions/v1/test-openphone-key', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
+      const { data, error } = await supabase.functions.invoke('send-sms-with-test', {
+        body: {
+          action: 'health'
         }
       });
 
-      console.log('Health check response status:', response.status);
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Health check response:', data);
-        
-        setHealthResult({
+      console.log('Fallback function test response:', { data, error });
+
+      if (!error && data) {
+        setFallbackResult({
           success: true,
-          message: '✅ Edge function is deployed and accessible!',
+          message: '✅ Fallback function is working!',
           details: data
         });
-        
         toast({
-          title: "Function Health Check Passed",
-          description: "The edge function is working properly",
+          title: "Fallback Function Working",
+          description: "Found a working edge function to use for testing",
         });
       } else {
-        const errorText = await response.text();
-        console.error('Health check failed:', response.status, errorText);
-        
-        setHealthResult({
+        setFallbackResult({
           success: false,
-          message: `❌ Function responded with status ${response.status}`,
-          details: errorText
+          message: `❌ Fallback function failed: ${error?.message || 'Unknown error'}`,
+          details: error || data
         });
-        
         toast({
-          title: "Function Health Check Failed",
-          description: `Status: ${response.status}`,
+          title: "Fallback Function Failed",
+          description: error?.message || 'Check details below',
           variant: "destructive"
         });
       }
     } catch (error) {
-      console.error('Health check error:', error);
-      setHealthResult({
+      console.error('Fallback function test error:', error);
+      setFallbackResult({
         success: false,
-        message: `❌ Cannot reach edge function: ${error.message}`,
-        details: {
-          error: error.toString(),
-          name: error.name,
-          suggestion: 'This indicates a deployment or connectivity issue with the edge function.'
-        }
+        message: `❌ Test failed: ${error.message}`,
+        details: error.toString()
       });
-      
       toast({
-        title: "Function Health Check Failed",
+        title: "Test Failed",
         description: error.message,
         variant: "destructive"
       });
     } finally {
-      setHealthChecking(false);
+      setTestingFallback(false);
+    }
+  };
+
+  const testNewApiKeyWithFallback = async () => {
+    if (!apiKey.trim()) {
+      toast({
+        title: "API Key Required",
+        description: "Please enter an API key to test",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setTesting(true);
+    setTestResult(null);
+
+    try {
+      console.log('🔍 Testing API key via fallback function...');
+      
+      const { data, error } = await supabase.functions.invoke('send-sms-with-test', {
+        body: {
+          action: 'test-api-key',
+          apiKey: apiKey.trim(),
+          testType: 'validate'
+        }
+      });
+
+      console.log('API key test response:', { data, error });
+
+      if (error) {
+        console.error('Function error:', error);
+        setTestResult({
+          success: false,
+          message: `❌ Function call failed: ${error.message || 'Unknown error'}`,
+          details: error
+        });
+        toast({
+          title: "Function Call Failed",
+          description: error.message || 'Unknown error occurred',
+          variant: "destructive"
+        });
+        return;
+      }
+
+      if (data?.success) {
+        setTestResult({
+          success: true,
+          message: data.message,
+          phoneNumbers: data.phoneNumbers
+        });
+        toast({
+          title: "API Key Valid",
+          description: "Your OpenPhone API key is working correctly",
+        });
+      } else {
+        setTestResult({
+          success: false,
+          message: data?.error || 'API key validation failed',
+          details: data?.details
+        });
+        toast({
+          title: "API Key Invalid",
+          description: data?.error || 'API key validation failed',
+          variant: "destructive"
+        });
+      }
+
+    } catch (error) {
+      console.error('API key test error:', error);
+      setTestResult({
+        success: false,
+        message: `❌ Test failed: ${error.message}`,
+        details: error.toString()
+      });
+      toast({
+        title: "Test Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setTesting(false);
     }
   };
 
@@ -94,7 +236,6 @@ export default function OpenPhoneApiKeyForm() {
     try {
       console.log('🔍 Testing current API key in Supabase...');
       
-      // Test by calling our send-sms edge function with a test message using Supabase client
       const { data, error } = await supabase.functions.invoke('send-sms', {
         body: {
           to: '+15551234567',
@@ -180,7 +321,7 @@ export default function OpenPhoneApiKeyForm() {
             errorName: error?.name,
             errorContext: error?.context,
             suggestion: error?.name === 'FunctionsFetchError' 
-              ? 'Edge function may be deploying or have connectivity issues. Try the health check first.'
+              ? 'Edge function may be deploying or have connectivity issues. Try the fallback function instead.'
               : 'Check the console logs for more details.'
           }
         });
@@ -223,7 +364,7 @@ export default function OpenPhoneApiKeyForm() {
         details: {
           error: error.toString(),
           stack: error.stack,
-          suggestion: 'This appears to be a network or function execution error. Try the health check first.'
+          suggestion: 'This appears to be a network or function execution error. Try the fallback function instead.'
         }
       });
       toast({
@@ -364,32 +505,52 @@ export default function OpenPhoneApiKeyForm() {
       </h3>
       
       <div className="space-y-4">
-        {/* Health Check Section - NEW */}
+        {/* Multi-Function Health Check Section */}
         <div className="bg-purple-50 p-3 rounded-lg border-l-4 border-purple-400">
           <div className="flex items-center gap-2 mb-3">
             <Activity className="h-4 w-4 text-purple-600" />
-            <span className="font-medium text-sm text-purple-800">Step 0: Function Health Check</span>
+            <span className="font-medium text-sm text-purple-800">Step 0: Edge Functions Deployment Check</span>
           </div>
           <p className="text-xs text-purple-700 mb-3">
-            First, verify that the edge function is deployed and accessible. This helps identify deployment issues.
+            Test all edge functions to identify which ones are deployed and working. This helps diagnose deployment issues.
           </p>
-          <Button 
-            onClick={testFunctionHealth}
-            disabled={healthChecking}
-            className="w-full bg-purple-600 hover:bg-purple-700"
-          >
-            {healthChecking ? (
-              <>
-                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                Checking Function Health...
-              </>
-            ) : (
-              <>
-                <Activity className="mr-2 h-4 w-4" />
-                Test Edge Function Health
-              </>
-            )}
-          </Button>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <Button 
+              onClick={testMultipleFunctions}
+              disabled={healthChecking}
+              className="w-full bg-purple-600 hover:bg-purple-700"
+            >
+              {healthChecking ? (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  Testing All Functions...
+                </>
+              ) : (
+                <>
+                  <Activity className="mr-2 h-4 w-4" />
+                  Test All Edge Functions
+                </>
+              )}
+            </Button>
+
+            <Button 
+              onClick={testFallbackFunction}
+              disabled={testingFallback}
+              className="w-full bg-indigo-600 hover:bg-indigo-700"
+            >
+              {testingFallback ? (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  Testing Fallback...
+                </>
+              ) : (
+                <>
+                  <Zap className="mr-2 h-4 w-4" />
+                  Test Fallback Function
+                </>
+              )}
+            </Button>
+          </div>
           
           {healthResult && (
             <div className={`mt-3 p-3 rounded border ${
@@ -406,10 +567,39 @@ export default function OpenPhoneApiKeyForm() {
                 <span className="font-medium text-xs">{healthResult.message}</span>
               </div>
               {healthResult.details && (
+                <div className="mt-2">
+                  <p className="text-xs font-medium text-gray-700 mb-1">Function Status:</p>
+                  {healthResult.details.map((result, index) => (
+                    <div key={index} className={`text-xs p-2 rounded mb-1 ${
+                      result.status === 'working' ? 'bg-green-100' : 'bg-red-100'
+                    }`}>
+                      <strong>{result.name}:</strong> {result.status === 'working' ? '✅ Working' : `❌ ${result.error}`}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {fallbackResult && (
+            <div className={`mt-3 p-3 rounded border ${
+              fallbackResult.success 
+                ? 'bg-green-50 border-green-200' 
+                : 'bg-red-50 border-red-200'
+            }`}>
+              <div className="flex items-center gap-2 mb-2">
+                {fallbackResult.success ? (
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                ) : (
+                  <AlertCircle className="h-4 w-4 text-red-600" />
+                )}
+                <span className="font-medium text-xs">{fallbackResult.message}</span>
+              </div>
+              {fallbackResult.details && (
                 <pre className="text-xs bg-gray-100 p-2 rounded mt-2 overflow-x-auto">
-                  {typeof healthResult.details === 'string' 
-                    ? healthResult.details 
-                    : JSON.stringify(healthResult.details, null, 2)}
+                  {typeof fallbackResult.details === 'string' 
+                    ? fallbackResult.details 
+                    : JSON.stringify(fallbackResult.details, null, 2)}
                 </pre>
               )}
             </div>
@@ -475,7 +665,7 @@ export default function OpenPhoneApiKeyForm() {
             <span className="font-medium text-sm text-yellow-800">Step 2: Test New API Key (if current fails)</span>
           </div>
           <p className="text-xs text-yellow-700 mb-3">
-            If the current setup fails, get a fresh API key and test it here. All tests run server-side via Supabase.
+            If the current setup fails, get a fresh API key and test it here. Multiple testing methods available.
           </p>
         </div>
 
@@ -493,7 +683,7 @@ export default function OpenPhoneApiKeyForm() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
           <Button 
             onClick={testNewApiKey}
             disabled={testing || !apiKey.trim()}
@@ -508,7 +698,26 @@ export default function OpenPhoneApiKeyForm() {
             ) : (
               <>
                 <Key className="mr-2 h-4 w-4" />
-                Test API Key
+                Test (Original)
+              </>
+            )}
+          </Button>
+
+          <Button 
+            onClick={testNewApiKeyWithFallback}
+            disabled={testing || !apiKey.trim()}
+            variant="outline"
+            className="w-full bg-indigo-50"
+          >
+            {testing ? (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                Testing...
+              </>
+            ) : (
+              <>
+                <Zap className="mr-2 h-4 w-4" />
+                Test (Fallback)
               </>
             )}
           </Button>
@@ -629,11 +838,12 @@ export default function OpenPhoneApiKeyForm() {
         )}
 
         <div className="bg-blue-50 p-3 rounded text-sm">
-          <p className="font-medium mb-2">📋 Step-by-Step Fix:</p>
+          <p className="font-medium mb-2">📋 Updated Step-by-Step Fix:</p>
           <ol className="list-decimal list-inside space-y-1 text-xs">
-            <li>First click "Test Current API Key in Supabase" above</li>
-            <li>If that works, you're done! If not, get a fresh API key from <a href="https://app.openphone.com/developer" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">OpenPhone Developer Settings</a></li>
-            <li>Paste it above and click "Test API Key" then "Test SMS Send"</li>
+            <li>First click "Test All Edge Functions" to see which functions are deployed</li>
+            <li>If functions are working, test your current API key</li>
+            <li>If that fails, get a fresh API key from <a href="https://app.openphone.com/developer" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">OpenPhone Developer Settings</a></li>
+            <li>Use either "Test (Original)" or "Test (Fallback)" button - try both if one fails</li>
             <li>If valid, click "Copy for Supabase"</li>
             <li>Go to <a href={`https://supabase.com/dashboard/project/zutwyyepahbbvrcbsbke/settings/functions`} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Supabase Edge Functions Secrets</a></li>
             <li>Update the <code className="bg-gray-200 px-1 rounded">OPENPHONE_API_KEY</code> secret</li>
@@ -642,23 +852,24 @@ export default function OpenPhoneApiKeyForm() {
         </div>
 
         <div className="bg-green-50 p-3 rounded text-sm">
-          <p className="font-medium mb-1">✅ Recent Fixes:</p>
+          <p className="font-medium mb-1">✅ Latest Improvements:</p>
           <ul className="list-disc list-inside space-y-1 text-xs">
-            <li>Made API testing function publicly accessible (no authentication required)</li>
-            <li>Added detailed error diagnostics for function call failures</li>
-            <li>Improved console logging for better debugging</li>
-            <li>All tests now run server-side via Supabase edge functions (CORS-free)</li>
+            <li>Added multiple edge function health checks</li>
+            <li>Created fallback edge function with combined testing capabilities</li>
+            <li>Added comprehensive function deployment diagnostics</li>
+            <li>Multiple testing strategies to work around deployment issues</li>
+            <li>All tests run server-side via Supabase edge functions (CORS-free)</li>
           </ul>
         </div>
 
         <div className="bg-yellow-50 p-3 rounded text-sm">
           <p className="font-medium mb-1">⚠️ Common Issues:</p>
           <ul className="list-disc list-inside space-y-1 text-xs">
+            <li>Edge function deployment failures (try fallback function)</li>
             <li>API key expired or revoked</li>
             <li>Insufficient SMS permissions on OpenPhone account</li>
             <li>Account billing issues</li>
             <li>Wrong API key (webhook secret vs API key)</li>
-            <li>Edge function deployment/connectivity issues (retry in a moment)</li>
           </ul>
         </div>
       </div>

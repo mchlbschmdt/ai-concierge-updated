@@ -9,3 +9,9 @@ verify_jwt = true
 
 [functions.test-openphone-key]
 verify_jwt = false
+
+[functions.health-check]
+verify_jwt = false
+
+[functions.send-sms-with-test]
+verify_jwt = false
