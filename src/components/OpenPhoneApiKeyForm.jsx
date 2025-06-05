@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -88,6 +89,7 @@ export default function OpenPhoneApiKeyForm() {
 
     try {
       console.log('🔍 Testing new API key via Supabase edge function...');
+      console.log('Supabase client status:', supabase ? 'initialized' : 'not initialized');
       
       const { data, error } = await supabase.functions.invoke('test-openphone-key', {
         body: {
@@ -99,20 +101,28 @@ export default function OpenPhoneApiKeyForm() {
       console.log('API key test response:', { data, error });
 
       if (error) {
+        console.error('Supabase function error:', error);
         setTestResult({
           success: false,
-          message: `❌ Test failed: ${error.message}`,
-          details: error
+          message: `❌ Function call failed: ${error.message || 'Unknown error'}`,
+          details: {
+            error: error,
+            errorName: error?.name,
+            errorContext: error?.context,
+            suggestion: error?.name === 'FunctionsFetchError' 
+              ? 'Edge function may be deploying or have connectivity issues. Try again in a moment.'
+              : 'Check the console logs for more details.'
+          }
         });
         toast({
-          title: "API Key Test Failed",
-          description: error.message,
+          title: "Function Call Failed",
+          description: error.message || 'Unknown error occurred',
           variant: "destructive"
         });
         return;
       }
 
-      if (data.success) {
+      if (data?.success) {
         setTestResult({
           success: true,
           message: data.message,
@@ -125,12 +135,12 @@ export default function OpenPhoneApiKeyForm() {
       } else {
         setTestResult({
           success: false,
-          message: data.error || 'API key validation failed',
-          details: data.details
+          message: data?.error || 'API key validation failed',
+          details: data?.details
         });
         toast({
           title: "API Key Invalid",
-          description: data.error || 'API key validation failed',
+          description: data?.error || 'API key validation failed',
           variant: "destructive"
         });
       }
@@ -140,7 +150,11 @@ export default function OpenPhoneApiKeyForm() {
       setTestResult({
         success: false,
         message: `❌ Test failed: ${error.message}`,
-        details: error.toString()
+        details: {
+          error: error.toString(),
+          stack: error.stack,
+          suggestion: 'This appears to be a network or function execution error. Please try again.'
+        }
       });
       toast({
         title: "Test Failed",
@@ -178,20 +192,28 @@ export default function OpenPhoneApiKeyForm() {
       console.log('SMS test response:', { data, error });
 
       if (error) {
+        console.error('SMS function error:', error);
         setSmsResult({
           success: false,
-          message: `❌ SMS test failed: ${error.message}`,
-          details: error
+          message: `❌ SMS function call failed: ${error.message || 'Unknown error'}`,
+          details: {
+            error: error,
+            errorName: error?.name,
+            errorContext: error?.context,
+            suggestion: error?.name === 'FunctionsFetchError' 
+              ? 'Edge function may be deploying or have connectivity issues. Try again in a moment.'
+              : 'Check the console logs for more details.'
+          }
         });
         toast({
-          title: "SMS Test Failed",
-          description: error.message,
+          title: "SMS Function Call Failed",
+          description: error.message || 'Unknown error occurred',
           variant: "destructive"
         });
         return;
       }
 
-      if (data.success) {
+      if (data?.success) {
         setSmsResult({
           success: true,
           message: data.message,
@@ -205,12 +227,12 @@ export default function OpenPhoneApiKeyForm() {
       } else {
         setSmsResult({
           success: false,
-          message: data.error || 'SMS sending failed',
-          details: data.details
+          message: data?.error || 'SMS sending failed',
+          details: data?.details
         });
         toast({
           title: "SMS Sending Failed",
-          description: data.error || 'SMS sending failed',
+          description: data?.error || 'SMS sending failed',
           variant: "destructive"
         });
       }
@@ -220,7 +242,11 @@ export default function OpenPhoneApiKeyForm() {
       setSmsResult({
         success: false,
         message: `❌ SMS test failed: ${error.message}`,
-        details: error.toString()
+        details: {
+          error: error.toString(),
+          stack: error.stack,
+          suggestion: 'This appears to be a network or function execution error. Please try again.'
+        }
       });
       toast({
         title: "SMS Test Failed",
@@ -435,11 +461,14 @@ export default function OpenPhoneApiKeyForm() {
             )}
 
             {testResult.details && (
-              <pre className="text-xs bg-gray-100 p-2 rounded mt-2 overflow-x-auto">
-                {typeof testResult.details === 'string' 
-                  ? testResult.details 
-                  : JSON.stringify(testResult.details, null, 2)}
-              </pre>
+              <div className="mt-2">
+                <p className="text-xs font-medium text-gray-700 mb-1">Details:</p>
+                <pre className="text-xs bg-gray-100 p-2 rounded overflow-x-auto">
+                  {typeof testResult.details === 'string' 
+                    ? testResult.details 
+                    : JSON.stringify(testResult.details, null, 2)}
+                </pre>
+              </div>
             )}
           </div>
         )}
@@ -465,11 +494,14 @@ export default function OpenPhoneApiKeyForm() {
             )}
             
             {smsResult.details && (
-              <pre className="text-xs bg-gray-100 p-2 rounded mt-2 overflow-x-auto">
-                {typeof smsResult.details === 'string' 
-                  ? smsResult.details 
-                  : JSON.stringify(smsResult.details, null, 2)}
-              </pre>
+              <div className="mt-2">
+                <p className="text-xs font-medium text-gray-700 mb-1">Details:</p>
+                <pre className="text-xs bg-gray-100 p-2 rounded overflow-x-auto">
+                  {typeof smsResult.details === 'string' 
+                    ? smsResult.details 
+                    : JSON.stringify(smsResult.details, null, 2)}
+                </pre>
+              </div>
             )}
           </div>
         )}
@@ -487,6 +519,16 @@ export default function OpenPhoneApiKeyForm() {
           </ol>
         </div>
 
+        <div className="bg-green-50 p-3 rounded text-sm">
+          <p className="font-medium mb-1">✅ Recent Fixes:</p>
+          <ul className="list-disc list-inside space-y-1 text-xs">
+            <li>Made API testing function publicly accessible (no authentication required)</li>
+            <li>Added detailed error diagnostics for function call failures</li>
+            <li>Improved console logging for better debugging</li>
+            <li>All tests now run server-side via Supabase edge functions (CORS-free)</li>
+          </ul>
+        </div>
+
         <div className="bg-yellow-50 p-3 rounded text-sm">
           <p className="font-medium mb-1">⚠️ Common Issues:</p>
           <ul className="list-disc list-inside space-y-1 text-xs">
@@ -494,18 +536,7 @@ export default function OpenPhoneApiKeyForm() {
             <li>Insufficient SMS permissions on OpenPhone account</li>
             <li>Account billing issues</li>
             <li>Wrong API key (webhook secret vs API key)</li>
-            <li>All tests now run server-side to avoid CORS issues</li>
-          </ul>
-        </div>
-
-        <div className="bg-green-50 p-3 rounded text-sm">
-          <p className="font-medium mb-1">✅ Good News:</p>
-          <ul className="list-disc list-inside space-y-1 text-xs">
-            <li>Your webhook is receiving messages perfectly</li>
-            <li>Message processing and response generation works</li>
-            <li>Database storage is working</li>
-            <li>All API tests now run server-side via Supabase edge functions</li>
-            <li>Only SMS sending needs the API key fix</li>
+            <li>Edge function deployment/connectivity issues (retry in a moment)</li>
           </ul>
         </div>
       </div>
