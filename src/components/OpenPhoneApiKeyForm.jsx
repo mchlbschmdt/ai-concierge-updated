@@ -4,6 +4,8 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { Key, ExternalLink, CheckCircle, AlertCircle, RefreshCw, Copy, Phone, MessageSquare, Database, Activity, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import EdgeFunctionDiagnostics from './EdgeFunctionDiagnostics';
+import ClientSideApiTest from './ClientSideApiTest';
 
 export default function OpenPhoneApiKeyForm() {
   const [apiKey, setApiKey] = useState('');
@@ -505,6 +507,12 @@ export default function OpenPhoneApiKeyForm() {
       </h3>
       
       <div className="space-y-4">
+        {/* Infrastructure Diagnostics Section */}
+        <EdgeFunctionDiagnostics />
+        
+        {/* Client-Side Workaround Section */}
+        <ClientSideApiTest />
+
         {/* Multi-Function Health Check Section */}
         <div className="bg-purple-50 p-3 rounded-lg border-l-4 border-purple-400">
           <div className="flex items-center gap-2 mb-3">
@@ -837,18 +845,15 @@ export default function OpenPhoneApiKeyForm() {
           </div>
         )}
 
-        <div className="bg-blue-50 p-3 rounded text-sm">
-          <p className="font-medium mb-2">📋 Updated Step-by-Step Fix:</p>
-          <ol className="list-decimal list-inside space-y-1 text-xs">
-            <li>First click "Test All Edge Functions" to see which functions are deployed</li>
-            <li>If functions are working, test your current API key</li>
-            <li>If that fails, get a fresh API key from <a href="https://app.openphone.com/developer" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">OpenPhone Developer Settings</a></li>
-            <li>Use either "Test (Original)" or "Test (Fallback)" button - try both if one fails</li>
-            <li>If valid, click "Copy for Supabase"</li>
-            <li>Go to <a href={`https://supabase.com/dashboard/project/zutwyyepahbbvrcbsbke/settings/functions`} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Supabase Edge Functions Secrets</a></li>
-            <li>Update the <code className="bg-gray-200 px-1 rounded">OPENPHONE_API_KEY</code> secret</li>
-            <li>Test SMS by sending "1001" to +1 (833) 330-1032</li>
-          </ol>
+        <div className="bg-red-50 p-3 rounded text-sm border-l-4 border-red-400">
+          <p className="font-medium mb-2">🚨 Current Issue Summary:</p>
+          <ul className="list-disc list-inside space-y-1 text-xs text-red-700">
+            <li><strong>❌ Edge Functions:</strong> All functions failing to deploy or be accessible</li>
+            <li><strong>❌ Infrastructure:</strong> Fundamental deployment issue with Supabase edge functions</li>
+            <li><strong>✅ Workaround:</strong> Client-side API key testing available above</li>
+            <li><strong>🔧 Next Steps:</strong> Run diagnostics and use workaround until functions deploy</li>
+            <li><strong>📞 Support:</strong> May need Supabase support assistance for infrastructure issues</li>
+          </ul>
         </div>
 
         <div className="bg-green-50 p-3 rounded text-sm">
