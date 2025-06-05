@@ -149,7 +149,7 @@ export default function ComprehensiveSmsDebugger() {
         };
       }
 
-      // Test 2: Edge Function Accessibility
+      // Test 2: Edge Function Accessibility (using proper GET requests)
       const functionsToTest = [
         'minimal-test',
         'health-check', 
@@ -163,7 +163,11 @@ export default function ComprehensiveSmsDebugger() {
       for (const funcName of functionsToTest) {
         try {
           const response = await fetch(`https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/${funcName}`, {
-            method: 'GET'
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dHd5eWVwYWhiYnZyY2JzYmtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0MDg3MDMsImV4cCI6MjA2MDk4NDcwM30.kUje38W2D2vXjYos6laaZ_rOzADLGiftoHAztFqSP9g`,
+              'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dHd5eWVwYWhiYnZyY2JzYmtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0MDg3MDMsImV4cCI6MjA2MDk4NDcwM30.kUje38W2D2vXjYos6laaZ_rOzADLGiftoHAztFqSP9g'
+            }
           });
           
           diagnosticResults.edgeFunctions[funcName] = {
@@ -172,9 +176,14 @@ export default function ComprehensiveSmsDebugger() {
             message: response.ok ? '✅ Function accessible' : `❌ Status ${response.status}`
           };
           
-          if (response.ok && funcName === 'minimal-test') {
-            const data = await response.text();
-            diagnosticResults.edgeFunctions[funcName].response = data;
+          if (response.ok) {
+            try {
+              const data = await response.json();
+              diagnosticResults.edgeFunctions[funcName].response = data;
+            } catch (e) {
+              const text = await response.text();
+              diagnosticResults.edgeFunctions[funcName].response = text;
+            }
           }
         } catch (error) {
           diagnosticResults.edgeFunctions[funcName] = {
@@ -212,7 +221,7 @@ export default function ComprehensiveSmsDebugger() {
       }
       
       if (accessibleFunctions === 0) {
-        diagnosticResults.suggestions.push('🚨 CRITICAL: No edge functions are deployed or accessible');
+        diagnosticResults.suggestions.push('🚨 CRITICAL: No edge functions are accessible');
         diagnosticResults.suggestions.push('💡 Try manual deployment via Supabase CLI: supabase functions deploy');
         diagnosticResults.suggestions.push('🔍 Check Supabase dashboard for deployment status');
         diagnosticResults.deployment = 'failed';

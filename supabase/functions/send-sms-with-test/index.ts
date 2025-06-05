@@ -1,6 +1,5 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.8'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,8 +13,49 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
+  // Handle GET requests as health checks
+  if (req.method === 'GET') {
+    return new Response(
+      JSON.stringify({ 
+        status: 'healthy',
+        message: 'send-sms-with-test function is working',
+        timestamp: new Date().toISOString(),
+        method: req.method,
+        availableActions: ['health', 'test-api-key', 'send-sms']
+      }),
+      { 
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    )
+  }
+
+  if (req.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed. Use POST for functionality or GET for health check.' }),
+      { 
+        status: 405,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    )
+  }
+
   try {
     const requestBody = await req.text()
+    
+    if (!requestBody) {
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          error: 'Empty request body. Please provide JSON with action parameter.' 
+        }),
+        { 
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
+    }
+
     const parsedBody = JSON.parse(requestBody)
     const { action, apiKey, testType, to, message, phoneNumberId } = parsedBody
 
@@ -148,7 +188,7 @@ serve(async (req) => {
       }
     }
 
-    // Regular SMS sending functionality (existing code)
+    // Regular SMS sending functionality
     const currentApiKey = Deno.env.get('OPENPHONE_API_KEY')
     
     if (!currentApiKey) {

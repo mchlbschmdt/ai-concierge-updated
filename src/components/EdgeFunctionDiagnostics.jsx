@@ -44,11 +44,15 @@ export default function EdgeFunctionDiagnostics() {
         };
       }
 
-      // Test 2: Minimal function test
+      // Test 2: Minimal function test with proper headers
       console.log('🔍 Testing minimal edge function...');
       try {
         const minimalResponse = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/minimal-test', {
-          method: 'GET'
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dHd5eWVwYWhiYnZyY2JzYmtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0MDg3MDMsImV4cCI6MjA2MDk4NDcwM30.kUje38W2D2vXjYos6laaZ_rOzADLGiftoHAztFqSP9g`,
+            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dHd5eWVwYWhiYnZyY2JzYmtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0MDg3MDMsImV4cCI6MjA2MDk4NDcwM30.kUje38W2D2vXjYos6laaZ_rOzADLGiftoHAztFqSP9g'
+          }
         });
         
         results.minimalFunction = {
@@ -58,7 +62,7 @@ export default function EdgeFunctionDiagnostics() {
         };
         
         if (minimalResponse.ok) {
-          const data = await minimalResponse.text();
+          const data = await minimalResponse.json();
           results.minimalFunction.response = data;
         }
       } catch (error) {

@@ -7,12 +7,36 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
+  console.log(`🔍 send-sms function called - Method: ${req.method}`)
+  
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
 
+  // Handle GET requests as health checks
+  if (req.method === 'GET') {
+    return new Response(
+      JSON.stringify({ 
+        status: 'healthy',
+        message: 'send-sms function is working',
+        timestamp: new Date().toISOString(),
+        method: req.method
+      }),
+      { 
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    )
+  }
+
   if (req.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 })
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed. Use POST for SMS sending or GET for health check.' }),
+      { 
+        status: 405,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    )
   }
 
   try {
@@ -40,6 +64,8 @@ serve(async (req) => {
       )
     }
 
+    console.log('🔍 Sending SMS via OpenPhone API...')
+
     // Send SMS via OpenPhone API
     const openPhoneResponse = await fetch('https://api.openphone.com/v1/messages', {
       method: 'POST',
@@ -50,7 +76,7 @@ serve(async (req) => {
       body: JSON.stringify({
         to: [to],
         text: message,
-        from: phoneNumberId || 'default' // Use provided phone number ID or default
+        from: phoneNumberId || '+18333301032'
       })
     })
 
@@ -70,7 +96,7 @@ serve(async (req) => {
       )
     }
 
-    console.log('SMS sent successfully:', responseData)
+    console.log('✅ SMS sent successfully:', responseData)
 
     return new Response(
       JSON.stringify({ 
@@ -85,7 +111,7 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('Send SMS error:', error)
+    console.error('🔥 Send SMS error:', error)
     return new Response(
       JSON.stringify({ error: error.message }),
       {
