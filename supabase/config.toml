@@ -6,3 +6,6 @@ verify_jwt = false
 
 [functions.send-sms]
 verify_jwt = true
+
+[functions.test-openphone-key]
+verify_jwt = true

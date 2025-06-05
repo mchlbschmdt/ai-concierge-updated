@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,98 +73,7 @@ export default function OpenPhoneApiKeyForm() {
     }
   };
 
-  const testDirectSms = async () => {
-    if (!apiKey.trim()) {
-      toast({
-        title: "API Key Required",
-        description: "Please enter an API key to test SMS sending",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setSendingSms(true);
-    setSmsResult(null);
-
-    try {
-      console.log('🚀 Testing direct SMS sending...');
-      
-      // Test direct SMS sending with the provided API key
-      const response = await fetch('https://api.openphone.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey.trim()}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          to: ['+12627453798'], // Use your actual phone number for testing
-          text: 'TEST: OpenPhone API direct test - please ignore',
-          from: '+18333301032' // Your OpenPhone number
-        })
-      });
-
-      if (!response.ok) {
-        // Handle HTTP errors
-        const errorText = await response.text();
-        console.log('Direct SMS test failed with status:', response.status, errorText);
-        
-        setSmsResult({
-          success: false,
-          message: `❌ SMS sending failed: ${response.status}`,
-          error: errorText,
-          details: { status: response.status, error: errorText }
-        });
-        toast({
-          title: "SMS Sending Failed",
-          description: `Status: ${response.status} - Check details below`,
-          variant: "destructive"
-        });
-        return;
-      }
-
-      const responseData = await response.json();
-      console.log('Direct SMS test response:', responseData);
-
-      setSmsResult({
-        success: true,
-        message: '✅ SMS sent successfully! Check your phone.',
-        messageId: responseData.id,
-        details: responseData
-      });
-      toast({
-        title: "SMS Sent Successfully",
-        description: "Test SMS was sent. Check your phone for the message.",
-      });
-
-    } catch (error) {
-      console.error('Direct SMS test error:', error);
-      
-      // Check if it's a network/CORS error
-      if (error.name === 'TypeError' && error.message.includes('fetch')) {
-        setSmsResult({
-          success: false,
-          message: '❌ Network error: This might be due to CORS restrictions. Try using the Supabase test instead.',
-          details: { error: error.message, suggestion: 'Use "Test Current API Key in Supabase" instead' }
-        });
-      } else {
-        setSmsResult({
-          success: false,
-          message: `❌ Network error: ${error.message}`,
-          details: error.toString()
-        });
-      }
-      
-      toast({
-        title: "SMS Test Failed",
-        description: "Network error occurred. Try the Supabase test instead.",
-        variant: "destructive"
-      });
-    } finally {
-      setSendingSms(false);
-    }
-  };
-
-  const testApiKey = async () => {
+  const testNewApiKey = async () => {
     if (!apiKey.trim()) {
       toast({
         title: "API Key Required",
@@ -179,69 +87,148 @@ export default function OpenPhoneApiKeyForm() {
     setTestResult(null);
 
     try {
-      console.log('Testing OpenPhone API key...');
-      // Test the API key by trying to fetch phone numbers
-      const response = await fetch('https://api.openphone.com/v1/phone-numbers', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${apiKey.trim()}`,
-          'Content-Type': 'application/json',
+      console.log('🔍 Testing new API key via Supabase edge function...');
+      
+      const { data, error } = await supabase.functions.invoke('test-openphone-key', {
+        body: {
+          apiKey: apiKey.trim(),
+          testType: 'validate'
         }
       });
 
-      console.log('API key test response status:', response.status);
+      console.log('API key test response:', { data, error });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.log('API key test failed:', errorText);
+      if (error) {
         setTestResult({
           success: false,
-          message: `❌ API key test failed: ${response.status} - ${errorText}`,
+          message: `❌ Test failed: ${error.message}`,
+          details: error
         });
         toast({
-          title: "API Key Invalid",
-          description: `Status: ${response.status}`,
+          title: "API Key Test Failed",
+          description: error.message,
           variant: "destructive"
         });
         return;
       }
 
-      const data = await response.json();
-      console.log('API key test successful:', data);
-      setTestResult({
-        success: true,
-        message: `✅ API key is valid! Found ${data.data?.length || 0} phone numbers.`,
-        phoneNumbers: data.data
-      });
-      toast({
-        title: "API Key Valid",
-        description: "Your OpenPhone API key is working correctly",
-      });
-
-    } catch (error) {
-      console.error('API key test error:', error);
-      
-      // Check if it's a network/CORS error
-      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      if (data.success) {
         setTestResult({
-          success: false,
-          message: '❌ Network error: This might be due to CORS restrictions. The API key might still be valid.',
-          details: { error: error.message, suggestion: 'If this error persists, the API key validation worked but browser security blocked the request' }
+          success: true,
+          message: data.message,
+          phoneNumbers: data.phoneNumbers
+        });
+        toast({
+          title: "API Key Valid",
+          description: "Your OpenPhone API key is working correctly",
         });
       } else {
         setTestResult({
           success: false,
-          message: `❌ Network error: ${error.message}`,
+          message: data.error || 'API key validation failed',
+          details: data.details
+        });
+        toast({
+          title: "API Key Invalid",
+          description: data.error || 'API key validation failed',
+          variant: "destructive"
         });
       }
-      
+
+    } catch (error) {
+      console.error('API key test error:', error);
+      setTestResult({
+        success: false,
+        message: `❌ Test failed: ${error.message}`,
+        details: error.toString()
+      });
       toast({
         title: "Test Failed",
-        description: "Network error occurred, but API key might still be valid",
+        description: error.message,
         variant: "destructive"
       });
     } finally {
       setTesting(false);
+    }
+  };
+
+  const testNewApiKeySms = async () => {
+    if (!apiKey.trim()) {
+      toast({
+        title: "API Key Required",
+        description: "Please enter an API key to test SMS sending",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setSendingSms(true);
+    setSmsResult(null);
+
+    try {
+      console.log('🚀 Testing SMS sending via Supabase edge function...');
+      
+      const { data, error } = await supabase.functions.invoke('test-openphone-key', {
+        body: {
+          apiKey: apiKey.trim(),
+          testType: 'sms'
+        }
+      });
+
+      console.log('SMS test response:', { data, error });
+
+      if (error) {
+        setSmsResult({
+          success: false,
+          message: `❌ SMS test failed: ${error.message}`,
+          details: error
+        });
+        toast({
+          title: "SMS Test Failed",
+          description: error.message,
+          variant: "destructive"
+        });
+        return;
+      }
+
+      if (data.success) {
+        setSmsResult({
+          success: true,
+          message: data.message,
+          messageId: data.messageId,
+          details: data.details
+        });
+        toast({
+          title: "SMS Sent Successfully",
+          description: "Test SMS was sent. Check your phone for the message.",
+        });
+      } else {
+        setSmsResult({
+          success: false,
+          message: data.error || 'SMS sending failed',
+          details: data.details
+        });
+        toast({
+          title: "SMS Sending Failed",
+          description: data.error || 'SMS sending failed',
+          variant: "destructive"
+        });
+      }
+
+    } catch (error) {
+      console.error('SMS test error:', error);
+      setSmsResult({
+        success: false,
+        message: `❌ SMS test failed: ${error.message}`,
+        details: error.toString()
+      });
+      toast({
+        title: "SMS Test Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setSendingSms(false);
     }
   };
 
@@ -340,7 +327,7 @@ export default function OpenPhoneApiKeyForm() {
             <span className="font-medium text-sm text-yellow-800">Step 2: Test New API Key (if current fails)</span>
           </div>
           <p className="text-xs text-yellow-700 mb-3">
-            If the current setup fails, get a fresh API key and test it here.
+            If the current setup fails, get a fresh API key and test it here. All tests run server-side via Supabase.
           </p>
         </div>
 
@@ -360,7 +347,7 @@ export default function OpenPhoneApiKeyForm() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
           <Button 
-            onClick={testApiKey}
+            onClick={testNewApiKey}
             disabled={testing || !apiKey.trim()}
             variant="outline"
             className="w-full"
@@ -371,12 +358,15 @@ export default function OpenPhoneApiKeyForm() {
                 Testing...
               </>
             ) : (
-              "Test API Key"
+              <>
+                <Key className="mr-2 h-4 w-4" />
+                Test API Key
+              </>
             )}
           </Button>
 
           <Button 
-            onClick={testDirectSms}
+            onClick={testNewApiKeySms}
             disabled={sendingSms || !apiKey.trim()}
             variant="outline"
             className="w-full"
@@ -443,6 +433,14 @@ export default function OpenPhoneApiKeyForm() {
                 </div>
               </div>
             )}
+
+            {testResult.details && (
+              <pre className="text-xs bg-gray-100 p-2 rounded mt-2 overflow-x-auto">
+                {typeof testResult.details === 'string' 
+                  ? testResult.details 
+                  : JSON.stringify(testResult.details, null, 2)}
+              </pre>
+            )}
           </div>
         )}
 
@@ -496,7 +494,7 @@ export default function OpenPhoneApiKeyForm() {
             <li>Insufficient SMS permissions on OpenPhone account</li>
             <li>Account billing issues</li>
             <li>Wrong API key (webhook secret vs API key)</li>
-            <li>CORS restrictions for direct API calls (use Supabase test instead)</li>
+            <li>All tests now run server-side to avoid CORS issues</li>
           </ul>
         </div>
 
@@ -506,6 +504,7 @@ export default function OpenPhoneApiKeyForm() {
             <li>Your webhook is receiving messages perfectly</li>
             <li>Message processing and response generation works</li>
             <li>Database storage is working</li>
+            <li>All API tests now run server-side via Supabase edge functions</li>
             <li>Only SMS sending needs the API key fix</li>
           </ul>
         </div>
