@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { Key, ExternalLink, CheckCircle, AlertCircle, RefreshCw, Copy, Phone, MessageSquare, Database } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function OpenPhoneApiKeyForm() {
   const [apiKey, setApiKey] = useState('');
@@ -23,28 +24,22 @@ export default function OpenPhoneApiKeyForm() {
     try {
       console.log('🔍 Testing current API key in Supabase...');
       
-      // Test by calling our send-sms edge function with a test message
-      const testResponse = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/send-sms', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dHd5eWVwYWhiYnZyY2JzYmtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0MDg3MDMsImV4cCI6MjA2MDk4NDcwM30.kUje38W2D2vXjYos6laaZ_rOzADLGiftoHAztFqSP9g`
-        },
-        body: JSON.stringify({
+      // Test by calling our send-sms edge function with a test message using Supabase client
+      const { data, error } = await supabase.functions.invoke('send-sms', {
+        body: {
           to: '+15551234567',
           message: 'API KEY TEST - Please ignore this message',
           phoneNumberId: '+18333301032'
-        })
+        }
       });
 
-      const responseData = await testResponse.text();
-      console.log('Current API key test response:', responseData);
+      console.log('Current API key test response:', { data, error });
 
-      if (testResponse.ok) {
+      if (!error && data) {
         setCurrentKeyResult({
           success: true,
           message: '✅ Current API key is working! SMS sending should be functional.',
-          details: responseData
+          details: data
         });
         toast({
           title: "Current API Key Working",
@@ -53,12 +48,12 @@ export default function OpenPhoneApiKeyForm() {
       } else {
         setCurrentKeyResult({
           success: false,
-          message: `❌ Current API key failed: ${testResponse.status}`,
-          details: responseData
+          message: `❌ Current API key failed: ${error?.message || 'Unknown error'}`,
+          details: error || data
         });
         toast({
           title: "Current API Key Issues",
-          description: `Status: ${testResponse.status} - Check details below`,
+          description: `Error: ${error?.message || 'Check details below'}`,
           variant: "destructive"
         });
       }
