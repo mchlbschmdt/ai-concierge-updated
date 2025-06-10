@@ -4,14 +4,60 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { MessageSquare, Send, Phone, RefreshCw } from "lucide-react";
+import { MessageSquare, Send, Phone, RefreshCw, CheckCircle } from "lucide-react";
 
 export default function SmsWorkflowTester() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [testingWebhook, setTestingWebhook] = useState(false);
+  const [healthChecking, setHealthChecking] = useState(false);
   const { toast } = useToast();
+
+  const testFunctionHealth = async () => {
+    setHealthChecking(true);
+    try {
+      console.log('🔍 Testing send-sms function health...');
+      
+      const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/send-sms', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dHd5eWVwYWhiYnZyY2JzYmtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0MDg3MDMsImV4cCI6MjA2MDk4NDcwM30.kUje38W2D2vXjYos6laaZ_rOzADLGiftoHAztFqSP9g`,
+          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dHd5eWVwYWhiYnZyY2JzYmtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0MDg3MDMsImV4cCI6MjA2MDk4NDcwM30.kUje38W2D2vXjYos6laaZ_rOzADLGiftoHAztFqSP9g'
+        }
+      });
+
+      console.log('🔍 Health check response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('🔍 Health check response:', data);
+        
+        toast({
+          title: "Function Health Check",
+          description: `✅ Function accessible. API key configured: ${data.apiKeyConfigured}`,
+        });
+      } else {
+        const errorText = await response.text();
+        console.error('❌ Health check failed:', response.status, errorText);
+        
+        toast({
+          title: "Function Health Check Failed",
+          description: `Status: ${response.status} - Check console for details`,
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('❌ Health check error:', error);
+      toast({
+        title: "Health Check Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setHealthChecking(false);
+    }
+  };
 
   const sendDirectSms = async () => {
     if (!phoneNumber || !message) {
@@ -26,6 +72,7 @@ export default function SmsWorkflowTester() {
     setSending(true);
     try {
       console.log('🔍 Testing direct SMS sending...');
+      console.log('🔍 Phone:', phoneNumber, 'Message:', message);
       
       const { data, error } = await supabase.functions.invoke('send-sms', {
         body: {
@@ -35,7 +82,10 @@ export default function SmsWorkflowTester() {
         }
       });
 
+      console.log('🔍 Direct SMS Response:', data, 'Error:', error);
+
       if (error) {
+        console.error('❌ Direct SMS error:', error);
         throw error;
       }
 
@@ -48,7 +98,7 @@ export default function SmsWorkflowTester() {
       setMessage('');
 
     } catch (error) {
-      console.error("SMS send error:", error);
+      console.error("❌ SMS send error:", error);
       toast({
         title: "SMS Send Failed",
         description: error.message || "Check console for details",
@@ -121,6 +171,32 @@ export default function SmsWorkflowTester() {
       </h3>
       
       <div className="space-y-4">
+        {/* Function Health Check */}
+        <div className="p-3 bg-gray-50 rounded-lg">
+          <h4 className="font-medium text-gray-800 mb-3">🏥 Function Health Check</h4>
+          <Button 
+            onClick={testFunctionHealth}
+            disabled={healthChecking}
+            variant="outline"
+            className="w-full"
+          >
+            {healthChecking ? (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                Checking Function Health...
+              </>
+            ) : (
+              <>
+                <CheckCircle className="mr-2 h-4 w-4" />
+                Test Function Health
+              </>
+            )}
+          </Button>
+          <p className="text-xs text-gray-600 mt-2">
+            First step: Check if the function is deployed and API key is configured
+          </p>
+        </div>
+
         {/* Direct SMS Test */}
         <div className="p-3 bg-blue-50 rounded-lg">
           <h4 className="font-medium text-blue-800 mb-3">📤 Direct SMS Test</h4>
@@ -197,6 +273,15 @@ export default function SmsWorkflowTester() {
             <strong>Text "1001" to +1 (833) 330-1032</strong> from your phone to test the complete workflow.
             You should receive an automated response within 30 seconds.
           </p>
+        </div>
+
+        {/* Debug Info */}
+        <div className="p-3 bg-gray-50 rounded text-xs">
+          <p className="font-medium">Debug Order:</p>
+          <p>1. Test Function Health first to verify deployment</p>
+          <p>2. If health check passes, try Direct SMS test</p>
+          <p>3. If direct SMS works, test the webhook workflow</p>
+          <p>4. Check browser console for detailed logs at each step</p>
         </div>
       </div>
     </div>

@@ -8,19 +8,29 @@ const corsHeaders = {
 
 serve(async (req) => {
   console.log(`🔍 send-sms function called - Method: ${req.method}`)
+  console.log(`🔍 Request URL: ${req.url}`)
+  console.log(`🔍 Request headers:`, Object.fromEntries(req.headers.entries()))
   
   if (req.method === 'OPTIONS') {
+    console.log('🔍 Handling CORS preflight request')
     return new Response(null, { headers: corsHeaders })
   }
 
   // Handle GET requests as health checks
   if (req.method === 'GET') {
+    console.log('🔍 Health check endpoint hit')
+    const apiKey = Deno.env.get('OPENPHONE_API_KEY')
+    console.log(`🔍 API key configured: ${!!apiKey}`)
+    console.log(`🔍 API key length: ${apiKey?.length || 0}`)
+    
     return new Response(
       JSON.stringify({ 
         status: 'healthy',
         message: 'send-sms function is working',
         timestamp: new Date().toISOString(),
-        method: req.method
+        method: req.method,
+        apiKeyConfigured: !!apiKey,
+        apiKeyLength: apiKey?.length || 0
       }),
       { 
         status: 200,
@@ -30,6 +40,7 @@ serve(async (req) => {
   }
 
   if (req.method !== 'POST') {
+    console.log(`🔍 Method ${req.method} not allowed`)
     return new Response(
       JSON.stringify({ error: 'Method not allowed. Use POST for SMS sending or GET for health check.' }),
       { 
@@ -40,9 +51,52 @@ serve(async (req) => {
   }
 
   try {
-    const { to, message, phoneNumberId } = await req.json()
+    console.log('🔍 Processing POST request for SMS sending')
+    
+    // Check API key first
+    const apiKey = Deno.env.get('OPENPHONE_API_KEY')
+    console.log(`🔍 API key check - configured: ${!!apiKey}`)
+    console.log(`🔍 API key length: ${apiKey?.length || 0}`)
+    
+    if (!apiKey) {
+      console.error('❌ OPENPHONE_API_KEY not configured')
+      return new Response(
+        JSON.stringify({ 
+          error: 'API key not configured',
+          details: 'OPENPHONE_API_KEY environment variable is missing'
+        }),
+        { 
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
+    }
+
+    // Parse request body
+    let requestBody
+    try {
+      const bodyText = await req.text()
+      console.log(`🔍 Request body text: ${bodyText}`)
+      requestBody = JSON.parse(bodyText)
+      console.log(`🔍 Parsed request body:`, requestBody)
+    } catch (parseError) {
+      console.error('❌ Failed to parse request body:', parseError)
+      return new Response(
+        JSON.stringify({ 
+          error: 'Invalid JSON in request body',
+          details: parseError.message
+        }),
+        { 
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
+    }
+
+    const { to, message, phoneNumberId } = requestBody
 
     if (!to || !message) {
+      console.log('❌ Missing required fields')
       return new Response(
         JSON.stringify({ error: 'Missing required fields: to, message' }),
         { 
@@ -52,19 +106,9 @@ serve(async (req) => {
       )
     }
 
-    const apiKey = Deno.env.get('OPENPHONE_API_KEY')
-    if (!apiKey) {
-      console.error('OPENPHONE_API_KEY not configured')
-      return new Response(
-        JSON.stringify({ error: 'API key not configured' }),
-        { 
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
-      )
-    }
-
-    console.log('🔍 Sending SMS via OpenPhone API...')
+    console.log(`🔍 Sending SMS to: ${to}`)
+    console.log(`🔍 Message: ${message}`)
+    console.log(`🔍 Phone Number ID: ${phoneNumberId || 'default'}`)
 
     // Send SMS via OpenPhone API
     const openPhoneResponse = await fetch('https://api.openphone.com/v1/messages', {
@@ -80,13 +124,36 @@ serve(async (req) => {
       })
     })
 
-    const responseData = await openPhoneResponse.json()
+    console.log(`🔍 OpenPhone API response status: ${openPhoneResponse.status}`)
+
+    let responseData
+    try {
+      responseData = await openPhoneResponse.json()
+      console.log('🔍 OpenPhone API response data:', responseData)
+    } catch (jsonError) {
+      console.error('❌ Failed to parse OpenPhone response as JSON:', jsonError)
+      const responseText = await openPhoneResponse.text()
+      console.log('🔍 OpenPhone API response text:', responseText)
+      
+      return new Response(
+        JSON.stringify({ 
+          error: 'Failed to parse OpenPhone API response',
+          status: openPhoneResponse.status,
+          responseText: responseText
+        }),
+        { 
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
+    }
 
     if (!openPhoneResponse.ok) {
-      console.error('OpenPhone API error:', responseData)
+      console.error('❌ OpenPhone API error:', responseData)
       return new Response(
         JSON.stringify({ 
           error: 'Failed to send SMS',
+          status: openPhoneResponse.status,
           details: responseData 
         }),
         { 
@@ -112,8 +179,13 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('🔥 Send SMS error:', error)
+    console.error('🔥 Error stack:', error.stack)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: error.message,
+        stack: error.stack,
+        type: error.constructor.name
+      }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500

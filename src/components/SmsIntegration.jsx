@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
-import { MessageSquare, Send, Loader2, Bug } from "lucide-react";
+import { MessageSquare, Send, Loader2, Bug, CheckCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 export default function SmsIntegration({ propertyId }) {
@@ -12,6 +12,7 @@ export default function SmsIntegration({ propertyId }) {
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [healthChecking, setHealthChecking] = useState(false);
   const { toast } = useToast();
 
   const quickTemplates = [
@@ -20,6 +21,51 @@ export default function SmsIntegration({ propertyId }) {
     "Check-in is at 3 PM and check-out is at 11 AM. Parking is available on-site.",
     "WiFi password: Welcome2024. Need anything else? Just text us!"
   ];
+
+  const testFunctionHealth = async () => {
+    setHealthChecking(true);
+    try {
+      console.log('🔍 Testing function health with GET request...');
+      
+      const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/send-sms', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dHd5eWVwYWhiYnZyY2JzYmtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0MDg3MDMsImV4cCI6MjA2MDk4NDcwM30.kUje38W2D2vXjYos6laaZ_rOzADLGiftoHAztFqSP9g`,
+          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dHd5eWVwYWhiYnZyY2JzYmtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0MDg3MDMsImV4cCI6MjA2MDk4NDcwM30.kUje38W2D2vXjYos6laaZ_rOzADLGiftoHAztFqSP9g'
+        }
+      });
+
+      console.log('🔍 Health check response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('🔍 Health check response:', data);
+        
+        toast({
+          title: "Function Health Check",
+          description: `✅ Function accessible. API key configured: ${data.apiKeyConfigured}`,
+        });
+      } else {
+        const errorText = await response.text();
+        console.error('❌ Health check failed:', response.status, errorText);
+        
+        toast({
+          title: "Function Health Check Failed",
+          description: `Status: ${response.status} - Check console for details`,
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('❌ Health check error:', error);
+      toast({
+        title: "Health Check Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setHealthChecking(false);
+    }
+  };
 
   const sendSms = async () => {
     if (!phoneNumber || !message) {
@@ -34,20 +80,20 @@ export default function SmsIntegration({ propertyId }) {
     setSending(true);
     
     try {
-      console.log('Sending SMS to:', phoneNumber, 'Message:', message);
+      console.log('🔍 Sending SMS to:', phoneNumber, 'Message:', message);
       
       const { data, error } = await supabase.functions.invoke('send-sms', {
         body: {
           to: phoneNumber,
           message: message,
-          phoneNumberId: 'default'
+          phoneNumberId: '+18333301032'
         }
       });
 
-      console.log('SMS Response:', data, 'Error:', error);
+      console.log('🔍 SMS Response:', data, 'Error:', error);
 
       if (error) {
-        console.error('Supabase function error:', error);
+        console.error('❌ Supabase function error:', error);
         throw error;
       }
 
@@ -61,7 +107,7 @@ export default function SmsIntegration({ propertyId }) {
       setMessage('');
 
     } catch (error) {
-      console.error("SMS send error:", error);
+      console.error("❌ SMS send error:", error);
       toast({
         title: "Failed to Send SMS",
         description: error.message || "Please check the console for details",
@@ -75,17 +121,17 @@ export default function SmsIntegration({ propertyId }) {
   const testSmsFunction = async () => {
     setTesting(true);
     try {
-      console.log('Testing SMS function with test data...');
+      console.log('🔍 Testing SMS function with test data...');
       
       const { data, error } = await supabase.functions.invoke('send-sms', {
         body: {
           to: '+1234567890',
           message: 'Test message from SMS integration - ' + new Date().toLocaleTimeString(),
-          phoneNumberId: 'default'
+          phoneNumberId: '+18333301032'
         }
       });
 
-      console.log('Test SMS Response:', data, 'Error:', error);
+      console.log('🔍 Test SMS Response:', data, 'Error:', error);
 
       if (error) {
         toast({
@@ -100,7 +146,7 @@ export default function SmsIntegration({ propertyId }) {
         });
       }
     } catch (error) {
-      console.error("SMS function test error:", error);
+      console.error("❌ SMS function test error:", error);
       toast({
         title: "SMS Function Test Failed",
         description: error.message,
@@ -118,6 +164,30 @@ export default function SmsIntegration({ propertyId }) {
       </h2>
       
       <div className="space-y-4">
+        {/* Health Check Section */}
+        <div className="p-3 bg-gray-50 rounded-lg">
+          <h4 className="font-medium text-gray-800 mb-2">🏥 Function Health Check</h4>
+          <Button 
+            onClick={testFunctionHealth}
+            disabled={healthChecking}
+            variant="outline"
+            className="w-full mb-2"
+          >
+            {healthChecking ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Checking...
+              </>
+            ) : (
+              <>
+                <CheckCircle className="mr-2 h-4 w-4" />
+                Test Function Health
+              </>
+            )}
+          </Button>
+          <p className="text-xs text-gray-600">This checks if the function is deployed and API key is configured</p>
+        </div>
+
         <div>
           <label className="block text-sm font-medium mb-1">Phone Number</label>
           <Input
@@ -193,10 +263,11 @@ export default function SmsIntegration({ propertyId }) {
         </div>
 
         <div className="mt-4 p-3 bg-gray-50 rounded text-xs">
-          <p className="font-medium">Debug Info:</p>
-          <p>• Check browser console for detailed logs</p>
-          <p>• Test Function button validates the SMS function without sending</p>
-          <p>• Make sure OPENPHONE_API_KEY is configured in Supabase secrets</p>
+          <p className="font-medium">Debug Steps:</p>
+          <p>• 1. Test Function Health to verify deployment and API key</p>
+          <p>• 2. Check browser console for detailed logs</p>
+          <p>• 3. Test Function validates SMS function without sending</p>
+          <p>• 4. Make sure OPENPHONE_API_KEY is configured in Supabase secrets</p>
         </div>
       </div>
     </div>
