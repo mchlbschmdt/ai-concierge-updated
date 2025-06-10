@@ -1,6 +1,7 @@
 
 import React from 'react';
 import ComprehensiveSmsDebugger from './ComprehensiveSmsDebugger';
+import DeploymentVerifier from './DeploymentVerifier';
 import { AlertCircle } from 'lucide-react';
 
 export default function TestSmsIntegration() {
@@ -16,50 +17,53 @@ export default function TestSmsIntegration() {
               <div>✅ <strong>Webhook Processing:</strong> Working - messages are received and processed</div>
               <div>✅ <strong>Database Storage:</strong> Working - conversations and responses are stored</div>
               <div>✅ <strong>Response Generation:</strong> Working - automated responses are generated</div>
-              <div>❓ <strong>Edge Functions:</strong> Deployment issues detected</div>
-              <div>❓ <strong>SMS Sending:</strong> Blocked by function deployment issues</div>
+              <div>🔄 <strong>Edge Functions:</strong> Testing deployment status...</div>
+              <div>❓ <strong>SMS Sending:</strong> Depends on function deployment verification</div>
               <div className="mt-2 p-2 bg-amber-100 rounded">
-                <strong>🎯 Root Cause:</strong> Edge functions are not deploying properly to your Supabase project. 
-                This is preventing SMS sending functionality from working.
+                <strong>🎯 Next Step:</strong> Verify edge function deployment status and force redeploy if needed.
               </div>
             </div>
           </div>
         </div>
       </div>
 
+      {/* Deployment Verifier */}
+      <DeploymentVerifier />
+
       {/* Comprehensive Debugger */}
       <ComprehensiveSmsDebugger />
 
-      {/* Next Steps */}
+      {/* Implementation Plan */}
       <div className="bg-blue-50 p-4 rounded-lg">
-        <h4 className="font-medium text-blue-800 mb-3">📋 Implementation Plan Progress</h4>
+        <h4 className="font-medium text-blue-800 mb-3">📋 Deployment Verification Steps</h4>
         <div className="space-y-2 text-sm">
           <div className="flex items-center gap-2">
-            <span className="w-6 h-6 bg-orange-500 text-white rounded-full flex items-center justify-center text-xs">1</span>
-            <span>Use the comprehensive debugger above to test your API key and diagnose deployment issues</span>
+            <span className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs">1</span>
+            <span>First, verify the edge function deployment status using the verifier above</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-6 h-6 bg-gray-300 text-gray-600 rounded-full flex items-center justify-center text-xs">2</span>
-            <span>If functions aren't deploying, try manual deployment via Supabase CLI or dashboard</span>
+            <span>If deployment is successful, test SMS functionality using the comprehensive debugger</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-6 h-6 bg-gray-300 text-gray-600 rounded-full flex items-center justify-center text-xs">3</span>
-            <span>Once deployed, test the complete SMS workflow</span>
+            <span>If deployment fails, the function will be automatically redeployed with the updated code</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-6 h-6 bg-gray-300 text-gray-600 rounded-full flex items-center justify-center text-xs">4</span>
-            <span>Verify end-to-end functionality by texting "1001" to +1 (833) 330-1032</span>
+            <span>Once verified, test the complete SMS workflow end-to-end</span>
           </div>
         </div>
       </div>
 
-      {/* Emergency Contacts */}
-      <div className="bg-red-50 p-4 rounded-lg">
-        <h4 className="font-medium text-red-800 mb-2">🆘 If Nothing Works</h4>
-        <div className="text-sm text-red-700 space-y-1">
-          <div>1. Contact Supabase support about edge function deployment issues</div>
-          <div>2. Try creating a new Supabase project and migrating your data</div>
-          <div>3. Use the Supabase CLI to manually deploy functions: <code className="bg-red-100 px-1 rounded">supabase functions deploy</code></div>
+      {/* Success Criteria */}
+      <div className="bg-green-50 p-4 rounded-lg">
+        <h4 className="font-medium text-green-800 mb-2">✅ Success Criteria</h4>
+        <div className="text-sm text-green-700 space-y-1">
+          <div>1. Edge function responds to GET requests with deployment info</div>
+          <div>2. API key is properly configured and accessible</div>
+          <div>3. POST requests for SMS sending work without 401 errors</div>
+          <div>4. Complete SMS workflow test passes successfully</div>
         </div>
       </div>
     </div>

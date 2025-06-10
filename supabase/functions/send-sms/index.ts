@@ -10,6 +10,7 @@ serve(async (req) => {
   console.log(`🔍 send-sms function called - Method: ${req.method}`)
   console.log(`🔍 Request URL: ${req.url}`)
   console.log(`🔍 Request headers:`, Object.fromEntries(req.headers.entries()))
+  console.log(`🔍 Function deployment timestamp: ${new Date().toISOString()}`)
   
   if (req.method === 'OPTIONS') {
     console.log('🔍 Handling CORS preflight request')
@@ -30,7 +31,8 @@ serve(async (req) => {
         timestamp: new Date().toISOString(),
         method: req.method,
         apiKeyConfigured: !!apiKey,
-        apiKeyLength: apiKey?.length || 0
+        apiKeyLength: apiKey?.length || 0,
+        deploymentCheck: 'Function successfully deployed and accessible'
       }),
       { 
         status: 200,
