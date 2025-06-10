@@ -8,6 +8,7 @@ const corsHeaders = {
 
 serve(async (req) => {
   console.log(`🔍 send-sms-with-test function called - Method: ${req.method}`)
+  console.log(`🔍 Function deployment timestamp: ${new Date().toISOString()}`)
 
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -15,12 +16,15 @@ serve(async (req) => {
 
   // Handle GET requests as health checks
   if (req.method === 'GET') {
+    const apiKey = Deno.env.get('OPENPHONE_API_KEY')
     return new Response(
       JSON.stringify({ 
         status: 'healthy',
         message: 'send-sms-with-test function is working',
         timestamp: new Date().toISOString(),
         method: req.method,
+        apiKeyConfigured: !!apiKey,
+        apiKeyLength: apiKey?.length || 0,
         availableActions: ['health', 'test-api-key', 'send-sms']
       }),
       { 
@@ -42,6 +46,7 @@ serve(async (req) => {
 
   try {
     const requestBody = await req.text()
+    console.log(`🔍 Request body: ${requestBody}`)
     
     if (!requestBody) {
       return new Response(
@@ -63,11 +68,14 @@ serve(async (req) => {
 
     // Health check endpoint
     if (action === 'health') {
+      const currentApiKey = Deno.env.get('OPENPHONE_API_KEY')
       return new Response(
         JSON.stringify({ 
           status: 'healthy',
           message: 'send-sms-with-test function is working',
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          apiKeyConfigured: !!currentApiKey,
+          apiKeyLength: currentApiKey?.length || 0
         }),
         { 
           status: 200,
@@ -78,11 +86,14 @@ serve(async (req) => {
 
     // API key testing functionality
     if (action === 'test-api-key') {
-      if (!apiKey) {
+      // Use provided API key for testing, or fall back to environment variable
+      const testApiKey = apiKey || Deno.env.get('OPENPHONE_API_KEY')
+      
+      if (!testApiKey) {
         return new Response(
           JSON.stringify({ 
             success: false,
-            error: 'API key is required for testing' 
+            error: 'No API key available for testing. Provide one in request or configure OPENPHONE_API_KEY.' 
           }),
           { 
             status: 400,
@@ -91,18 +102,20 @@ serve(async (req) => {
         )
       }
 
+      console.log(`🔍 Testing API key (length: ${testApiKey.length}) with type: ${testType}`)
+
       if (testType === 'validate') {
         console.log('🔍 Validating API key by fetching phone numbers')
         
         const response = await fetch('https://api.openphone.com/v1/phone-numbers', {
           method: 'GET',
           headers: {
-            'Authorization': `Bearer ${apiKey}`,
+            'Authorization': `Bearer ${testApiKey}`,
             'Content-Type': 'application/json',
           }
         })
 
-        console.log(`🔍 OpenPhone API response status: ${response.status}`)
+        console.log(`🔍 OpenPhone API validation response status: ${response.status}`)
 
         if (!response.ok) {
           const errorText = await response.text()
@@ -111,7 +124,12 @@ serve(async (req) => {
             JSON.stringify({ 
               success: false,
               error: `API key validation failed: ${response.status}`,
-              details: errorText
+              details: errorText,
+              suggestion: response.status === 401 
+                ? 'Invalid API key - check your OpenPhone developer settings'
+                : response.status === 403
+                ? 'API key lacks required permissions'
+                : 'Network or API error'
             }),
             { 
               status: 200,
@@ -127,7 +145,9 @@ serve(async (req) => {
           JSON.stringify({ 
             success: true,
             message: `✅ API key is valid! Found ${data.data?.length || 0} phone numbers.`,
-            phoneNumbers: data.data
+            phoneNumbers: data.data,
+            apiKeyStatus: 'valid',
+            testedKeyLength: testApiKey.length
           }),
           {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -137,22 +157,22 @@ serve(async (req) => {
       }
 
       if (testType === 'sms') {
-        console.log('🔍 Testing SMS sending with provided API key')
+        console.log('🔍 Testing SMS sending with API key')
         
         const response = await fetch('https://api.openphone.com/v1/messages', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${apiKey}`,
+            'Authorization': `Bearer ${testApiKey}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            to: ['+12627453798'],
+            to: ['+12627453798'], // Test phone number
             text: 'TEST: OpenPhone API key test - please ignore',
             from: '+18333301032'
           })
         })
 
-        console.log(`🔍 OpenPhone SMS API response status: ${response.status}`)
+        console.log(`🔍 OpenPhone SMS test response status: ${response.status}`)
 
         if (!response.ok) {
           const errorText = await response.text()
@@ -161,7 +181,10 @@ serve(async (req) => {
             JSON.stringify({ 
               success: false,
               error: `SMS sending failed: ${response.status}`,
-              details: errorText
+              details: errorText,
+              suggestion: response.status === 401 
+                ? 'Invalid API key for SMS sending'
+                : 'Check SMS permissions or phone number validity'
             }),
             { 
               status: 200,
@@ -178,7 +201,8 @@ serve(async (req) => {
             success: true,
             message: '✅ SMS sent successfully! Check your phone.',
             messageId: responseData.id,
-            details: responseData
+            details: responseData,
+            apiKeyStatus: 'valid-for-sms'
           }),
           {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -186,25 +210,36 @@ serve(async (req) => {
           }
         )
       }
-    }
 
-    // Regular SMS sending functionality
-    const currentApiKey = Deno.env.get('OPENPHONE_API_KEY')
-    
-    if (!currentApiKey) {
       return new Response(
         JSON.stringify({ 
           success: false,
-          error: 'OPENPHONE_API_KEY not configured' 
+          error: 'Invalid test type. Use "validate" or "sms"' 
         }),
-        { 
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400
         }
       )
     }
 
+    // Regular SMS sending functionality
     if (action === 'send-sms') {
+      const currentApiKey = Deno.env.get('OPENPHONE_API_KEY')
+      
+      if (!currentApiKey) {
+        return new Response(
+          JSON.stringify({ 
+            success: false,
+            error: 'OPENPHONE_API_KEY not configured in Supabase secrets' 
+          }),
+          { 
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        )
+      }
+
       if (!to || !message) {
         return new Response(
           JSON.stringify({ 
@@ -218,7 +253,8 @@ serve(async (req) => {
         )
       }
 
-      console.log('🔍 Sending SMS with current API key')
+      console.log('🔍 Sending SMS with current environment API key')
+      console.log(`🔍 To: ${to}, Message: ${message}`)
       
       const response = await fetch('https://api.openphone.com/v1/messages', {
         method: 'POST',
@@ -233,6 +269,8 @@ serve(async (req) => {
         })
       })
 
+      console.log(`🔍 SMS send response status: ${response.status}`)
+
       if (!response.ok) {
         const errorText = await response.text()
         console.error('🔥 SMS sending failed:', response.status, errorText)
@@ -240,7 +278,10 @@ serve(async (req) => {
           JSON.stringify({ 
             success: false,
             error: `SMS sending failed: ${response.status}`,
-            details: errorText
+            details: errorText,
+            suggestion: response.status === 401 
+              ? 'API key invalid - update OPENPHONE_API_KEY in Supabase secrets'
+              : 'Check SMS permissions or phone number format'
           }),
           { 
             status: 200,
@@ -283,7 +324,8 @@ serve(async (req) => {
       JSON.stringify({ 
         success: false,
         error: error.message,
-        details: error.toString()
+        details: error.toString(),
+        stack: error.stack
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
