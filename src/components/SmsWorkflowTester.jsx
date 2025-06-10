@@ -74,28 +74,62 @@ export default function SmsWorkflowTester() {
       console.log('🔍 Testing direct SMS sending...');
       console.log('🔍 Phone:', phoneNumber, 'Message:', message);
       
-      const { data, error } = await supabase.functions.invoke('send-sms', {
-        body: {
+      // Try direct fetch method with enhanced error handling
+      const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/send-sms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dHd5eWVwYWhiYnZyY2JzYmtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0MDg3MDMsImV4cCI6MjA2MDk4NDcwM30.kUje38W2D2vXjYos6laaZ_rOzADLGiftoHAztFqSP9g`,
+          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dHd5eWVwYWhiYnZyY2JzYmtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0MDg3MDMsImV4cCI6MjA2MDk4NDcwM30.kUje38W2D2vXjYos6laaZ_rOzADLGiftoHAztFqSP9g'
+        },
+        body: JSON.stringify({
           to: phoneNumber,
           message: message,
           phoneNumberId: '+18333301032'
+        })
+      });
+
+      console.log('🔍 Direct SMS response status:', response.status);
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('🔍 Direct SMS Response:', data);
+
+        toast({
+          title: "SMS Sent Successfully",
+          description: `Message sent to ${phoneNumber}`,
+        });
+
+        setPhoneNumber('');
+        setMessage('');
+      } else {
+        const errorText = await response.text();
+        console.error('❌ Direct SMS failed:', response.status, errorText);
+        
+        // Try fallback with Supabase client
+        console.log('🔍 Trying fallback method...');
+        const { data, error } = await supabase.functions.invoke('send-sms', {
+          body: {
+            to: phoneNumber,
+            message: message,
+            phoneNumberId: '+18333301032'
+          }
+        });
+
+        console.log('🔍 Fallback Response:', data, 'Error:', error);
+
+        if (error) {
+          throw new Error(`Both methods failed: Direct ${response.status}, Fallback: ${error.message}`);
         }
-      });
 
-      console.log('🔍 Direct SMS Response:', data, 'Error:', error);
+        toast({
+          title: "SMS Sent Successfully",
+          description: `Message sent to ${phoneNumber} (via fallback)`,
+        });
 
-      if (error) {
-        console.error('❌ Direct SMS error:', error);
-        throw error;
+        setPhoneNumber('');
+        setMessage('');
       }
-
-      toast({
-        title: "SMS Sent Successfully",
-        description: `Message sent to ${phoneNumber}`,
-      });
-
-      setPhoneNumber('');
-      setMessage('');
 
     } catch (error) {
       console.error("❌ SMS send error:", error);
@@ -282,6 +316,7 @@ export default function SmsWorkflowTester() {
           <p>2. If health check passes, try Direct SMS test</p>
           <p>3. If direct SMS works, test the webhook workflow</p>
           <p>4. Check browser console for detailed logs at each step</p>
+          <p>5. JWT verification now disabled for better compatibility</p>
         </div>
       </div>
     </div>

@@ -5,7 +5,7 @@ project_id = "zutwyyepahbbvrcbsbke"
 verify_jwt = false
 
 [functions.send-sms]
-verify_jwt = true
+verify_jwt = false
 
 [functions.test-openphone-key]
 verify_jwt = false

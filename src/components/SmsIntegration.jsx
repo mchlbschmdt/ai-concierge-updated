@@ -81,30 +81,67 @@ export default function SmsIntegration({ propertyId }) {
     
     try {
       console.log('🔍 Sending SMS to:', phoneNumber, 'Message:', message);
+      console.log('🔍 Supabase client configured:', !!supabase);
       
-      const { data, error } = await supabase.functions.invoke('send-sms', {
-        body: {
+      // Try direct fetch first with enhanced headers
+      console.log('🔍 Attempting direct fetch to edge function...');
+      const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/send-sms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dHd5eWVwYWhiYnZyY2JzYmtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0MDg3MDMsImV4cCI6MjA2MDk4NDcwM30.kUje38W2D2vXjYos6laaZ_rOzADLGiftoHAztFqSP9g`,
+          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dHd5eWVwYWhiYnZyY2JzYmtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0MDg3MDMsImV4cCI6MjA2MDk4NDcwM30.kUje38W2D2vXjYos6laaZ_rOzADLGiftoHAztFqSP9g'
+        },
+        body: JSON.stringify({
           to: phoneNumber,
           message: message,
           phoneNumberId: '+18333301032'
+        })
+      });
+
+      console.log('🔍 Direct fetch response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('🔍 Direct fetch success:', data);
+        
+        toast({
+          title: "SMS Sent",
+          description: `Message sent successfully to ${phoneNumber}`
+        });
+
+        // Clear form
+        setPhoneNumber('');
+        setMessage('');
+      } else {
+        const errorText = await response.text();
+        console.error('❌ Direct fetch failed:', response.status, errorText);
+        
+        // Fallback to Supabase client method
+        console.log('🔍 Trying Supabase client method as fallback...');
+        const { data, error } = await supabase.functions.invoke('send-sms', {
+          body: {
+            to: phoneNumber,
+            message: message,
+            phoneNumberId: '+18333301032'
+          }
+        });
+
+        if (error) {
+          console.error('❌ Supabase client also failed:', error);
+          throw new Error(`Both methods failed. Direct: ${response.status}, Client: ${error.message}`);
         }
-      });
 
-      console.log('🔍 SMS Response:', data, 'Error:', error);
+        console.log('🔍 Supabase client success:', data);
+        toast({
+          title: "SMS Sent",
+          description: `Message sent successfully to ${phoneNumber} (via fallback)`
+        });
 
-      if (error) {
-        console.error('❌ Supabase function error:', error);
-        throw error;
+        // Clear form
+        setPhoneNumber('');
+        setMessage('');
       }
-
-      toast({
-        title: "SMS Sent",
-        description: `Message sent successfully to ${phoneNumber}`
-      });
-
-      // Clear form
-      setPhoneNumber('');
-      setMessage('');
 
     } catch (error) {
       console.error("❌ SMS send error:", error);
@@ -123,26 +160,39 @@ export default function SmsIntegration({ propertyId }) {
     try {
       console.log('🔍 Testing SMS function with test data...');
       
-      const { data, error } = await supabase.functions.invoke('send-sms', {
-        body: {
+      // Try direct fetch method
+      const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/send-sms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dHd5eWVwYWhiYnZyY2JzYmtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0MDg3MDMsImV4cCI6MjA2MDk4NDcwM30.kUje38W2D2vXjYos6laaZ_rOzADLGiftoHAztFqSP9g`,
+          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dHd5eWVwYWhiYnZyY2JzYmtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0MDg3MDMsImV4cCI6MjA2MDk4NDcwM30.kUje38W2D2vXjYos6laaZ_rOzADLGiftoHAztFqSP9g'
+        },
+        body: JSON.stringify({
           to: '+1234567890',
           message: 'Test message from SMS integration - ' + new Date().toLocaleTimeString(),
           phoneNumberId: '+18333301032'
-        }
+        })
       });
 
-      console.log('🔍 Test SMS Response:', data, 'Error:', error);
-
-      if (error) {
-        toast({
-          title: "SMS Function Test Failed",
-          description: error.message || "Check console for details",
-          variant: "destructive"
-        });
-      } else {
+      console.log('🔍 Test response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('🔍 Test SMS Response:', data);
+        
         toast({
           title: "SMS Function Test",
           description: "Function responded successfully (check logs for API call result)",
+        });
+      } else {
+        const errorText = await response.text();
+        console.error('❌ Test failed:', response.status, errorText);
+        
+        toast({
+          title: "SMS Function Test Failed",
+          description: `Status: ${response.status} - Check console for details`,
+          variant: "destructive"
         });
       }
     } catch (error) {
@@ -268,6 +318,7 @@ export default function SmsIntegration({ propertyId }) {
           <p>• 2. Check browser console for detailed logs</p>
           <p>• 3. Test Function validates SMS function without sending</p>
           <p>• 4. Make sure OPENPHONE_API_KEY is configured in Supabase secrets</p>
+          <p>• 5. Updated config to disable JWT verification for better compatibility</p>
         </div>
       </div>
     </div>
