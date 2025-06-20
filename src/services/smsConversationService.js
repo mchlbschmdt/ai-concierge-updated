@@ -709,16 +709,16 @@ Keep it conversational and helpful, ending with an offer to provide directions o
     // Normalize the text to handle different line endings and spacing
     const normalizedText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     
-    // Updated regex patterns to properly stop at section boundaries
+    // Updated regex patterns to handle single-line format where sections are separated by spaces
     const patterns = [
-      // Pattern 1: Match BEACHES: followed by content until next UPPERCASE section or end
+      // Pattern 1: Match BEACHES: followed by content until next UPPERCASE section (space-separated)
+      new RegExp(`${sectionName}\\s*:\\s*([^]*?)(?=\\s+(?:RESTAURANTS|ATTRACTIONS|TRANSPORTATION|AMENITIES|ACTIVITIES|SHOPPING|WEATHER|AIRPORT)\\s*:|$)`, 'i'),
+      // Pattern 2: Match until we see another section with colon (more general)
+      new RegExp(`${sectionName}\\s*:\\s*([^]*?)(?=\\s+[A-Z]{3,}\\s*:|$)`, 'i'),
+      // Pattern 3: Match BEACHES: followed by content until next newline section or end
       new RegExp(`${sectionName}\\s*:([^]*?)(?=\\n\\s*[A-Z]{3,}\\s*:|$)`, 'i'),
-      // Pattern 2: More strict - match until we see another section with colon
-      new RegExp(`${sectionName}\\s*:([^]*?)(?=\\n[A-Z]+\\s*:|$)`, 'i'),
-      // Pattern 3: Match until double newline (paragraph break)
-      new RegExp(`${sectionName}\\s*:([^]*?)(?=\\n\\n|$)`, 'i'),
-      // Pattern 4: Match until we see common section headers
-      new RegExp(`${sectionName}\\s*:([^]*?)(?=\\n(?:RESTAURANTS|ATTRACTIONS|BEACHES|TRANSPORTATION|AMENITIES|ACTIVITIES)\\s*:|$)`, 'i')
+      // Pattern 4: Match until double newline (paragraph break)
+      new RegExp(`${sectionName}\\s*:([^]*?)(?=\\n\\n|$)`, 'i')
     ];
 
     for (let i = 0; i < patterns.length; i++) {
@@ -730,7 +730,7 @@ Keep it conversational and helpful, ending with an offer to provide directions o
         console.log(`🔍 DEBUG: Pattern ${i + 1} matched. Raw content length:`, result.length);
         
         // Additional cleanup: remove any trailing section headers that might have been captured
-        result = result.replace(/\n\s*[A-Z]{3,}\s*:\s*$/i, '').trim();
+        result = result.replace(/\s*(?:RESTAURANTS|ATTRACTIONS|TRANSPORTATION|AMENITIES|ACTIVITIES|SHOPPING|WEATHER|AIRPORT)\s*:\s*.*$/i, '').trim();
         
         if (result.length > 10) { // Only return if we got substantial content
           console.log(`🔍 DEBUG: Successfully extracted with pattern ${i + 1}:`, result.substring(0, 100) + '...');
