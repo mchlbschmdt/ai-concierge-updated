@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -421,7 +422,7 @@ async function validateAndTestOpenPhoneApiKey(apiKey: string) {
     const testResponse = await fetch('https://api.openphone.com/v1/phone-numbers', {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${apiKey.trim()}`,
+        'Authorization': apiKey.trim(),
         'Content-Type': 'application/json',
       }
     });
@@ -482,7 +483,7 @@ async function sendSmsResponse(apiKey: string, toNumber: string, fromNumber: str
     const response = await fetch('https://api.openphone.com/v1/messages', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey.trim()}`,
+        'Authorization': apiKey.trim(),
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(smsPayload)
