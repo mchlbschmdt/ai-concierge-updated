@@ -111,12 +111,13 @@ serve(async (req) => {
     console.log(`🔍 Sending SMS to: ${to}`)
     console.log(`🔍 Message: ${message}`)
     console.log(`🔍 Phone Number ID: ${phoneNumberId || 'default'}`)
+    console.log(`🔍 Using Authorization header without Bearer prefix`)
 
-    // Send SMS via OpenPhone API
+    // Send SMS via OpenPhone API - FIXED: Remove Bearer prefix
     const openPhoneResponse = await fetch('https://api.openphone.com/v1/messages', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
+        'Authorization': apiKey,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({

@@ -103,6 +103,7 @@ serve(async (req) => {
       }
 
       console.log(`🔍 Testing API key (length: ${testApiKey.length}) with type: ${testType}`)
+      console.log(`🔍 Using Authorization header without Bearer prefix`)
 
       if (testType === 'validate') {
         console.log('🔍 Validating API key by fetching phone numbers')
@@ -110,7 +111,7 @@ serve(async (req) => {
         const response = await fetch('https://api.openphone.com/v1/phone-numbers', {
           method: 'GET',
           headers: {
-            'Authorization': `Bearer ${testApiKey}`,
+            'Authorization': testApiKey,
             'Content-Type': 'application/json',
           }
         })
@@ -162,7 +163,7 @@ serve(async (req) => {
         const response = await fetch('https://api.openphone.com/v1/messages', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${testApiKey}`,
+            'Authorization': testApiKey,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -255,11 +256,12 @@ serve(async (req) => {
 
       console.log('🔍 Sending SMS with current environment API key')
       console.log(`🔍 To: ${to}, Message: ${message}`)
+      console.log(`🔍 Using Authorization header without Bearer prefix`)
       
       const response = await fetch('https://api.openphone.com/v1/messages', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${currentApiKey}`,
+          'Authorization': currentApiKey,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
