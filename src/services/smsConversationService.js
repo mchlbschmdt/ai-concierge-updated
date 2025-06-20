@@ -622,6 +622,7 @@ Please provide 3-4 specific, actionable recommendations with:
 
 Keep it conversational and helpful, ending with an offer to provide directions or more information.`;
 
+      console.log('🤖 Calling OpenAI recommendations function with prompt');
       const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
         method: 'POST',
         headers: {
@@ -631,16 +632,19 @@ Keep it conversational and helpful, ending with an offer to provide directions o
         body: JSON.stringify({ prompt })
       });
 
+      console.log('🤖 OpenAI response status:', response.status);
+
       if (response.ok) {
         const data = await response.json();
-        console.log('✅ OpenAI recommendations received');
+        console.log('✅ OpenAI recommendations received successfully');
         return {
           response: data.recommendation,
           shouldUpdateState: false
         };
       } else {
-        console.error('❌ OpenAI API call failed:', response.status);
-        throw new Error('OpenAI API call failed');
+        const errorText = await response.text();
+        console.error('❌ OpenAI API call failed:', response.status, errorText);
+        throw new Error(`OpenAI API call failed: ${response.status}`);
       }
     } catch (error) {
       console.error('❌ Error getting OpenAI recommendations:', error);
@@ -688,26 +692,37 @@ Keep it conversational and helpful, ending with an offer to provide directions o
       return null;
     }
 
+    // Normalize the text to handle different line endings and spacing
+    const normalizedText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    
     // Try multiple regex patterns to be more robust
     const patterns = [
-      // Case-insensitive pattern for "BEACHES:" or "RESTAURANTS:" etc.
-      new RegExp(`${sectionName}\\s*:([^]*?)(?=\\n\\s*[A-Z]+\\s*:|$)`, 'i'),
-      // More flexible pattern
-      new RegExp(`${sectionName}\\s*:([^]*?)(?=[A-Z]{2,}\\s*:|$)`, 'i'),
-      // Simple colon pattern
-      new RegExp(`${sectionName}\\s*:([^]*?)(?=\\n\\n|$)`, 'i')
+      // Pattern 1: Match BEACHES: or RESTAURANTS: followed by content until next section or end
+      new RegExp(`${sectionName}\\s*:([^]*?)(?=\\n\\s*[A-Z]{2,}\\s*:|$)`, 'i'),
+      // Pattern 2: More flexible - handles various whitespace and formatting
+      new RegExp(`${sectionName}\\s*:([^]*?)(?=\\n\\s*[A-Z][A-Z]+\\s*:|$)`, 'i'),
+      // Pattern 3: Simple colon pattern with paragraph break
+      new RegExp(`${sectionName}\\s*:([^]*?)(?=\\n\\n|$)`, 'i'),
+      // Pattern 4: Even more flexible - look for section headers
+      new RegExp(`${sectionName}\\s*:([^]*?)(?=\\n[A-Z]+:|$)`, 'i')
     ];
 
     for (let i = 0; i < patterns.length; i++) {
-      console.log(`🔍 DEBUG: Trying pattern ${i + 1}`);
-      const match = text.match(patterns[i]);
+      console.log(`🔍 DEBUG: Trying pattern ${i + 1}:`, patterns[i].toString());
+      const match = normalizedText.match(patterns[i]);
       
       if (match && match[1]) {
         const result = match[1].trim();
+        console.log(`🔍 DEBUG: Pattern ${i + 1} matched. Content length:`, result.length);
+        
         if (result.length > 10) { // Only return if we got substantial content
           console.log(`🔍 DEBUG: Successfully extracted with pattern ${i + 1}:`, result.substring(0, 100) + '...');
           return result;
+        } else {
+          console.log(`🔍 DEBUG: Pattern ${i + 1} match too short:`, result);
         }
+      } else {
+        console.log(`🔍 DEBUG: Pattern ${i + 1} no match`);
       }
     }
 
