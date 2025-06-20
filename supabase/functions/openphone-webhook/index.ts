@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -366,7 +365,7 @@ class SmsConversationService {
       });
 
       return {
-        response: "Perfect! How can I help you today? You can ask me about check-in/check-out times, WiFi, parking, amenities, or anything else about your stay. You can also text 'reset' anytime to restart our conversation.",
+        response: "Perfect! How can I help you today? You can ask me about check-in/check-out times, WiFi, parking, amenities, or anything else about your stay. You can also text 'reset' anytime to start over.",
         shouldUpdateState: true
       };
     } else if (isNo) {
@@ -392,10 +391,189 @@ class SmsConversationService {
   async handleGeneralInquiry(conversation, messageBody) {
     console.log('Handling general inquiry:', messageBody);
     
-    return {
-      response: "Thanks for your message! I've received your inquiry about your stay. For immediate assistance with urgent matters, please don't hesitate to call the property directly. You can text 'reset' anytime to restart our conversation.",
-      shouldUpdateState: false
-    };
+    try {
+      // Get property information
+      const property = await this.getPropertyInfo(conversation.property_id);
+      const message = messageBody.trim().toLowerCase();
+      
+      console.log('Property info:', property);
+      console.log('User message:', message);
+
+      // Check-in/check-out time keywords
+      if (this.matchesKeywords(message, ['check in', 'checkin', 'check-in', 'check out', 'checkout', 'check-out', 'arrival', 'departure'])) {
+        const checkInTime = property?.check_in_time || '4:00 PM';
+        const checkOutTime = property?.check_out_time || '11:00 AM';
+        return {
+          response: `Check-in is at ${checkInTime} and check-out is at ${checkOutTime}. If you need to arrange an early check-in or late check-out, please contact the property directly.`,
+          shouldUpdateState: false
+        };
+      }
+
+      // WiFi keywords
+      if (this.matchesKeywords(message, ['wifi', 'wi-fi', 'internet', 'password', 'network'])) {
+        if (property?.wifi_name || property?.wifi_password) {
+          let wifiResponse = 'Here are your WiFi details:\n';
+          if (property.wifi_name) wifiResponse += `Network: ${property.wifi_name}\n`;
+          if (property.wifi_password) wifiResponse += `Password: ${property.wifi_password}`;
+          return {
+            response: wifiResponse.trim(),
+            shouldUpdateState: false
+          };
+        } else {
+          return {
+            response: "WiFi information should be available in your check-in instructions. If you can't find it, please contact the property directly for WiFi details.",
+            shouldUpdateState: false
+          };
+        }
+      }
+
+      // Address/location keywords
+      if (this.matchesKeywords(message, ['address', 'location', 'where', 'directions', 'how to get'])) {
+        let locationResponse = '';
+        if (property?.address) {
+          locationResponse = `You're staying at: ${property.address}`;
+          if (property?.directions_to_property) {
+            locationResponse += `\n\nDirections: ${property.directions_to_property}`;
+          }
+        } else {
+          locationResponse = "Your property address should be in your booking confirmation. If you need directions, please contact the property directly.";
+        }
+        return {
+          response: locationResponse,
+          shouldUpdateState: false
+        };
+      }
+
+      // Parking keywords
+      if (this.matchesKeywords(message, ['parking', 'park', 'car', 'vehicle'])) {
+        if (property?.parking_instructions) {
+          return {
+            response: `Parking information: ${property.parking_instructions}`,
+            shouldUpdateState: false
+          };
+        } else {
+          return {
+            response: "For parking information, please check your booking confirmation or contact the property directly.",
+            shouldUpdateState: false
+          };
+        }
+      }
+
+      // Access/entry keywords
+      if (this.matchesKeywords(message, ['access', 'entry', 'key', 'code', 'door', 'enter', 'how to get in'])) {
+        if (property?.access_instructions) {
+          return {
+            response: `Access instructions: ${property.access_instructions}`,
+            shouldUpdateState: false
+          };
+        } else {
+          return {
+            response: "Access instructions should be provided closer to your check-in time. If you need immediate access help, please contact the property directly.",
+            shouldUpdateState: false
+          };
+        }
+      }
+
+      // Local recommendations keywords
+      if (this.matchesKeywords(message, ['restaurant', 'food', 'eat', 'recommendation', 'local', 'nearby', 'beach', 'attraction'])) {
+        if (property?.local_recommendations) {
+          return {
+            response: `Here are some local recommendations: ${property.local_recommendations}`,
+            shouldUpdateState: false
+          };
+        } else {
+          return {
+            response: "For local recommendations, I'd suggest checking travel apps or asking locals. The property staff may also have great suggestions!",
+            shouldUpdateState: false
+          };
+        }
+      }
+
+      // Emergency/contact keywords
+      if (this.matchesKeywords(message, ['emergency', 'urgent', 'contact', 'phone', 'help', 'problem'])) {
+        if (property?.emergency_contact) {
+          return {
+            response: `Emergency contact information: ${property.emergency_contact}`,
+            shouldUpdateState: false
+          };
+        } else {
+          return {
+            response: "For urgent matters, please contact the property directly using the phone number provided in your booking confirmation.",
+            shouldUpdateState: false
+          };
+        }
+      }
+
+      // Amenities keywords
+      if (this.matchesKeywords(message, ['amenities', 'facilities', 'pool', 'gym', 'laundry', 'kitchen'])) {
+        if (property?.amenities && property.amenities.length > 0) {
+          const amenitiesList = Array.isArray(property.amenities) ? property.amenities : JSON.parse(property.amenities || '[]');
+          return {
+            response: `Available amenities: ${amenitiesList.join(', ')}`,
+            shouldUpdateState: false
+          };
+        } else {
+          return {
+            response: "For information about available amenities, please check your booking confirmation or contact the property directly.",
+            shouldUpdateState: false
+          };
+        }
+      }
+
+      // Rules keywords
+      if (this.matchesKeywords(message, ['rules', 'policy', 'allowed', 'smoking', 'pets', 'noise'])) {
+        if (property?.house_rules) {
+          return {
+            response: `House rules: ${property.house_rules}`,
+            shouldUpdateState: false
+          };
+        } else {
+          return {
+            response: "For property rules and policies, please check your booking confirmation or contact the property directly.",
+            shouldUpdateState: false
+          };
+        }
+      }
+
+      // Default response for unmatched queries
+      return {
+        response: "I'd be happy to help! I can assist with check-in/check-out times, WiFi info, directions, parking, and general questions about your stay. For specific issues, please contact the property directly.",
+        shouldUpdateState: false
+      };
+
+    } catch (error) {
+      console.error('Error in handleGeneralInquiry:', error);
+      return {
+        response: "I'm having trouble accessing your property information right now. Please try again or contact the property directly for assistance.",
+        shouldUpdateState: false
+      };
+    }
+  }
+
+  async getPropertyInfo(propertyId) {
+    if (!propertyId) return null;
+
+    try {
+      const { data: property, error } = await this.supabase
+        .from('properties')
+        .select('*')
+        .eq('id', propertyId)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error fetching property info:', error);
+        return null;
+      }
+
+      return property;
+    } catch (error) {
+      console.error('Error getting property info:', error);
+      return null;
+    }
+  }
+
+  matchesKeywords(message, keywords) {
+    return keywords.some(keyword => message.includes(keyword));
   }
 
   getWelcomeMessage() {
