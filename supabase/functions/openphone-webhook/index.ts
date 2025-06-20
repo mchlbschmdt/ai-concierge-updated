@@ -473,7 +473,7 @@ async function sendSmsResponse(apiKey: string, toNumber: string, fromNumber: str
 
   const smsPayload = {
     to: [toNumber],
-    text: message,
+    content: message,  // Changed from 'text' to 'content'
     from: fromNumber
   };
 
