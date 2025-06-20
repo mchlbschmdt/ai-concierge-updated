@@ -151,40 +151,64 @@ export type Database = {
       }
       properties: {
         Row: {
+          access_instructions: string | null
           address: string
+          amenities: Json | null
           check_in_time: string | null
           check_out_time: string | null
           code: string
           created_at: string
+          directions_to_property: string | null
+          emergency_contact: string | null
+          house_rules: string | null
           id: string
           knowledge_base: string | null
           local_recommendations: string | null
+          parking_instructions: string | null
           property_name: string
           updated_at: string
+          wifi_name: string | null
+          wifi_password: string | null
         }
         Insert: {
+          access_instructions?: string | null
           address: string
+          amenities?: Json | null
           check_in_time?: string | null
           check_out_time?: string | null
           code: string
           created_at?: string
+          directions_to_property?: string | null
+          emergency_contact?: string | null
+          house_rules?: string | null
           id?: string
           knowledge_base?: string | null
           local_recommendations?: string | null
+          parking_instructions?: string | null
           property_name: string
           updated_at?: string
+          wifi_name?: string | null
+          wifi_password?: string | null
         }
         Update: {
+          access_instructions?: string | null
           address?: string
+          amenities?: Json | null
           check_in_time?: string | null
           check_out_time?: string | null
           code?: string
           created_at?: string
+          directions_to_property?: string | null
+          emergency_contact?: string | null
+          house_rules?: string | null
           id?: string
           knowledge_base?: string | null
           local_recommendations?: string | null
+          parking_instructions?: string | null
           property_name?: string
           updated_at?: string
+          wifi_name?: string | null
+          wifi_password?: string | null
         }
         Relationships: []
       }

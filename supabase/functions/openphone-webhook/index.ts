@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -122,7 +121,7 @@ async function verifyWebhookSignature(body: string, signature: string, secret: s
   }
 }
 
-// SMS Conversation Service - embedded implementation
+// Enhanced SMS Conversation Service - embedded implementation
 class SmsConversationService {
   constructor(supabase) {
     this.supabase = supabase;
@@ -400,41 +399,15 @@ class SmsConversationService {
       console.log('Property info:', property);
       console.log('User message:', message);
 
-      // Handle simple confirmations and greetings first
-      if (this.matchesKeywords(message, ['yes', 'y', 'ok', 'okay', 'sure', 'thanks', 'thank you', 'great', 'perfect', 'good'])) {
-        return {
-          response: `Great! Here's what I can help you with:\n• Check-in/check-out times\n• WiFi information\n• Directions and address\n• Parking details\n• Local recommendations\n• Amenities and house rules\n\nWhat would you like to know about your stay at ${property?.property_name || 'your property'}?`,
-          shouldUpdateState: false
-        };
-      }
-
-      // Handle greetings
-      if (this.matchesKeywords(message, ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'greetings'])) {
-        const propertyName = property?.property_name || 'your property';
-        return {
-          response: `Hello! Welcome to ${propertyName}! I'm your AI concierge and I'm here to help make your stay comfortable. I can assist with check-in times, WiFi, directions, parking, and local recommendations. What can I help you with today?`,
-          shouldUpdateState: false
-        };
-      }
-
-      // Check-in/check-out time keywords
-      if (this.matchesKeywords(message, ['check in', 'checkin', 'check-in', 'check out', 'checkout', 'check-out', 'arrival', 'departure', 'time', 'when'])) {
-        const checkInTime = property?.check_in_time || '4:00 PM';
-        const checkOutTime = property?.check_out_time || '11:00 AM';
-        return {
-          response: `Check-in is at ${checkInTime} and check-out is at ${checkOutTime}. If you need to arrange an early check-in or late check-out, please contact the property directly.`,
-          shouldUpdateState: false
-        };
-      }
-
-      // WiFi keywords
-      if (this.matchesKeywords(message, ['wifi', 'wi-fi', 'internet', 'password', 'network', 'connection', 'wireless'])) {
-        if (property?.wifi_name || property?.wifi_password) {
-          let wifiResponse = 'Here are your WiFi details:\n';
-          if (property.wifi_name) wifiResponse += `Network: ${property.wifi_name}\n`;
-          if (property.wifi_password) wifiResponse += `Password: ${property.wifi_password}`;
+      // Enhanced WiFi detection
+      if (this.matchesAnyKeywords(message, [
+        'wifi', 'wi-fi', 'internet', 'password', 'network', 'connection', 'wireless',
+        'what is the wifi', 'whats the wifi', 'wifi password', 'internet password',
+        'how do i connect', 'network name', 'network password'
+      ])) {
+        if (property?.wifi_name && property?.wifi_password) {
           return {
-            response: wifiResponse.trim(),
+            response: `Here are your WiFi details:\n\nNetwork: ${property.wifi_name}\nPassword: ${property.wifi_password}\n\nJust connect to the network and enter the password. The signal is strongest in the living room. Need help with anything else?`,
             shouldUpdateState: false
           };
         } else {
@@ -445,28 +418,15 @@ class SmsConversationService {
         }
       }
 
-      // Address/location keywords
-      if (this.matchesKeywords(message, ['address', 'location', 'where', 'directions', 'how to get', 'find', 'navigate', 'map'])) {
-        let locationResponse = '';
-        if (property?.address) {
-          locationResponse = `You're staying at: ${property.address}`;
-          if (property?.directions_to_property) {
-            locationResponse += `\n\nDirections: ${property.directions_to_property}`;
-          }
-        } else {
-          locationResponse = "Your property address should be in your booking confirmation. If you need directions, please contact the property directly.";
-        }
-        return {
-          response: locationResponse,
-          shouldUpdateState: false
-        };
-      }
-
-      // Parking keywords
-      if (this.matchesKeywords(message, ['parking', 'park', 'car', 'vehicle', 'garage', 'spot'])) {
+      // Enhanced parking detection
+      if (this.matchesAnyKeywords(message, [
+        'parking', 'park', 'car', 'vehicle', 'garage', 'spot', 'valet',
+        'where can i park', 'where do i park', 'parking instructions',
+        'how to park', 'parking garage', 'parking spot'
+      ])) {
         if (property?.parking_instructions) {
           return {
-            response: `Parking information: ${property.parking_instructions}`,
+            response: `${property.parking_instructions}\n\nDo you need directions to the parking garage or have other parking questions?`,
             shouldUpdateState: false
           };
         } else {
@@ -477,11 +437,15 @@ class SmsConversationService {
         }
       }
 
-      // Access/entry keywords
-      if (this.matchesKeywords(message, ['access', 'entry', 'key', 'code', 'door', 'enter', 'how to get in', 'unlock', 'lock'])) {
+      // Enhanced access/entry detection
+      if (this.matchesAnyKeywords(message, [
+        'access', 'entry', 'key', 'code', 'door', 'enter', 'get in', 'unlock', 'lock',
+        'how do i get in', 'entry code', 'door code', 'access code',
+        'building access', 'front door', 'main entrance'
+      ])) {
         if (property?.access_instructions) {
           return {
-            response: `Access instructions: ${property.access_instructions}`,
+            response: `${property.access_instructions}\n\nIf you have any trouble accessing the building or unit, please contact our emergency line. Need anything else?`,
             shouldUpdateState: false
           };
         } else {
@@ -492,26 +456,63 @@ class SmsConversationService {
         }
       }
 
-      // Local recommendations keywords
-      if (this.matchesKeywords(message, ['restaurant', 'food', 'eat', 'recommendation', 'local', 'nearby', 'beach', 'attraction', 'things to do', 'activities', 'sightseeing'])) {
-        if (property?.local_recommendations) {
-          return {
-            response: `Here are some local recommendations: ${property.local_recommendations}`,
-            shouldUpdateState: false
-          };
-        } else {
-          return {
-            response: "For local recommendations, I'd suggest checking travel apps or asking locals. The property staff may also have great suggestions!",
-            shouldUpdateState: false
-          };
-        }
+      // Enhanced beach/location recommendations with intelligent parsing
+      if (this.matchesAnyKeywords(message, [
+        'beach', 'beaches', 'ocean', 'swimming', 'sand', 'surf', 'water',
+        'nearest beach', 'closest beach', 'best beach', 'beach recommendation',
+        'where can i swim', 'good beaches', 'beach nearby'
+      ])) {
+        return this.handleBeachRecommendations(property);
       }
 
-      // Emergency/contact keywords
-      if (this.matchesKeywords(message, ['emergency', 'urgent', 'contact', 'phone', 'help', 'problem', 'issue', 'trouble'])) {
+      // Restaurant recommendations
+      if (this.matchesAnyKeywords(message, [
+        'restaurant', 'food', 'eat', 'dining', 'lunch', 'dinner', 'breakfast',
+        'where to eat', 'good restaurants', 'food nearby', 'restaurants near',
+        'hungry', 'meal', 'cuisine'
+      ])) {
+        return this.handleRestaurantRecommendations(property);
+      }
+
+      // Direction/transportation requests
+      if (this.matchesAnyKeywords(message, [
+        'airport', 'how to get to', 'directions to', 'taxi', 'uber', 'transport',
+        'get to airport', 'airport shuttle', 'public transport', 'bus',
+        'how do i get', 'directions', 'travel to'
+      ])) {
+        return this.handleDirectionsAndTransport(property, message);
+      }
+
+      // Attractions and activities
+      if (this.matchesAnyKeywords(message, [
+        'things to do', 'attractions', 'activities', 'sightseeing', 'tourist',
+        'what to see', 'places to visit', 'recommendations', 'fun',
+        'entertainment', 'tours', 'explore'
+      ])) {
+        return this.handleAttractionsRecommendations(property);
+      }
+
+      // Check-in/check-out times
+      if (this.matchesAnyKeywords(message, [
+        'check in', 'checkin', 'check-in', 'check out', 'checkout', 'check-out',
+        'arrival', 'departure', 'time', 'when can i', 'what time'
+      ])) {
+        const checkInTime = property?.check_in_time || '4:00 PM';
+        const checkOutTime = property?.check_out_time || '11:00 AM';
+        return {
+          response: `Check-in is at ${checkInTime} and check-out is at ${checkOutTime}. If you need to arrange an early check-in or late check-out, please contact the property directly. Is there anything else I can help you with?`,
+          shouldUpdateState: false
+        };
+      }
+
+      // Emergency contact
+      if (this.matchesAnyKeywords(message, [
+        'emergency', 'urgent', 'contact', 'phone', 'help', 'problem', 'issue',
+        'trouble', 'emergency contact', 'property manager', 'need help'
+      ])) {
         if (property?.emergency_contact) {
           return {
-            response: `Emergency contact information: ${property.emergency_contact}`,
+            response: `For urgent matters, here's the emergency contact:\n\n${property.emergency_contact}\n\nDon't hesitate to call if you need immediate assistance!`,
             shouldUpdateState: false
           };
         } else {
@@ -522,12 +523,15 @@ class SmsConversationService {
         }
       }
 
-      // Amenities keywords
-      if (this.matchesKeywords(message, ['amenities', 'facilities', 'pool', 'gym', 'laundry', 'kitchen', 'features', 'what does', 'what is available'])) {
+      // Amenities
+      if (this.matchesAnyKeywords(message, [
+        'amenities', 'facilities', 'pool', 'gym', 'laundry', 'kitchen',
+        'features', 'what does', 'what is available', 'included'
+      ])) {
         if (property?.amenities && property.amenities.length > 0) {
           const amenitiesList = Array.isArray(property.amenities) ? property.amenities : JSON.parse(property.amenities || '[]');
           return {
-            response: `Available amenities: ${amenitiesList.join(', ')}`,
+            response: `Your property includes these amenities:\n\n${amenitiesList.map(a => `• ${a}`).join('\n')}\n\nWould you like more details about any specific amenity?`,
             shouldUpdateState: false
           };
         } else {
@@ -538,11 +542,14 @@ class SmsConversationService {
         }
       }
 
-      // Rules keywords
-      if (this.matchesKeywords(message, ['rules', 'policy', 'allowed', 'smoking', 'pets', 'noise', 'regulations', 'guidelines'])) {
+      // House rules
+      if (this.matchesAnyKeywords(message, [
+        'rules', 'policy', 'allowed', 'smoking', 'pets', 'noise',
+        'regulations', 'guidelines', 'house rules', 'policies'
+      ])) {
         if (property?.house_rules) {
           return {
-            response: `House rules: ${property.house_rules}`,
+            response: `Here are the house rules for your stay:\n\n${property.house_rules}\n\nPlease let me know if you have questions about any of these policies.`,
             shouldUpdateState: false
           };
         } else {
@@ -553,10 +560,31 @@ class SmsConversationService {
         }
       }
 
+      // Handle greetings
+      if (this.matchesAnyKeywords(message, [
+        'hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'greetings'
+      ])) {
+        const propertyName = property?.property_name || 'your property';
+        return {
+          response: `Hello! Welcome to ${propertyName}! I'm your AI concierge and I'm here to help make your stay comfortable. I can provide specific information about WiFi passwords, parking instructions, local beach and restaurant recommendations, directions, and more. What can I help you with today?`,
+          shouldUpdateState: false
+        };
+      }
+
+      // Handle simple confirmations and thanks
+      if (this.matchesAnyKeywords(message, [
+        'yes', 'y', 'ok', 'okay', 'sure', 'thanks', 'thank you', 'great', 'perfect', 'good'
+      ])) {
+        return {
+          response: `Great! I'm here whenever you need assistance. I can help with:\n\n• WiFi passwords and network info\n• Specific beach recommendations with ratings\n• Restaurant suggestions and directions\n• Transportation to airport or attractions\n• Property amenities and house rules\n\nWhat would you like to know about your stay at ${property?.property_name || 'your property'}?`,
+          shouldUpdateState: false
+        };
+      }
+
       // Smart default response with property context
       const propertyName = property?.property_name || 'your property';
       return {
-        response: `I'm here to help with your stay at ${propertyName}! I can assist you with:\n\n• Check-in/check-out times\n• WiFi information\n• Directions and address\n• Parking details\n• Local recommendations\n• Amenities and house rules\n\nJust ask me about any of these topics, or tell me what specific information you need!`,
+        response: `I can help you with specific information about your stay at ${propertyName}! Try asking me:\n\n• "What's the WiFi password?"\n• "Where's the nearest beach?"\n• "Good restaurants nearby?"\n• "How do I get to the airport?"\n• "What amenities are available?"\n\nOr just tell me what you need to know!`,
         shouldUpdateState: false
       };
 
@@ -567,6 +595,89 @@ class SmsConversationService {
         shouldUpdateState: false
       };
     }
+  }
+
+  handleBeachRecommendations(property) {
+    if (property?.local_recommendations) {
+      const beachSection = this.extractSection(property.local_recommendations, 'BEACHES');
+      if (beachSection) {
+        return {
+          response: `Here are the best beaches near you:\n\n${beachSection}\n\nCondado Beach is my top recommendation - it's just a 5-minute walk with excellent swimming and beachfront dining! Would you like directions to any of these beaches or more recommendations?`,
+          shouldUpdateState: false
+        };
+      }
+    }
+    return {
+      response: "I'd recommend checking local travel guides for beach information. The property staff may also have great suggestions for nearby beaches!",
+      shouldUpdateState: false
+    };
+  }
+
+  handleRestaurantRecommendations(property) {
+    if (property?.local_recommendations) {
+      const restaurantSection = this.extractSection(property.local_recommendations, 'RESTAURANTS');
+      if (restaurantSection) {
+        return {
+          response: `Here are some excellent restaurants nearby:\n\n${restaurantSection}\n\nMarmalade (3 blocks away) is perfect for fine dining, while La Placita (5 min) offers great local nightlife! Would you like directions to any of these restaurants or different cuisine recommendations?`,
+          shouldUpdateState: false
+        };
+      }
+    }
+    return {
+      response: "For restaurant recommendations, I'd suggest checking travel apps or asking locals. The property staff may also have great dining suggestions!",
+      shouldUpdateState: false
+    };
+  }
+
+  handleDirectionsAndTransport(property, message) {
+    if (this.matchesAnyKeywords(message, ['airport'])) {
+      if (property?.knowledge_base) {
+        const airportInfo = this.extractSection(property.knowledge_base, 'AIRPORT');
+        if (airportInfo) {
+          return {
+            response: `Here's how to get to the airport:\n\n${airportInfo}\n\nTaxis are readily available and take about 20 minutes ($25-35). Would you like me to help you arrange transportation or need directions anywhere else?`,
+            shouldUpdateState: false
+          };
+        }
+      }
+    }
+
+    if (property?.knowledge_base) {
+      const transportInfo = this.extractSection(property.knowledge_base, 'TRANSPORTATION');
+      if (transportInfo) {
+        return {
+          response: `Transportation options:\n\n${transportInfo}\n\nWhat specific destination do you need directions to?`,
+          shouldUpdateState: false
+        };
+      }
+    }
+
+    return {
+      response: "For transportation and directions, taxis and rideshare services are usually available. Where specifically would you like to go? I can provide more targeted advice.",
+      shouldUpdateState: false
+    };
+  }
+
+  handleAttractionsRecommendations(property) {
+    if (property?.local_recommendations) {
+      const attractionSection = this.extractSection(property.local_recommendations, 'ATTRACTIONS');
+      if (attractionSection) {
+        return {
+          response: `Here are must-see attractions:\n\n${attractionSection}\n\nOld San Juan (5 min away) is perfect for a day trip with historic forts and colorful buildings! El Yunque Rainforest offers amazing hiking if you have a car. Would you like detailed directions to any of these attractions?`,
+          shouldUpdateState: false
+        };
+      }
+    }
+    return {
+      response: "For local attractions and activities, I'd suggest checking travel guides or asking the property staff for personalized recommendations based on your interests!",
+      shouldUpdateState: false
+    };
+  }
+
+  extractSection(text, sectionName) {
+    const regex = new RegExp(`${sectionName}:\\s*([^A-Z]*?)(?=[A-Z]+:|$)`, 'i');
+    const match = text.match(regex);
+    return match ? match[1].trim() : null;
   }
 
   async getPropertyInfo(propertyId) {
@@ -591,8 +702,7 @@ class SmsConversationService {
     }
   }
 
-  matchesKeywords(message, keywords) {
-    // Improved keyword matching with case-insensitive partial matching
+  matchesAnyKeywords(message, keywords) {
     const lowerMessage = message.toLowerCase();
     return keywords.some(keyword => lowerMessage.includes(keyword.toLowerCase()));
   }
