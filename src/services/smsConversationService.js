@@ -476,15 +476,47 @@ export class SmsConversationService {
   }
 
   handleBeachRecommendations(property) {
+    console.log('🏖️ DEBUG: Beach recommendations called');
+    console.log('🏖️ Property data:', property);
+    console.log('🏖️ Local recommendations field:', property?.local_recommendations);
+    
     if (property?.local_recommendations) {
       const beachSection = this.extractSection(property.local_recommendations, 'BEACHES');
+      console.log('🏖️ Extracted beach section:', beachSection);
+      
       if (beachSection) {
         return {
           response: `Here are the best beaches near you:\n\n${beachSection}\n\nCondado Beach is my top recommendation - it's just a 5-minute walk with excellent swimming and beachfront dining! Would you like directions to any of these beaches or more recommendations?`,
           shouldUpdateState: false
         };
+      } else {
+        console.log('🏖️ DEBUG: Beach section not found, trying fallback parsing');
+        // Fallback: try to find beach content differently
+        const recommendations = property.local_recommendations;
+        if (recommendations.toLowerCase().includes('beach')) {
+          // Try to extract just the beach-related content manually
+          const lines = recommendations.split(/[.!]\s*/);
+          const beachLines = lines.filter(line => 
+            line.toLowerCase().includes('beach') || 
+            line.toLowerCase().includes('swimming') ||
+            line.toLowerCase().includes('condado') ||
+            line.toLowerCase().includes('ocean park') ||
+            line.toLowerCase().includes('isla verde')
+          );
+          
+          if (beachLines.length > 0) {
+            const beachInfo = beachLines.join('. ');
+            console.log('🏖️ Fallback beach info found:', beachInfo);
+            return {
+              response: `Here are the best beaches near you:\n\n${beachInfo}\n\nWould you like directions to any of these beaches or more recommendations?`,
+              shouldUpdateState: false
+            };
+          }
+        }
       }
     }
+    
+    console.log('🏖️ DEBUG: No beach data found, using generic response');
     return {
       response: "I'd recommend checking local travel guides for beach information. The property staff may also have great suggestions for nearby beaches!",
       shouldUpdateState: false
@@ -492,13 +524,39 @@ export class SmsConversationService {
   }
 
   handleRestaurantRecommendations(property) {
+    console.log('🍽️ DEBUG: Restaurant recommendations called');
+    console.log('🍽️ Local recommendations field:', property?.local_recommendations);
+    
     if (property?.local_recommendations) {
       const restaurantSection = this.extractSection(property.local_recommendations, 'RESTAURANTS');
+      console.log('🍽️ Extracted restaurant section:', restaurantSection);
+      
       if (restaurantSection) {
         return {
           response: `Here are some excellent restaurants nearby:\n\n${restaurantSection}\n\nMarmalade (3 blocks away) is perfect for fine dining, while La Placita (5 min) offers great local nightlife! Would you like directions to any of these restaurants or different cuisine recommendations?`,
           shouldUpdateState: false
         };
+      } else {
+        // Fallback parsing for restaurants
+        const recommendations = property.local_recommendations;
+        if (recommendations.toLowerCase().includes('restaurant')) {
+          const lines = recommendations.split(/[.!]\s*/);
+          const restaurantLines = lines.filter(line => 
+            line.toLowerCase().includes('restaurant') || 
+            line.toLowerCase().includes('dining') ||
+            line.toLowerCase().includes('marmalade') ||
+            line.toLowerCase().includes('placita') ||
+            line.toLowerCase().includes('santaella')
+          );
+          
+          if (restaurantLines.length > 0) {
+            const restaurantInfo = restaurantLines.join('. ');
+            return {
+              response: `Here are some excellent restaurants nearby:\n\n${restaurantInfo}\n\nWould you like directions to any of these restaurants?`,
+              shouldUpdateState: false
+            };
+          }
+        }
       }
     }
     return {
@@ -553,9 +611,37 @@ export class SmsConversationService {
   }
 
   extractSection(text, sectionName) {
-    const regex = new RegExp(`${sectionName}:\\s*([^A-Z]*?)(?=[A-Z]+:|$)`, 'i');
-    const match = text.match(regex);
-    return match ? match[1].trim() : null;
+    console.log(`🔍 DEBUG: Extracting section "${sectionName}" from text:`, text);
+    
+    if (!text || !sectionName) {
+      console.log('🔍 DEBUG: Missing text or sectionName');
+      return null;
+    }
+
+    // Try multiple regex patterns to be more robust
+    const patterns = [
+      // Original pattern
+      new RegExp(`${sectionName}:\\s*([^A-Z]*?)(?=[A-Z]+:|$)`, 'i'),
+      // More flexible pattern that allows for different spacing and punctuation
+      new RegExp(`${sectionName}\\s*:([^A-Z]*?)(?=[A-Z]+\\s*:|$)`, 'i'),
+      // Even more flexible - look for content until next section or end
+      new RegExp(`${sectionName}\\s*:([\\s\\S]*?)(?=[A-Z]{2,}\\s*:|$)`, 'i')
+    ];
+
+    for (let i = 0; i < patterns.length; i++) {
+      console.log(`🔍 DEBUG: Trying pattern ${i + 1}:`, patterns[i]);
+      const match = text.match(patterns[i]);
+      console.log(`🔍 DEBUG: Pattern ${i + 1} match:`, match);
+      
+      if (match && match[1]) {
+        const result = match[1].trim();
+        console.log(`🔍 DEBUG: Successfully extracted with pattern ${i + 1}:`, result);
+        return result;
+      }
+    }
+
+    console.log(`🔍 DEBUG: No match found for section "${sectionName}"`);
+    return null;
   }
 
   async getPropertyInfo(propertyId) {
