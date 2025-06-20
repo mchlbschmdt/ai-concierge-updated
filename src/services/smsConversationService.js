@@ -1,4 +1,3 @@
-
 // SMS Conversation Service - handles the logic for property identification flow
 export class SmsConversationService {
   constructor(supabase) {
@@ -340,7 +339,7 @@ export class SmsConversationService {
         'nearest beach', 'closest beach', 'best beach', 'beach recommendation',
         'where can i swim', 'good beaches', 'beach nearby'
       ])) {
-        return this.handleBeachRecommendations(property);
+        return await this.handleBeachRecommendations(property);
       }
 
       // Restaurant recommendations
@@ -349,7 +348,7 @@ export class SmsConversationService {
         'where to eat', 'good restaurants', 'food nearby', 'restaurants near',
         'hungry', 'meal', 'cuisine'
       ])) {
-        return this.handleRestaurantRecommendations(property);
+        return await this.handleRestaurantRecommendations(property);
       }
 
       // Direction/transportation requests
@@ -358,7 +357,7 @@ export class SmsConversationService {
         'get to airport', 'airport shuttle', 'public transport', 'bus',
         'how do i get', 'directions', 'travel to'
       ])) {
-        return this.handleDirectionsAndTransport(property, message);
+        return await this.handleDirectionsAndTransport(property, message);
       }
 
       // Attractions and activities
@@ -367,7 +366,7 @@ export class SmsConversationService {
         'what to see', 'places to visit', 'recommendations', 'fun',
         'entertainment', 'tours', 'explore'
       ])) {
-        return this.handleAttractionsRecommendations(property);
+        return await this.handleAttractionsRecommendations(property);
       }
 
       // Check-in/check-out times
@@ -475,112 +474,111 @@ export class SmsConversationService {
     }
   }
 
-  handleBeachRecommendations(property) {
+  async handleBeachRecommendations(property) {
     console.log('🏖️ DEBUG: Beach recommendations called');
     console.log('🏖️ Property data:', property);
     console.log('🏖️ Local recommendations field:', property?.local_recommendations);
     
+    // First try to get recommendations from property data
     if (property?.local_recommendations) {
       const beachSection = this.extractSection(property.local_recommendations, 'BEACHES');
       console.log('🏖️ Extracted beach section:', beachSection);
       
-      if (beachSection) {
+      if (beachSection && beachSection.trim().length > 0) {
         return {
-          response: `Here are the best beaches near you:\n\n${beachSection}\n\nCondado Beach is my top recommendation - it's just a 5-minute walk with excellent swimming and beachfront dining! Would you like directions to any of these beaches or more recommendations?`,
+          response: `Here are the best beaches near you:\n\n${beachSection}\n\nWould you like directions to any of these beaches or more recommendations?`,
           shouldUpdateState: false
         };
-      } else {
-        console.log('🏖️ DEBUG: Beach section not found, trying fallback parsing');
-        // Fallback: try to find beach content differently
-        const recommendations = property.local_recommendations;
-        if (recommendations.toLowerCase().includes('beach')) {
-          // Try to extract just the beach-related content manually
-          const lines = recommendations.split(/[.!]\s*/);
-          const beachLines = lines.filter(line => 
-            line.toLowerCase().includes('beach') || 
-            line.toLowerCase().includes('swimming') ||
-            line.toLowerCase().includes('condado') ||
-            line.toLowerCase().includes('ocean park') ||
-            line.toLowerCase().includes('isla verde')
-          );
-          
-          if (beachLines.length > 0) {
-            const beachInfo = beachLines.join('. ');
-            console.log('🏖️ Fallback beach info found:', beachInfo);
-            return {
-              response: `Here are the best beaches near you:\n\n${beachInfo}\n\nWould you like directions to any of these beaches or more recommendations?`,
-              shouldUpdateState: false
-            };
-          }
-        }
       }
-    }
-    
-    console.log('🏖️ DEBUG: No beach data found, using generic response');
-    return {
-      response: "I'd recommend checking local travel guides for beach information. The property staff may also have great suggestions for nearby beaches!",
-      shouldUpdateState: false
-    };
-  }
-
-  handleRestaurantRecommendations(property) {
-    console.log('🍽️ DEBUG: Restaurant recommendations called');
-    console.log('🍽️ Local recommendations field:', property?.local_recommendations);
-    
-    if (property?.local_recommendations) {
-      const restaurantSection = this.extractSection(property.local_recommendations, 'RESTAURANTS');
-      console.log('🍽️ Extracted restaurant section:', restaurantSection);
       
-      if (restaurantSection) {
-        return {
-          response: `Here are some excellent restaurants nearby:\n\n${restaurantSection}\n\nMarmalade (3 blocks away) is perfect for fine dining, while La Placita (5 min) offers great local nightlife! Would you like directions to any of these restaurants or different cuisine recommendations?`,
-          shouldUpdateState: false
-        };
-      } else {
-        // Fallback parsing for restaurants
-        const recommendations = property.local_recommendations;
-        if (recommendations.toLowerCase().includes('restaurant')) {
-          const lines = recommendations.split(/[.!]\s*/);
-          const restaurantLines = lines.filter(line => 
-            line.toLowerCase().includes('restaurant') || 
-            line.toLowerCase().includes('dining') ||
-            line.toLowerCase().includes('marmalade') ||
-            line.toLowerCase().includes('placita') ||
-            line.toLowerCase().includes('santaella')
-          );
-          
-          if (restaurantLines.length > 0) {
-            const restaurantInfo = restaurantLines.join('. ');
-            return {
-              response: `Here are some excellent restaurants nearby:\n\n${restaurantInfo}\n\nWould you like directions to any of these restaurants?`,
-              shouldUpdateState: false
-            };
-          }
-        }
-      }
-    }
-    return {
-      response: "For restaurant recommendations, I'd suggest checking travel apps or asking locals. The property staff may also have great dining suggestions!",
-      shouldUpdateState: false
-    };
-  }
-
-  handleDirectionsAndTransport(property, message) {
-    if (this.matchesAnyKeywords(message, ['airport'])) {
-      if (property?.knowledge_base) {
-        const airportInfo = this.extractSection(property.knowledge_base, 'AIRPORT');
-        if (airportInfo) {
+      // Try fallback parsing for any beach-related content
+      const recommendations = property.local_recommendations;
+      if (recommendations.toLowerCase().includes('beach')) {
+        const lines = recommendations.split(/[.!]\s*/);
+        const beachLines = lines.filter(line => 
+          line.toLowerCase().includes('beach') || 
+          line.toLowerCase().includes('swimming') ||
+          line.toLowerCase().includes('ocean') ||
+          line.toLowerCase().includes('sand')
+        ).slice(0, 3); // Limit to first 3 relevant lines
+        
+        if (beachLines.length > 0) {
+          const beachInfo = beachLines.join('. ');
+          console.log('🏖️ Fallback beach info found:', beachInfo);
           return {
-            response: `Here's how to get to the airport:\n\n${airportInfo}\n\nTaxis are readily available and take about 20 minutes ($25-35). Would you like me to help you arrange transportation or need directions anywhere else?`,
+            response: `Here are the best beaches near you:\n\n${beachInfo}\n\nWould you like directions to any of these beaches or more recommendations?`,
             shouldUpdateState: false
           };
         }
       }
     }
+    
+    // If no property data found, use OpenAI as fallback
+    console.log('🏖️ No property beach data found, using OpenAI fallback');
+    return await this.getOpenAIRecommendations(property, 'beach');
+  }
+
+  async handleRestaurantRecommendations(property) {
+    console.log('🍽️ DEBUG: Restaurant recommendations called');
+    console.log('🍽️ Local recommendations field:', property?.local_recommendations);
+    
+    // First try to get recommendations from property data
+    if (property?.local_recommendations) {
+      const restaurantSection = this.extractSection(property.local_recommendations, 'RESTAURANTS');
+      console.log('🍽️ Extracted restaurant section:', restaurantSection);
+      
+      if (restaurantSection && restaurantSection.trim().length > 0) {
+        return {
+          response: `Here are some excellent restaurants nearby:\n\n${restaurantSection}\n\nWould you like directions to any of these restaurants or different cuisine recommendations?`,
+          shouldUpdateState: false
+        };
+      }
+      
+      // Try fallback parsing for restaurant content
+      const recommendations = property.local_recommendations;
+      if (recommendations.toLowerCase().includes('restaurant')) {
+        const lines = recommendations.split(/[.!]\s*/);
+        const restaurantLines = lines.filter(line => 
+          line.toLowerCase().includes('restaurant') || 
+          line.toLowerCase().includes('dining') ||
+          line.toLowerCase().includes('food') ||
+          line.toLowerCase().includes('eat')
+        ).slice(0, 3);
+        
+        if (restaurantLines.length > 0) {
+          const restaurantInfo = restaurantLines.join('. ');
+          return {
+            response: `Here are some excellent restaurants nearby:\n\n${restaurantInfo}\n\nWould you like directions to any of these restaurants?`,
+            shouldUpdateState: false
+          };
+        }
+      }
+    }
+    
+    // If no property data found, use OpenAI as fallback
+    console.log('🍽️ No property restaurant data found, using OpenAI fallback');
+    return await this.getOpenAIRecommendations(property, 'restaurant');
+  }
+
+  async handleDirectionsAndTransport(property, message) {
+    if (this.matchesAnyKeywords(message, ['airport'])) {
+      if (property?.knowledge_base) {
+        const airportInfo = this.extractSection(property.knowledge_base, 'AIRPORT');
+        if (airportInfo && airportInfo.trim().length > 0) {
+          return {
+            response: `Here's how to get to the airport:\n\n${airportInfo}\n\nWould you like me to help you arrange transportation or need directions anywhere else?`,
+            shouldUpdateState: false
+          };
+        }
+      }
+      
+      // Use OpenAI for airport directions if no property data
+      return await this.getOpenAIRecommendations(property, 'airport transportation');
+    }
 
     if (property?.knowledge_base) {
       const transportInfo = this.extractSection(property.knowledge_base, 'TRANSPORTATION');
-      if (transportInfo) {
+      if (transportInfo && transportInfo.trim().length > 0) {
         return {
           response: `Transportation options:\n\n${transportInfo}\n\nWhat specific destination do you need directions to?`,
           shouldUpdateState: false
@@ -588,30 +586,102 @@ export class SmsConversationService {
       }
     }
 
-    return {
-      response: "For transportation and directions, taxis and rideshare services are usually available. Where specifically would you like to go? I can provide more targeted advice.",
-      shouldUpdateState: false
-    };
+    // Use OpenAI for general transportation
+    return await this.getOpenAIRecommendations(property, 'transportation and directions');
   }
 
-  handleAttractionsRecommendations(property) {
+  async handleAttractionsRecommendations(property) {
     if (property?.local_recommendations) {
       const attractionSection = this.extractSection(property.local_recommendations, 'ATTRACTIONS');
-      if (attractionSection) {
+      if (attractionSection && attractionSection.trim().length > 0) {
         return {
-          response: `Here are must-see attractions:\n\n${attractionSection}\n\nOld San Juan (5 min away) is perfect for a day trip with historic forts and colorful buildings! El Yunque Rainforest offers amazing hiking if you have a car. Would you like detailed directions to any of these attractions?`,
+          response: `Here are must-see attractions:\n\n${attractionSection}\n\nWould you like detailed directions to any of these attractions?`,
           shouldUpdateState: false
         };
       }
     }
-    return {
-      response: "For local attractions and activities, I'd suggest checking travel guides or asking the property staff for personalized recommendations based on your interests!",
-      shouldUpdateState: false
-    };
+    
+    // Use OpenAI for attractions if no property data
+    return await this.getOpenAIRecommendations(property, 'attractions and activities');
+  }
+
+  async getOpenAIRecommendations(property, type) {
+    console.log(`🤖 Getting OpenAI recommendations for ${type}`);
+    
+    try {
+      const propertyAddress = property?.address || 'the property';
+      const propertyName = property?.property_name || 'your accommodation';
+      
+      const prompt = `You are a knowledgeable local concierge assistant. A guest is staying at ${propertyName} located at ${propertyAddress}. They are asking for ${type} recommendations. 
+
+Please provide 3-4 specific, actionable recommendations with:
+- Names and brief descriptions
+- Approximate distance/travel time from the property address
+- Why each recommendation is good
+- A personal touch as if you're a local expert
+
+Keep it conversational and helpful, ending with an offer to provide directions or more information.`;
+
+      const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dHd5eWVwYWhiYnZyY2JzYmtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0MDg3MDMsImV4cCI6MjA2MDk4NDcwM30.kUje38W2D2vXjYos6laaZ_rOzADLGiftoHAztFqSP9g`
+        },
+        body: JSON.stringify({ prompt })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ OpenAI recommendations received');
+        return {
+          response: data.recommendation,
+          shouldUpdateState: false
+        };
+      } else {
+        console.error('❌ OpenAI API call failed:', response.status);
+        throw new Error('OpenAI API call failed');
+      }
+    } catch (error) {
+      console.error('❌ Error getting OpenAI recommendations:', error);
+      
+      // Enhanced fallback with property context
+      const propertyName = property?.property_name || 'your property';
+      const contextualAdvice = this.getContextualFallback(type, property);
+      
+      return {
+        response: `I'd be happy to help you find great ${type} near ${propertyName}! ${contextualAdvice} For the most current recommendations, you might also want to check local travel apps or ask the property staff for their personal favorites.`,
+        shouldUpdateState: false
+      };
+    }
+  }
+
+  getContextualFallback(type, property) {
+    const address = property?.address || '';
+    
+    if (type.includes('beach')) {
+      if (address.toLowerCase().includes('san juan') || address.toLowerCase().includes('puerto rico')) {
+        return 'Condado Beach and Ocean Park Beach are popular choices in San Juan, both offering great swimming and dining options nearby.';
+      }
+      if (address.toLowerCase().includes('miami')) {
+        return 'South Beach and Key Biscayne are excellent options in Miami, with beautiful sand and vibrant beach scenes.';
+      }
+      return 'Look for beaches within 10-15 minutes of your location for the best experience.';
+    }
+    
+    if (type.includes('restaurant')) {
+      return 'Local favorites often include a mix of traditional cuisine and international options within walking distance.';
+    }
+    
+    if (type.includes('attraction')) {
+      return 'Historic districts, local markets, and cultural sites are usually great starting points for exploration.';
+    }
+    
+    return 'The local area typically offers great options within a short distance.';
   }
 
   extractSection(text, sectionName) {
-    console.log(`🔍 DEBUG: Extracting section "${sectionName}" from text:`, text);
+    console.log(`🔍 DEBUG: Extracting section "${sectionName}" from text length:`, text?.length);
     
     if (!text || !sectionName) {
       console.log('🔍 DEBUG: Missing text or sectionName');
@@ -620,23 +690,24 @@ export class SmsConversationService {
 
     // Try multiple regex patterns to be more robust
     const patterns = [
-      // Original pattern
-      new RegExp(`${sectionName}:\\s*([^A-Z]*?)(?=[A-Z]+:|$)`, 'i'),
-      // More flexible pattern that allows for different spacing and punctuation
-      new RegExp(`${sectionName}\\s*:([^A-Z]*?)(?=[A-Z]+\\s*:|$)`, 'i'),
-      // Even more flexible - look for content until next section or end
-      new RegExp(`${sectionName}\\s*:([\\s\\S]*?)(?=[A-Z]{2,}\\s*:|$)`, 'i')
+      // Case-insensitive pattern for "BEACHES:" or "RESTAURANTS:" etc.
+      new RegExp(`${sectionName}\\s*:([^]*?)(?=\\n\\s*[A-Z]+\\s*:|$)`, 'i'),
+      // More flexible pattern
+      new RegExp(`${sectionName}\\s*:([^]*?)(?=[A-Z]{2,}\\s*:|$)`, 'i'),
+      // Simple colon pattern
+      new RegExp(`${sectionName}\\s*:([^]*?)(?=\\n\\n|$)`, 'i')
     ];
 
     for (let i = 0; i < patterns.length; i++) {
-      console.log(`🔍 DEBUG: Trying pattern ${i + 1}:`, patterns[i]);
+      console.log(`🔍 DEBUG: Trying pattern ${i + 1}`);
       const match = text.match(patterns[i]);
-      console.log(`🔍 DEBUG: Pattern ${i + 1} match:`, match);
       
       if (match && match[1]) {
         const result = match[1].trim();
-        console.log(`🔍 DEBUG: Successfully extracted with pattern ${i + 1}:`, result);
-        return result;
+        if (result.length > 10) { // Only return if we got substantial content
+          console.log(`🔍 DEBUG: Successfully extracted with pattern ${i + 1}:`, result.substring(0, 100) + '...');
+          return result;
+        }
       }
     }
 
