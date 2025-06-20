@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -399,8 +400,25 @@ class SmsConversationService {
       console.log('Property info:', property);
       console.log('User message:', message);
 
+      // Handle simple confirmations and greetings first
+      if (this.matchesKeywords(message, ['yes', 'y', 'ok', 'okay', 'sure', 'thanks', 'thank you', 'great', 'perfect', 'good'])) {
+        return {
+          response: `Great! Here's what I can help you with:\n• Check-in/check-out times\n• WiFi information\n• Directions and address\n• Parking details\n• Local recommendations\n• Amenities and house rules\n\nWhat would you like to know about your stay at ${property?.property_name || 'your property'}?`,
+          shouldUpdateState: false
+        };
+      }
+
+      // Handle greetings
+      if (this.matchesKeywords(message, ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'greetings'])) {
+        const propertyName = property?.property_name || 'your property';
+        return {
+          response: `Hello! Welcome to ${propertyName}! I'm your AI concierge and I'm here to help make your stay comfortable. I can assist with check-in times, WiFi, directions, parking, and local recommendations. What can I help you with today?`,
+          shouldUpdateState: false
+        };
+      }
+
       // Check-in/check-out time keywords
-      if (this.matchesKeywords(message, ['check in', 'checkin', 'check-in', 'check out', 'checkout', 'check-out', 'arrival', 'departure'])) {
+      if (this.matchesKeywords(message, ['check in', 'checkin', 'check-in', 'check out', 'checkout', 'check-out', 'arrival', 'departure', 'time', 'when'])) {
         const checkInTime = property?.check_in_time || '4:00 PM';
         const checkOutTime = property?.check_out_time || '11:00 AM';
         return {
@@ -410,7 +428,7 @@ class SmsConversationService {
       }
 
       // WiFi keywords
-      if (this.matchesKeywords(message, ['wifi', 'wi-fi', 'internet', 'password', 'network'])) {
+      if (this.matchesKeywords(message, ['wifi', 'wi-fi', 'internet', 'password', 'network', 'connection', 'wireless'])) {
         if (property?.wifi_name || property?.wifi_password) {
           let wifiResponse = 'Here are your WiFi details:\n';
           if (property.wifi_name) wifiResponse += `Network: ${property.wifi_name}\n`;
@@ -428,7 +446,7 @@ class SmsConversationService {
       }
 
       // Address/location keywords
-      if (this.matchesKeywords(message, ['address', 'location', 'where', 'directions', 'how to get'])) {
+      if (this.matchesKeywords(message, ['address', 'location', 'where', 'directions', 'how to get', 'find', 'navigate', 'map'])) {
         let locationResponse = '';
         if (property?.address) {
           locationResponse = `You're staying at: ${property.address}`;
@@ -445,7 +463,7 @@ class SmsConversationService {
       }
 
       // Parking keywords
-      if (this.matchesKeywords(message, ['parking', 'park', 'car', 'vehicle'])) {
+      if (this.matchesKeywords(message, ['parking', 'park', 'car', 'vehicle', 'garage', 'spot'])) {
         if (property?.parking_instructions) {
           return {
             response: `Parking information: ${property.parking_instructions}`,
@@ -460,7 +478,7 @@ class SmsConversationService {
       }
 
       // Access/entry keywords
-      if (this.matchesKeywords(message, ['access', 'entry', 'key', 'code', 'door', 'enter', 'how to get in'])) {
+      if (this.matchesKeywords(message, ['access', 'entry', 'key', 'code', 'door', 'enter', 'how to get in', 'unlock', 'lock'])) {
         if (property?.access_instructions) {
           return {
             response: `Access instructions: ${property.access_instructions}`,
@@ -475,7 +493,7 @@ class SmsConversationService {
       }
 
       // Local recommendations keywords
-      if (this.matchesKeywords(message, ['restaurant', 'food', 'eat', 'recommendation', 'local', 'nearby', 'beach', 'attraction'])) {
+      if (this.matchesKeywords(message, ['restaurant', 'food', 'eat', 'recommendation', 'local', 'nearby', 'beach', 'attraction', 'things to do', 'activities', 'sightseeing'])) {
         if (property?.local_recommendations) {
           return {
             response: `Here are some local recommendations: ${property.local_recommendations}`,
@@ -490,7 +508,7 @@ class SmsConversationService {
       }
 
       // Emergency/contact keywords
-      if (this.matchesKeywords(message, ['emergency', 'urgent', 'contact', 'phone', 'help', 'problem'])) {
+      if (this.matchesKeywords(message, ['emergency', 'urgent', 'contact', 'phone', 'help', 'problem', 'issue', 'trouble'])) {
         if (property?.emergency_contact) {
           return {
             response: `Emergency contact information: ${property.emergency_contact}`,
@@ -505,7 +523,7 @@ class SmsConversationService {
       }
 
       // Amenities keywords
-      if (this.matchesKeywords(message, ['amenities', 'facilities', 'pool', 'gym', 'laundry', 'kitchen'])) {
+      if (this.matchesKeywords(message, ['amenities', 'facilities', 'pool', 'gym', 'laundry', 'kitchen', 'features', 'what does', 'what is available'])) {
         if (property?.amenities && property.amenities.length > 0) {
           const amenitiesList = Array.isArray(property.amenities) ? property.amenities : JSON.parse(property.amenities || '[]');
           return {
@@ -521,7 +539,7 @@ class SmsConversationService {
       }
 
       // Rules keywords
-      if (this.matchesKeywords(message, ['rules', 'policy', 'allowed', 'smoking', 'pets', 'noise'])) {
+      if (this.matchesKeywords(message, ['rules', 'policy', 'allowed', 'smoking', 'pets', 'noise', 'regulations', 'guidelines'])) {
         if (property?.house_rules) {
           return {
             response: `House rules: ${property.house_rules}`,
@@ -535,9 +553,10 @@ class SmsConversationService {
         }
       }
 
-      // Default response for unmatched queries
+      // Smart default response with property context
+      const propertyName = property?.property_name || 'your property';
       return {
-        response: "I'd be happy to help! I can assist with check-in/check-out times, WiFi info, directions, parking, and general questions about your stay. For specific issues, please contact the property directly.",
+        response: `I'm here to help with your stay at ${propertyName}! I can assist you with:\n\n• Check-in/check-out times\n• WiFi information\n• Directions and address\n• Parking details\n• Local recommendations\n• Amenities and house rules\n\nJust ask me about any of these topics, or tell me what specific information you need!`,
         shouldUpdateState: false
       };
 
@@ -573,7 +592,9 @@ class SmsConversationService {
   }
 
   matchesKeywords(message, keywords) {
-    return keywords.some(keyword => message.includes(keyword));
+    // Improved keyword matching with case-insensitive partial matching
+    const lowerMessage = message.toLowerCase();
+    return keywords.some(keyword => lowerMessage.includes(keyword.toLowerCase()));
   }
 
   getWelcomeMessage() {
