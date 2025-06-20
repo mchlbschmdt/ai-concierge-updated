@@ -709,12 +709,12 @@ Keep it conversational and helpful, ending with an offer to provide directions o
     // Normalize the text to handle different line endings and spacing
     const normalizedText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     
-    // Updated regex patterns to handle single-line format where sections are separated by spaces
+    // Updated regex patterns to handle single-line format where sections may not have spaces before headers
     const patterns = [
-      // Pattern 1: Match BEACHES: followed by content until next UPPERCASE section (space-separated)
-      new RegExp(`${sectionName}\\s*:\\s*([^]*?)(?=\\s+(?:RESTAURANTS|ATTRACTIONS|TRANSPORTATION|AMENITIES|ACTIVITIES|SHOPPING|WEATHER|AIRPORT)\\s*:|$)`, 'i'),
-      // Pattern 2: Match until we see another section with colon (more general)
-      new RegExp(`${sectionName}\\s*:\\s*([^]*?)(?=\\s+[A-Z]{3,}\\s*:|$)`, 'i'),
+      // Pattern 1: Match BEACHES: followed by content until next UPPERCASE section (handles "activities. RESTAURANTS:")
+      new RegExp(`${sectionName}\\s*:\\s*([^]*?)(?=\\s*(?:RESTAURANTS|ATTRACTIONS|TRANSPORTATION|AMENITIES|ACTIVITIES|SHOPPING|WEATHER|AIRPORT)\\s*:|$)`, 'i'),
+      // Pattern 2: Match until we see another section with colon (more general, no space requirement)
+      new RegExp(`${sectionName}\\s*:\\s*([^]*?)(?=\\s*[A-Z]{3,}\\s*:|$)`, 'i'),
       // Pattern 3: Match BEACHES: followed by content until next newline section or end
       new RegExp(`${sectionName}\\s*:([^]*?)(?=\\n\\s*[A-Z]{3,}\\s*:|$)`, 'i'),
       // Pattern 4: Match until double newline (paragraph break)
