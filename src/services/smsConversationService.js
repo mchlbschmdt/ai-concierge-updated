@@ -1,4 +1,3 @@
-
 // SMS Conversation Service - handles the logic for property identification flow
 export class SmsConversationService {
   constructor(supabase) {
@@ -334,7 +333,7 @@ export class SmsConversationService {
         }
       }
 
-      // Enhanced beach/location recommendations - NOW GOES DIRECTLY TO OPENAI
+      // Beach recommendations - ONLY OpenAI
       if (this.matchesAnyKeywords(message, [
         'beach', 'beaches', 'ocean', 'swimming', 'sand', 'surf', 'water',
         'nearest beach', 'closest beach', 'best beach', 'beach recommendation',
@@ -343,7 +342,7 @@ export class SmsConversationService {
         return await this.handleBeachRecommendations(property);
       }
 
-      // Restaurant recommendations - NOW GOES DIRECTLY TO OPENAI
+      // Restaurant recommendations - ONLY OpenAI
       if (this.matchesAnyKeywords(message, [
         'restaurant', 'food', 'eat', 'dining', 'lunch', 'dinner', 'breakfast',
         'where to eat', 'good restaurants', 'food nearby', 'restaurants near',
@@ -361,7 +360,7 @@ export class SmsConversationService {
         return await this.handleDirectionsAndTransport(property, message);
       }
 
-      // Attractions and activities - NOW GOES DIRECTLY TO OPENAI
+      // Attractions and activities - ONLY OpenAI
       if (this.matchesAnyKeywords(message, [
         'things to do', 'attractions', 'activities', 'sightseeing', 'tourist',
         'what to see', 'places to visit', 'recommendations', 'fun',
@@ -477,15 +476,11 @@ export class SmsConversationService {
 
   async handleBeachRecommendations(property) {
     console.log('🏖️ Beach recommendations - going directly to OpenAI');
-    
-    // SIMPLIFIED: Skip all local recommendations parsing and go directly to OpenAI
     return await this.getOpenAIRecommendations(property, 'beach');
   }
 
   async handleRestaurantRecommendations(property) {
     console.log('🍽️ Restaurant recommendations - going directly to OpenAI');
-    
-    // SIMPLIFIED: Skip all local recommendations parsing and go directly to OpenAI
     return await this.getOpenAIRecommendations(property, 'restaurant');
   }
 
@@ -521,8 +516,6 @@ export class SmsConversationService {
 
   async handleAttractionsRecommendations(property) {
     console.log('🎯 Attractions recommendations - going directly to OpenAI');
-    
-    // SIMPLIFIED: Skip all local recommendations parsing and go directly to OpenAI
     return await this.getOpenAIRecommendations(property, 'attractions and activities');
   }
 
@@ -577,46 +570,12 @@ Keep it conversational and helpful, ending with an offer to provide directions o
     } catch (error) {
       console.error('❌ Error getting OpenAI recommendations:', error);
       
-      // Enhanced fallback with property context
-      const propertyName = property?.property_name || 'your property';
-      const contextualAdvice = this.getContextualFallback(type, property);
-      
-      let fallbackResponse = `I'd be happy to help you find great ${type} near ${propertyName}! ${contextualAdvice} For the most current recommendations, you might also want to check local travel apps or ask the property staff for their personal favorites.`;
-      
-      // Add personalization prompt for beach recommendations in fallback too
-      if (type.includes('beach')) {
-        fallbackResponse += ' If you can tell me a little bit more about the vibe you\'re looking for I can provide better recommendations.';
-      }
-      
+      // Simple error response - no hardcoded recommendations
       return {
-        response: fallbackResponse,
+        response: "I'm having trouble connecting to our recommendation service right now. Please try again in a moment, or feel free to ask me about other aspects of your stay like WiFi, parking, or check-in details.",
         shouldUpdateState: false
       };
     }
-  }
-
-  getContextualFallback(type, property) {
-    const address = property?.address || '';
-    
-    if (type.includes('beach')) {
-      if (address.toLowerCase().includes('san juan') || address.toLowerCase().includes('puerto rico')) {
-        return 'Condado Beach and Ocean Park Beach are popular choices in San Juan, both offering great swimming and dining options nearby.';
-      }
-      if (address.toLowerCase().includes('miami')) {
-        return 'South Beach and Key Biscayne are excellent options in Miami, with beautiful sand and vibrant beach scenes.';
-      }
-      return 'Look for beaches within 10-15 minutes of your location for the best experience.';
-    }
-    
-    if (type.includes('restaurant')) {
-      return 'Local favorites often include a mix of traditional cuisine and international options within walking distance.';
-    }
-    
-    if (type.includes('attraction')) {
-      return 'Historic districts, local markets, and cultural sites are usually great starting points for exploration.';
-    }
-    
-    return 'The local area typically offers great options within a short distance.';
   }
 
   extractSection(text, sectionName) {

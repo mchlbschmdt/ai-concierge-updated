@@ -16,8 +16,10 @@ serve(async (req) => {
   }
 
   try {
+    console.log('🤖 OpenAI recommendations function called');
+    
     if (!openAIApiKey) {
-      console.error('OPENAI_API_KEY not found');
+      console.error('❌ OPENAI_API_KEY not found in environment');
       return new Response(
         JSON.stringify({ error: 'OpenAI API key not configured' }),
         {
@@ -28,6 +30,7 @@ serve(async (req) => {
     }
 
     const { prompt } = await req.json();
+    console.log('📝 Received prompt:', prompt);
 
     if (!prompt) {
       return new Response(
@@ -39,6 +42,7 @@ serve(async (req) => {
       );
     }
 
+    console.log('🚀 Calling OpenAI API...');
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -46,11 +50,11 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4.1-2025-04-14',
         messages: [
           { 
             role: 'system', 
-            content: 'You are a helpful local concierge who provides specific, actionable recommendations to guests. Always be conversational, friendly, and include practical details like distances and why places are recommended.' 
+            content: 'You are a helpful local concierge who provides specific, actionable recommendations to guests. Always be conversational, friendly, and include practical details like distances and why places are recommended. Focus ONLY on what the user is asking for - if they ask for beaches, provide only beach recommendations. Do not mix categories.' 
           },
           { role: 'user', content: prompt }
         ],
@@ -59,9 +63,11 @@ serve(async (req) => {
       }),
     });
 
+    console.log('📊 OpenAI response status:', response.status);
+
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('OpenAI API error:', errorText);
+      console.error('❌ OpenAI API error:', errorText);
       return new Response(
         JSON.stringify({ error: 'Failed to get recommendation from OpenAI' }),
         {
@@ -73,6 +79,9 @@ serve(async (req) => {
 
     const data = await response.json();
     const recommendation = data.choices[0].message.content;
+    
+    console.log('✅ OpenAI recommendation generated successfully');
+    console.log('📝 Recommendation length:', recommendation.length);
 
     return new Response(
       JSON.stringify({ recommendation }),
@@ -81,7 +90,7 @@ serve(async (req) => {
       }
     );
   } catch (error) {
-    console.error('Error in openai-recommendations function:', error);
+    console.error('❌ Error in openai-recommendations function:', error);
     return new Response(
       JSON.stringify({ error: 'Internal server error' }),
       {
