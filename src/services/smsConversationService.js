@@ -1,3 +1,4 @@
+
 // SMS Conversation Service - handles the logic for property identification flow
 export class SmsConversationService {
   constructor(supabase) {
@@ -333,7 +334,7 @@ export class SmsConversationService {
         }
       }
 
-      // Enhanced beach/location recommendations with intelligent parsing
+      // Enhanced beach/location recommendations - NOW GOES DIRECTLY TO OPENAI
       if (this.matchesAnyKeywords(message, [
         'beach', 'beaches', 'ocean', 'swimming', 'sand', 'surf', 'water',
         'nearest beach', 'closest beach', 'best beach', 'beach recommendation',
@@ -342,7 +343,7 @@ export class SmsConversationService {
         return await this.handleBeachRecommendations(property);
       }
 
-      // Restaurant recommendations
+      // Restaurant recommendations - NOW GOES DIRECTLY TO OPENAI
       if (this.matchesAnyKeywords(message, [
         'restaurant', 'food', 'eat', 'dining', 'lunch', 'dinner', 'breakfast',
         'where to eat', 'good restaurants', 'food nearby', 'restaurants near',
@@ -360,7 +361,7 @@ export class SmsConversationService {
         return await this.handleDirectionsAndTransport(property, message);
       }
 
-      // Attractions and activities
+      // Attractions and activities - NOW GOES DIRECTLY TO OPENAI
       if (this.matchesAnyKeywords(message, [
         'things to do', 'attractions', 'activities', 'sightseeing', 'tourist',
         'what to see', 'places to visit', 'recommendations', 'fun',
@@ -475,58 +476,16 @@ export class SmsConversationService {
   }
 
   async handleBeachRecommendations(property) {
-    console.log('🏖️ DEBUG: Beach recommendations called');
-    console.log('🏖️ Property data:', property);
-    console.log('🏖️ Local recommendations field:', property?.local_recommendations);
+    console.log('🏖️ Beach recommendations - going directly to OpenAI');
     
-    // Try to get recommendations from property data
-    if (property?.local_recommendations) {
-      const beachSection = this.extractSection(property.local_recommendations, 'BEACHES');
-      console.log('🏖️ RAW extracted beach section:', beachSection);
-      console.log('🏖️ Beach section length:', beachSection ? beachSection.length : 0);
-      
-      if (beachSection && beachSection.trim().length > 0) {
-        // CRITICAL FIX: Make sure we ONLY use the extracted section
-        const cleanBeachSection = beachSection.trim();
-        console.log('🏖️ CLEAN beach section (first 100 chars):', cleanBeachSection.substring(0, 100));
-        console.log('🏖️ FINAL response being constructed...');
-        
-        const finalResponse = `Here are the best beaches near you:\n\n${cleanBeachSection}\n\nWould you like directions to any of these beaches or more recommendations? If you can tell me a little bit more about the vibe you're looking for I can provide better recommendations.`;
-        
-        console.log('🏖️ FINAL RESPONSE (first 200 chars):', finalResponse.substring(0, 200));
-        console.log('🏖️ FINAL RESPONSE LENGTH:', finalResponse.length);
-        
-        return {
-          response: finalResponse,
-          shouldUpdateState: false
-        };
-      }
-    }
-    
-    // If no specific beach section found, use OpenAI as fallback
-    console.log('🏖️ No property beach data found, using OpenAI fallback');
+    // SIMPLIFIED: Skip all local recommendations parsing and go directly to OpenAI
     return await this.getOpenAIRecommendations(property, 'beach');
   }
 
   async handleRestaurantRecommendations(property) {
-    console.log('🍽️ DEBUG: Restaurant recommendations called');
-    console.log('🍽️ Local recommendations field:', property?.local_recommendations);
+    console.log('🍽️ Restaurant recommendations - going directly to OpenAI');
     
-    // Try to get recommendations from property data
-    if (property?.local_recommendations) {
-      const restaurantSection = this.extractSection(property.local_recommendations, 'RESTAURANTS');
-      console.log('🍽️ Extracted restaurant section:', restaurantSection);
-      
-      if (restaurantSection && restaurantSection.trim().length > 0) {
-        return {
-          response: `Here are some excellent restaurants nearby:\n\n${restaurantSection}\n\nWould you like directions to any of these restaurants or different cuisine recommendations?`,
-          shouldUpdateState: false
-        };
-      }
-    }
-    
-    // If no specific restaurant section found, use OpenAI as fallback
-    console.log('🍽️ No property restaurant data found, using OpenAI fallback');
+    // SIMPLIFIED: Skip all local recommendations parsing and go directly to OpenAI
     return await this.getOpenAIRecommendations(property, 'restaurant');
   }
 
@@ -561,17 +520,9 @@ export class SmsConversationService {
   }
 
   async handleAttractionsRecommendations(property) {
-    if (property?.local_recommendations) {
-      const attractionSection = this.extractSection(property.local_recommendations, 'ATTRACTIONS');
-      if (attractionSection && attractionSection.trim().length > 0) {
-        return {
-          response: `Here are must-see attractions:\n\n${attractionSection}\n\nWould you like detailed directions to any of these attractions?`,
-          shouldUpdateState: false
-        };
-      }
-    }
+    console.log('🎯 Attractions recommendations - going directly to OpenAI');
     
-    // Use OpenAI for attractions if no property data
+    // SIMPLIFIED: Skip all local recommendations parsing and go directly to OpenAI
     return await this.getOpenAIRecommendations(property, 'attractions and activities');
   }
 
