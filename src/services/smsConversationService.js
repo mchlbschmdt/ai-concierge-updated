@@ -1,3 +1,4 @@
+
 // SMS Conversation Service - handles the logic for property identification flow
 export class SmsConversationService {
   constructor(supabase) {
@@ -333,42 +334,6 @@ export class SmsConversationService {
         }
       }
 
-      // Beach recommendations - ONLY OpenAI
-      if (this.matchesAnyKeywords(message, [
-        'beach', 'beaches', 'ocean', 'swimming', 'sand', 'surf', 'water',
-        'nearest beach', 'closest beach', 'best beach', 'beach recommendation',
-        'where can i swim', 'good beaches', 'beach nearby'
-      ])) {
-        return await this.handleBeachRecommendations(property);
-      }
-
-      // Restaurant recommendations - ONLY OpenAI
-      if (this.matchesAnyKeywords(message, [
-        'restaurant', 'food', 'eat', 'dining', 'lunch', 'dinner', 'breakfast',
-        'where to eat', 'good restaurants', 'food nearby', 'restaurants near',
-        'hungry', 'meal', 'cuisine'
-      ])) {
-        return await this.handleRestaurantRecommendations(property);
-      }
-
-      // Direction/transportation requests
-      if (this.matchesAnyKeywords(message, [
-        'airport', 'how to get to', 'directions to', 'taxi', 'uber', 'transport',
-        'get to airport', 'airport shuttle', 'public transport', 'bus',
-        'how do i get', 'directions', 'travel to'
-      ])) {
-        return await this.handleDirectionsAndTransport(property, message);
-      }
-
-      // Attractions and activities - ONLY OpenAI
-      if (this.matchesAnyKeywords(message, [
-        'things to do', 'attractions', 'activities', 'sightseeing', 'tourist',
-        'what to see', 'places to visit', 'recommendations', 'fun',
-        'entertainment', 'tours', 'explore'
-      ])) {
-        return await this.handleAttractionsRecommendations(property);
-      }
-
       // Check-in/check-out times
       if (this.matchesAnyKeywords(message, [
         'check in', 'checkin', 'check-in', 'check out', 'checkout', 'check-out',
@@ -437,7 +402,7 @@ export class SmsConversationService {
         }
       }
 
-      // Handle greetings
+      // Handle basic greetings
       if (this.matchesAnyKeywords(message, [
         'hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'greetings'
       ])) {
@@ -448,22 +413,14 @@ export class SmsConversationService {
         };
       }
 
-      // Handle simple confirmations and thanks
-      if (this.matchesAnyKeywords(message, [
-        'yes', 'y', 'ok', 'okay', 'sure', 'thanks', 'thank you', 'great', 'perfect', 'good'
-      ])) {
-        return {
-          response: `Great! I'm here whenever you need assistance. I can help with:\n\n• WiFi passwords and network info\n• Specific beach recommendations with ratings\n• Restaurant suggestions and directions\n• Transportation to airport or attractions\n• Property amenities and house rules\n\nWhat would you like to know about your stay at ${property?.property_name || 'your property'}?`,
-          shouldUpdateState: false
-        };
+      // NEW: Enhanced keyword detection for multi-concept questions
+      if (this.matchesLocationOrRecommendationKeywords(message)) {
+        return await this.handleLocationOrRecommendationRequest(property, message);
       }
 
-      // Smart default response with property context
-      const propertyName = property?.property_name || 'your property';
-      return {
-        response: `I can help you with specific information about your stay at ${propertyName}! Try asking me:\n\n• "What's the WiFi password?"\n• "Where's the nearest beach?"\n• "Good restaurants nearby?"\n• "How do I get to the airport?"\n• "What amenities are available?"\n\nOr just tell me what you need to know!`,
-        shouldUpdateState: false
-      };
+      // For any unmatched complex question, send to OpenAI instead of generic response
+      console.log('🤖 Complex question detected - routing to OpenAI for contextual response');
+      return await this.getOpenAIRecommendations(property, `general inquiry: ${messageBody}`);
 
     } catch (error) {
       console.error('Error in handleGeneralInquiry:', error);
@@ -474,49 +431,45 @@ export class SmsConversationService {
     }
   }
 
-  async handleBeachRecommendations(property) {
-    console.log('🏖️ Beach recommendations - going directly to OpenAI');
-    return await this.getOpenAIRecommendations(property, 'beach');
+  // NEW: Enhanced keyword detection for location/recommendation requests
+  matchesLocationOrRecommendationKeywords(message) {
+    const locationKeywords = [
+      // Beaches
+      'beach', 'beaches', 'ocean', 'swimming', 'sand', 'surf', 'water', 'escambron', 'condado', 'isla verde',
+      // Restaurants/bars/drinks
+      'restaurant', 'food', 'eat', 'dining', 'lunch', 'dinner', 'breakfast', 'drink', 'bar', 'sunset', 'cocktail',
+      // Attractions/activities
+      'things to do', 'attractions', 'activities', 'sightseeing', 'tourist', 'places to visit', 'explore',
+      // Directions/transport
+      'directions', 'how to get', 'way to', 'stop on the way', 'route to', 'near', 'close to'
+    ];
+
+    return this.matchesAnyKeywords(message, locationKeywords);
   }
 
-  async handleRestaurantRecommendations(property) {
-    console.log('🍽️ Restaurant recommendations - going directly to OpenAI');
-    return await this.getOpenAIRecommendations(property, 'restaurant');
-  }
-
-  async handleDirectionsAndTransport(property, message) {
-    if (this.matchesAnyKeywords(message, ['airport'])) {
-      if (property?.knowledge_base) {
-        const airportInfo = this.extractSection(property.knowledge_base, 'AIRPORT');
-        if (airportInfo && airportInfo.trim().length > 0) {
-          return {
-            response: `Here's how to get to the airport:\n\n${airportInfo}\n\nWould you like me to help you arrange transportation or need directions anywhere else?`,
-            shouldUpdateState: false
-          };
-        }
-      }
-      
-      // Use OpenAI for airport directions if no property data
-      return await this.getOpenAIRecommendations(property, 'airport transportation');
+  // NEW: Route location/recommendation requests to appropriate OpenAI handlers
+  async handleLocationOrRecommendationRequest(property, message) {
+    console.log('🎯 Routing location/recommendation request to OpenAI');
+    
+    // Determine the type of request for better OpenAI prompting
+    if (this.matchesAnyKeywords(message, ['beach', 'beaches', 'ocean', 'swimming', 'escambron', 'condado'])) {
+      return await this.getOpenAIRecommendations(property, 'beach and coastal recommendations');
     }
-
-    if (property?.knowledge_base) {
-      const transportInfo = this.extractSection(property.knowledge_base, 'TRANSPORTATION');
-      if (transportInfo && transportInfo.trim().length > 0) {
-        return {
-          response: `Transportation options:\n\n${transportInfo}\n\nWhat specific destination do you need directions to?`,
-          shouldUpdateState: false
-        };
-      }
+    
+    if (this.matchesAnyKeywords(message, ['restaurant', 'food', 'eat', 'dining', 'drink', 'bar', 'sunset', 'cocktail'])) {
+      return await this.getOpenAIRecommendations(property, 'restaurant and dining recommendations');
     }
-
-    // Use OpenAI for general transportation
-    return await this.getOpenAIRecommendations(property, 'transportation and directions');
-  }
-
-  async handleAttractionsRecommendations(property) {
-    console.log('🎯 Attractions recommendations - going directly to OpenAI');
-    return await this.getOpenAIRecommendations(property, 'attractions and activities');
+    
+    if (this.matchesAnyKeywords(message, ['things to do', 'attractions', 'activities', 'sightseeing', 'places to visit'])) {
+      return await this.getOpenAIRecommendations(property, 'attractions and activities');
+    }
+    
+    if (this.matchesAnyKeywords(message, ['directions', 'how to get', 'way to', 'route to', 'airport'])) {
+      return await this.getOpenAIRecommendations(property, 'directions and transportation');
+    }
+    
+    // Default to contextual inquiry for complex questions
+    return await this.getOpenAIRecommendations(property, `contextual travel inquiry: ${message}`);
   }
 
   async getOpenAIRecommendations(property, type) {
@@ -526,7 +479,7 @@ export class SmsConversationService {
       const propertyAddress = property?.address || 'the property';
       const propertyName = property?.property_name || 'your accommodation';
       
-      const prompt = `You are a knowledgeable local concierge assistant. A guest is staying at ${propertyName} located at ${propertyAddress}. They are asking for ${type} recommendations. 
+      const prompt = `You are a knowledgeable local concierge assistant. A guest is staying at ${propertyName} located at ${propertyAddress}. They are asking about: ${type}
 
 Please provide 3-4 specific, actionable recommendations with:
 - Names and brief descriptions
@@ -534,7 +487,9 @@ Please provide 3-4 specific, actionable recommendations with:
 - Why each recommendation is good
 - A personal touch as if you're a local expert
 
-Keep it conversational and helpful, ending with an offer to provide directions or more information.`;
+Keep it conversational and helpful, ending with an offer to provide directions or more information.
+
+Focus ONLY on what they're asking about - don't mix categories unless they specifically ask for multiple types.`;
 
       console.log('🤖 Calling OpenAI recommendations function with prompt');
       const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
@@ -552,14 +507,8 @@ Keep it conversational and helpful, ending with an offer to provide directions o
         const data = await response.json();
         console.log('✅ OpenAI recommendations received successfully');
         
-        // Add personalization prompt for beach recommendations
-        let finalResponse = data.recommendation;
-        if (type.includes('beach')) {
-          finalResponse += ' If you can tell me a little bit more about the vibe you\'re looking for I can provide better recommendations.';
-        }
-        
         return {
-          response: finalResponse,
+          response: data.recommendation,
           shouldUpdateState: false
         };
       } else {
@@ -570,60 +519,11 @@ Keep it conversational and helpful, ending with an offer to provide directions o
     } catch (error) {
       console.error('❌ Error getting OpenAI recommendations:', error);
       
-      // Simple error response - no hardcoded recommendations
       return {
         response: "I'm having trouble connecting to our recommendation service right now. Please try again in a moment, or feel free to ask me about other aspects of your stay like WiFi, parking, or check-in details.",
         shouldUpdateState: false
       };
     }
-  }
-
-  extractSection(text, sectionName) {
-    console.log(`🔍 DEBUG: Extracting section "${sectionName}" from text length:`, text?.length);
-    
-    if (!text || !sectionName) {
-      console.log('🔍 DEBUG: Missing text or sectionName');
-      return null;
-    }
-
-    // Normalize the text to handle different line endings and spacing
-    const normalizedText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    
-    // CRITICAL FIX: Use more precise patterns that stop at section boundaries
-    const patterns = [
-      // Pattern 1: Match BEACHES: followed by content until next section header (most precise)
-      new RegExp(`${sectionName}\\s*:\\s*([^]*?)(?=\\n\\s*(?:RESTAURANTS|ATTRACTIONS|TRANSPORTATION|AMENITIES|ACTIVITIES|SHOPPING|WEATHER|AIRPORT)\\s*:|$)`, 'i'),
-      // Pattern 2: Match until we see another section with colon
-      new RegExp(`${sectionName}\\s*:\\s*([^]*?)(?=\\s*[A-Z]{3,}\\s*:|$)`, 'i'),
-      // Pattern 3: Match until double newline (paragraph break)
-      new RegExp(`${sectionName}\\s*:([^]*?)(?=\\n\\n|$)`, 'i')
-    ];
-
-    for (let i = 0; i < patterns.length; i++) {
-      console.log(`🔍 DEBUG: Trying pattern ${i + 1}:`, patterns[i].toString());
-      const match = normalizedText.match(patterns[i]);
-      
-      if (match && match[1]) {
-        let result = match[1].trim();
-        console.log(`🔍 DEBUG: Pattern ${i + 1} matched. Raw content length:`, result.length);
-        console.log(`🔍 DEBUG: Raw result (first 100 chars):`, result.substring(0, 100));
-        
-        // CRITICAL: Remove any trailing section headers that might have been captured
-        result = result.replace(/\s*(?:RESTAURANTS|ATTRACTIONS|TRANSPORTATION|AMENITIES|ACTIVITIES|SHOPPING|WEATHER|AIRPORT)\s*:\s*.*$/i, '').trim();
-        
-        if (result.length > 10) { // Only return if we got substantial content
-          console.log(`🔍 DEBUG: Successfully extracted with pattern ${i + 1} (length: ${result.length}):`, result.substring(0, 100) + '...');
-          return result;
-        } else {
-          console.log(`🔍 DEBUG: Pattern ${i + 1} match too short after cleanup:`, result);
-        }
-      } else {
-        console.log(`🔍 DEBUG: Pattern ${i + 1} no match`);
-      }
-    }
-
-    console.log(`🔍 DEBUG: No match found for section "${sectionName}"`);
-    return null;
   }
 
   async getPropertyInfo(propertyId) {
