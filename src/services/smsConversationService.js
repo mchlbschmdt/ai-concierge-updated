@@ -267,16 +267,15 @@ export class SmsConversationService {
   }
 
   async handleGeneralInquiry(conversation, messageBody) {
-    console.log('🔍 === HANDLING GENERAL INQUIRY ===');
-    console.log('📝 Original message:', messageBody);
+    console.log('Handling general inquiry:', messageBody);
     
     try {
       // Get property information
       const property = await this.getPropertyInfo(conversation.property_id);
       const message = messageBody.trim().toLowerCase();
       
-      console.log('🏢 Property info loaded:', property?.property_name || 'No property name');
-      console.log('🔤 Cleaned message:', message);
+      console.log('Property info:', property);
+      console.log('User message:', message);
 
       // Enhanced WiFi detection
       if (this.matchesAnyKeywords(message, [
@@ -284,7 +283,6 @@ export class SmsConversationService {
         'what is the wifi', 'whats the wifi', 'wifi password', 'internet password',
         'how do i connect', 'network name', 'network password'
       ])) {
-        console.log('✅ Matched WiFi keywords - providing WiFi information');
         if (property?.wifi_name && property?.wifi_password) {
           return {
             response: `Here are your WiFi details:\n\nNetwork: ${property.wifi_name}\nPassword: ${property.wifi_password}\n\nJust connect to the network and enter the password. The signal is strongest in the living room. Need help with anything else?`,
@@ -304,7 +302,6 @@ export class SmsConversationService {
         'where can i park', 'where do i park', 'parking instructions',
         'how to park', 'parking garage', 'parking spot'
       ])) {
-        console.log('✅ Matched parking keywords - providing parking information');
         if (property?.parking_instructions) {
           return {
             response: `${property.parking_instructions}\n\nDo you need directions to the parking garage or have other parking questions?`,
@@ -324,7 +321,6 @@ export class SmsConversationService {
         'how do i get in', 'entry code', 'door code', 'access code',
         'building access', 'front door', 'main entrance'
       ])) {
-        console.log('✅ Matched access keywords - providing access information');
         if (property?.access_instructions) {
           return {
             response: `${property.access_instructions}\n\nIf you have any trouble accessing the building or unit, please contact our emergency line. Need anything else?`,
@@ -343,7 +339,6 @@ export class SmsConversationService {
         'check in', 'checkin', 'check-in', 'check out', 'checkout', 'check-out',
         'arrival', 'departure', 'time', 'when can i', 'what time'
       ])) {
-        console.log('✅ Matched check-in/out keywords - providing timing information');
         const checkInTime = property?.check_in_time || '4:00 PM';
         const checkOutTime = property?.check_out_time || '11:00 AM';
         return {
@@ -357,7 +352,6 @@ export class SmsConversationService {
         'emergency', 'urgent', 'contact', 'phone', 'help', 'problem', 'issue',
         'trouble', 'emergency contact', 'property manager', 'need help'
       ])) {
-        console.log('✅ Matched emergency keywords - providing emergency contact');
         if (property?.emergency_contact) {
           return {
             response: `For urgent matters, here's the emergency contact:\n\n${property.emergency_contact}\n\nDon't hesitate to call if you need immediate assistance!`,
@@ -376,7 +370,6 @@ export class SmsConversationService {
         'amenities', 'facilities', 'pool', 'gym', 'laundry', 'kitchen',
         'features', 'what does', 'what is available', 'included'
       ])) {
-        console.log('✅ Matched amenities keywords - providing amenities list');
         if (property?.amenities && property.amenities.length > 0) {
           const amenitiesList = Array.isArray(property.amenities) ? property.amenities : JSON.parse(property.amenities || '[]');
           return {
@@ -396,7 +389,6 @@ export class SmsConversationService {
         'rules', 'policy', 'allowed', 'smoking', 'pets', 'noise',
         'regulations', 'guidelines', 'house rules', 'policies'
       ])) {
-        console.log('✅ Matched house rules keywords - providing house rules');
         if (property?.house_rules) {
           return {
             response: `Here are the house rules for your stay:\n\n${property.house_rules}\n\nPlease let me know if you have questions about any of these policies.`,
@@ -414,7 +406,6 @@ export class SmsConversationService {
       if (this.matchesAnyKeywords(message, [
         'hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'greetings'
       ])) {
-        console.log('✅ Matched greeting keywords - providing welcome message');
         const propertyName = property?.property_name || 'your property';
         return {
           response: `Hello! Welcome to ${propertyName}! I'm your AI concierge and I'm here to help make your stay comfortable. I can provide specific information about WiFi passwords, parking instructions, local beach and restaurant recommendations, directions, and more. What can I help you with today?`,
@@ -422,20 +413,17 @@ export class SmsConversationService {
         };
       }
 
-      // 🎯 CHECK FOR LOCATION/RECOMMENDATION KEYWORDS
-      console.log('🔍 Checking if message matches location/recommendation keywords...');
+      // NEW: Enhanced keyword detection for multi-concept questions
       if (this.matchesLocationOrRecommendationKeywords(message)) {
-        console.log('✅ MATCHED location/recommendation keywords - routing to specialized handler');
         return await this.handleLocationOrRecommendationRequest(property, message);
       }
 
-      // 🤖 FINAL FALLBACK: Send complex questions directly to OpenAI
-      console.log('🤖 No specific keywords matched - routing to OpenAI for contextual response');
-      console.log('📝 Sending to OpenAI with context: complex question about travel/property');
-      return await this.getOpenAIRecommendations(property, `complex travel question: ${messageBody}`);
+      // For any unmatched complex question, send to OpenAI instead of generic response
+      console.log('🤖 Complex question detected - routing to OpenAI for contextual response');
+      return await this.getOpenAIRecommendations(property, `general inquiry: ${messageBody}`);
 
     } catch (error) {
-      console.error('❌ Error in handleGeneralInquiry:', error);
+      console.error('Error in handleGeneralInquiry:', error);
       return {
         response: "I'm having trouble accessing your property information right now. Please try again or contact the property directly for assistance.",
         shouldUpdateState: false
@@ -443,10 +431,8 @@ export class SmsConversationService {
     }
   }
 
-  // Enhanced keyword detection for location/recommendation requests
+  // NEW: Enhanced keyword detection for location/recommendation requests
   matchesLocationOrRecommendationKeywords(message) {
-    console.log('🔍 Checking location/recommendation keywords for message:', message);
-    
     const locationKeywords = [
       // Beaches
       'beach', 'beaches', 'ocean', 'swimming', 'sand', 'surf', 'water', 'escambron', 'condado', 'isla verde',
@@ -455,57 +441,39 @@ export class SmsConversationService {
       // Attractions/activities
       'things to do', 'attractions', 'activities', 'sightseeing', 'tourist', 'places to visit', 'explore',
       // Directions/transport
-      'directions', 'how to get', 'way to', 'stop on the way', 'route to', 'near', 'close to', 'on the way'
+      'directions', 'how to get', 'way to', 'stop on the way', 'route to', 'near', 'close to'
     ];
 
-    const matched = this.matchesAnyKeywords(message, locationKeywords);
-    console.log('🎯 Location/recommendation keywords matched:', matched);
-    
-    if (matched) {
-      console.log('✅ Message contains location/recommendation keywords - will route to OpenAI');
-    } else {
-      console.log('❌ No location/recommendation keywords found');
-    }
-    
-    return matched;
+    return this.matchesAnyKeywords(message, locationKeywords);
   }
 
-  // Route location/recommendation requests to appropriate OpenAI handlers
+  // NEW: Route location/recommendation requests to appropriate OpenAI handlers
   async handleLocationOrRecommendationRequest(property, message) {
-    console.log('🎯 === ROUTING LOCATION/RECOMMENDATION REQUEST ===');
-    console.log('📝 Message:', message);
+    console.log('🎯 Routing location/recommendation request to OpenAI');
     
     // Determine the type of request for better OpenAI prompting
     if (this.matchesAnyKeywords(message, ['beach', 'beaches', 'ocean', 'swimming', 'escambron', 'condado'])) {
-      console.log('🏖️ Routing to: beach and coastal recommendations');
       return await this.getOpenAIRecommendations(property, 'beach and coastal recommendations');
     }
     
     if (this.matchesAnyKeywords(message, ['restaurant', 'food', 'eat', 'dining', 'drink', 'bar', 'sunset', 'cocktail'])) {
-      console.log('🍽️ Routing to: restaurant and dining recommendations');
       return await this.getOpenAIRecommendations(property, 'restaurant and dining recommendations');
     }
     
     if (this.matchesAnyKeywords(message, ['things to do', 'attractions', 'activities', 'sightseeing', 'places to visit'])) {
-      console.log('🎭 Routing to: attractions and activities');
       return await this.getOpenAIRecommendations(property, 'attractions and activities');
     }
     
-    if (this.matchesAnyKeywords(message, ['directions', 'how to get', 'way to', 'route to', 'airport', 'on the way', 'stop on the way'])) {
-      console.log('🗺️ Routing to: directions and transportation');
+    if (this.matchesAnyKeywords(message, ['directions', 'how to get', 'way to', 'route to', 'airport'])) {
       return await this.getOpenAIRecommendations(property, 'directions and transportation');
     }
     
     // Default to contextual inquiry for complex questions
-    console.log('🤔 Routing to: contextual travel inquiry (complex/multi-part question)');
     return await this.getOpenAIRecommendations(property, `contextual travel inquiry: ${message}`);
   }
 
   async getOpenAIRecommendations(property, type) {
-    console.log(`🤖 === CALLING OPENAI RECOMMENDATIONS ===`);
-    console.log(`📋 Request type: ${type}`);
-    console.log(`🏢 Property: ${property?.property_name || 'Unknown'}`);
-    console.log(`📍 Address: ${property?.address || 'Unknown address'}`);
+    console.log(`🤖 Getting OpenAI recommendations for ${type}`);
     
     try {
       const propertyAddress = property?.address || 'the property';
@@ -523,8 +491,7 @@ Keep it conversational and helpful, ending with an offer to provide directions o
 
 Focus ONLY on what they're asking about - don't mix categories unless they specifically ask for multiple types.`;
 
-      console.log('📤 Sending prompt to OpenAI:', prompt.substring(0, 200) + '...');
-
+      console.log('🤖 Calling OpenAI recommendations function with prompt');
       const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
         method: 'POST',
         headers: {
@@ -534,14 +501,11 @@ Focus ONLY on what they're asking about - don't mix categories unless they speci
         body: JSON.stringify({ prompt })
       });
 
-      console.log('📊 OpenAI response status:', response.status);
-      console.log('📊 OpenAI response ok:', response.ok);
+      console.log('🤖 OpenAI response status:', response.status);
 
       if (response.ok) {
         const data = await response.json();
         console.log('✅ OpenAI recommendations received successfully');
-        console.log('📝 Response length:', data.recommendation?.length || 0);
-        console.log('📄 Response preview:', data.recommendation?.substring(0, 100) + '...' || 'No content');
         
         return {
           response: data.recommendation,
@@ -549,24 +513,14 @@ Focus ONLY on what they're asking about - don't mix categories unless they speci
         };
       } else {
         const errorText = await response.text();
-        console.error('❌ OpenAI API call failed - Status:', response.status);
-        console.error('❌ OpenAI API error response:', errorText);
-        
-        // Return a helpful error message instead of generic fallback
-        return {
-          response: "I'm having trouble connecting to our recommendation service right now, but I can still help! Could you ask me about WiFi passwords, parking instructions, check-in details, or be more specific about what type of recommendations you're looking for?",
-          shouldUpdateState: false
-        };
+        console.error('❌ OpenAI API call failed:', response.status, errorText);
+        throw new Error(`OpenAI API call failed: ${response.status}`);
       }
     } catch (error) {
-      console.error('❌ Exception in getOpenAIRecommendations:', error);
-      console.error('❌ Error type:', error.constructor.name);
-      console.error('❌ Error message:', error.message);
-      console.error('❌ Error stack:', error.stack);
+      console.error('❌ Error getting OpenAI recommendations:', error);
       
-      // Return a helpful error message instead of generic fallback
       return {
-        response: "I'm having trouble with my recommendation system right now. I can still help you with WiFi passwords, parking information, check-in details, and property amenities. What specific information do you need?",
+        response: "I'm having trouble connecting to our recommendation service right now. Please try again in a moment, or feel free to ask me about other aspects of your stay like WiFi, parking, or check-in details.",
         shouldUpdateState: false
       };
     }
