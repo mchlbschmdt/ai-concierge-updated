@@ -312,30 +312,48 @@ export type Database = {
       }
       sms_conversations: {
         Row: {
+          conversation_context: Json | null
           conversation_state: string
           created_at: string
           id: string
+          last_interaction_timestamp: string | null
+          last_message_type: string | null
+          last_recommendations: string | null
           phone_number: string
+          preferences: Json | null
           property_confirmed: boolean | null
           property_id: string | null
+          timezone: string | null
           updated_at: string
         }
         Insert: {
+          conversation_context?: Json | null
           conversation_state?: string
           created_at?: string
           id?: string
+          last_interaction_timestamp?: string | null
+          last_message_type?: string | null
+          last_recommendations?: string | null
           phone_number: string
+          preferences?: Json | null
           property_confirmed?: boolean | null
           property_id?: string | null
+          timezone?: string | null
           updated_at?: string
         }
         Update: {
+          conversation_context?: Json | null
           conversation_state?: string
           created_at?: string
           id?: string
+          last_interaction_timestamp?: string | null
+          last_message_type?: string | null
+          last_recommendations?: string | null
           phone_number?: string
+          preferences?: Json | null
           property_confirmed?: boolean | null
           property_id?: string | null
+          timezone?: string | null
           updated_at?: string
         }
         Relationships: []
