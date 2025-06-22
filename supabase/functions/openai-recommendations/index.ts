@@ -42,7 +42,7 @@ serve(async (req) => {
       );
     }
 
-    // Check if this is a follow-up question about previous recommendations
+    // Enhanced follow-up question detection
     const isFollowUpQuestion = checkIfFollowUpQuestion(prompt, previousRecommendations);
 
     // Build enhanced context-aware prompt
@@ -112,9 +112,10 @@ function checkIfFollowUpQuestion(prompt, previousRecommendations) {
   
   const followUpKeywords = [
     'walk to', 'walking', 'walkable', 'can i walk', 'how far',
-    'distance', 'drive to', 'driving', 'close', 'near',
-    'either of those', 'those places', 'them', 'it',
-    'the restaurant', 'the cafe', 'the spot'
+    'distance', 'drive to', 'driving', 'close', 'near', 'nearby',
+    'either of those', 'those places', 'them', 'it', 'any of them',
+    'the restaurant', 'the cafe', 'the spot', 'those spots',
+    'how long', 'minutes', 'blocks', 'far is', 'close is'
   ];
   
   const lowerPrompt = prompt.toLowerCase();
@@ -128,10 +129,16 @@ function getEnhancedSystemPrompt(isFollowUpQuestion = false) {
 FOLLOW-UP RESPONSE RULES (CRITICAL):
 - ONLY reference the places you previously recommended - DO NOT suggest new places
 - Answer the specific question about distance, walkability, or clarification
+- Always include distance in miles (e.g., "0.4 mi") for each place mentioned
 - Use these walkability guidelines:
-  • ≤ 0.5 mi: "easily walkable" or "just a short walk"
-  • 0.5–1.0 mi: "walkable, but a bit of a stroll" 
-  • > 1.0 mi: "better to drive or take rideshare"
+  • ≤ 0.5 mi: "easily walkable" 
+  • 0.5–1.0 mi: "walkable, but a bit of a stroll"
+  • > 1.0 mi: "best reached by car or Uber"
+
+RESPONSE FORMAT for multiple places:
+"Yes! [Place1] is [walkability] ([distance]); [Place2] is [walkability] ([distance])."
+
+Example: "Yes! Marmalade is easily walkable (0.4 mi); Cocina Abierta is walkable, but a bit of a stroll (0.6 mi)."
 
 SMS FORMAT REQUIREMENTS:
 - Keep under 160 characters total
@@ -139,7 +146,7 @@ SMS FORMAT REQUIREMENTS:
 - Reference the guest's context naturally
 - Use phrases like "Yes! Both spots I mentioned..." or "The places I recommended..."
 
-TONE: Warm, helpful, and focused on clarifying previous recommendations.`;
+TONE: Warm, helpful, and focused on clarifying previous recommendations only.`;
   }
 
   return `You are an expert local concierge with deep knowledge of high-quality establishments. Your mission is to provide hyper-relevant, location-based recommendations that guests will love.
@@ -175,7 +182,8 @@ function buildEnhancedPrompt(prompt, propertyAddress, guestContext, requestType,
   
   if (isFollowUpQuestion && previousRecommendations) {
     enhancedPrompt += `IMPORTANT: This is a follow-up question about these previously recommended places:\n"${previousRecommendations}"\n\n`;
-    enhancedPrompt += `DO NOT suggest new places. Only answer about the places already recommended.\n\n`;
+    enhancedPrompt += `DO NOT suggest new places. Only answer about the places already recommended.\n`;
+    enhancedPrompt += `Include distance in miles and walkability judgment for each place mentioned.\n\n`;
   }
   
   // Add property location context
@@ -203,7 +211,7 @@ function buildEnhancedPrompt(prompt, propertyAddress, guestContext, requestType,
   enhancedPrompt += `\nRequest Type: ${requestType || 'general'}\n`;
   
   if (isFollowUpQuestion) {
-    enhancedPrompt += `\nIMPORTANT: This is a follow-up question. Reference only the previously recommended places. Use walkability guidelines. Keep under 160 characters. Be conversational.`;
+    enhancedPrompt += `\nIMPORTANT: This is a follow-up question. Reference only the previously recommended places. Include distance and walkability for each. Use format: "Yes! [Place] is [walkability] ([distance])". Keep under 160 characters. Be conversational.`;
   } else {
     enhancedPrompt += `\nIMPORTANT: Provide 1-2 HIGH-QUALITY suggestions only. Include distance and star rating. Keep under 160 characters. Be conversational and reference their context.`;
   }
