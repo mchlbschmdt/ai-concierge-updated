@@ -1,6 +1,6 @@
 
 import React from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 import { Toaster } from "./components/ui/toaster";
 import ResetPassword from "./pages/ResetPassword";
@@ -23,6 +23,12 @@ export default function App() {
   return (
     <>
       <Routes>
+        <Route 
+          path="/" 
+          element={
+            currentUser ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />
+          } 
+        />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/register" element={<Register />} />
         <Route path="/login" element={<Login />} />
@@ -34,6 +40,7 @@ export default function App() {
             </PrivateRoute>
           }
         />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <Toaster />
     </>
