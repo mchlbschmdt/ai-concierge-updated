@@ -1,9 +1,25 @@
 
 import React from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { auth } from "../firebase";
+import { signOut } from "firebase/auth";
 import Sidebar from "./Sidebar";
 import Footer from "./Footer";
 
 export default function Layout({ children }) {
+  const navigate = useNavigate();
+  const { currentUser } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      navigate("/login");
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  };
+
   return (
     <div className="flex min-h-screen bg-slate-100">
       <Sidebar />
@@ -11,12 +27,11 @@ export default function Layout({ children }) {
         {/* App Bar/Header */}
         <header className="h-16 bg-gradient-to-r from-primary to-secondary border-b border-gray-200 px-8 flex items-center justify-between shadow-md">
           <div className="flex items-center gap-3">
-            {/* Modern Logo mark / gradient text */}
             <span className="text-3xl font-bold font-display text-white drop-shadow-sm">
-              <span className="sr-only">Hostly Ai Concierge</span>🏨
+              <span className="sr-only">Hostly AI Concierge</span>🏨
             </span>
             <h1 className="text-xl font-semibold font-display text-white tracking-tight">
-              Hostly Ai Concierge
+              Hostly AI Concierge
             </h1>
           </div>
           
@@ -28,9 +43,17 @@ export default function Layout({ children }) {
             </button>
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-white/20 text-white flex items-center justify-center">
-                <span>A</span>
+                <span>{currentUser?.email?.charAt(0)?.toUpperCase() || 'U'}</span>
               </div>
-              <span className="text-white text-sm hidden md:block">Admin</span>
+              <div className="hidden md:flex flex-col">
+                <span className="text-white text-sm">{currentUser?.email || 'User'}</span>
+                <button 
+                  onClick={handleLogout}
+                  className="text-white/80 hover:text-white text-xs text-left"
+                >
+                  Sign out
+                </button>
+              </div>
             </div>
           </div>
         </header>
