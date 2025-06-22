@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -248,11 +247,78 @@ class EnhancedSmsConversationService {
     // Location/recommendation requests
     if (this.matchesLocationKeywords(message)) {
       await this.updateConversationContext(conversation, 'recommendations');
-      return await this.getContextualRecommendations(property, originalMessage, conversation);
+      return await this.getEnhancedRecommendations(property, originalMessage, conversation);
     }
 
     // Default to contextual response
     return await this.getContextualRecommendations(property, `general: ${originalMessage}`, conversation);
+  }
+
+  async getEnhancedRecommendations(property, originalMessage, conversation) {
+    console.log(`🎯 Getting enhanced recommendations for: ${originalMessage}`);
+    
+    try {
+      const propertyAddress = property?.address || 'the property';
+      const propertyName = property?.property_name || 'your accommodation';
+      const context = conversation?.conversation_context || {};
+      
+      // Extract guest context for better recommendations
+      const guestContext = this.extractGuestContext(originalMessage, context, conversation);
+      const requestType = this.categorizeRequest(originalMessage);
+      
+      // Get previous recommendations for follow-up detection
+      const previousRecommendations = conversation?.last_recommendations || null;
+      
+      console.log('📍 Guest context extracted:', guestContext);
+      console.log('🏷️ Request type:', requestType);
+      console.log('📝 Previous recommendations:', previousRecommendations);
+
+      const enhancedPayload = {
+        prompt: originalMessage,
+        propertyAddress: `${propertyName}, ${propertyAddress}`,
+        guestContext: guestContext,
+        requestType: requestType,
+        previousRecommendations: previousRecommendations
+      };
+
+      const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+        },
+        body: JSON.stringify(enhancedPayload)
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Enhanced recommendations received');
+        
+        // Store recommendations and context for future use
+        await this.updateConversationState(conversation.phone_number, {
+          last_recommendations: data.recommendation,
+          conversation_context: {
+            ...context,
+            lastRecommendationType: requestType,
+            lastGuestContext: guestContext
+          }
+        });
+        
+        return {
+          response: this.ensureSmsLimit(data.recommendation),
+          shouldUpdateState: false
+        };
+      } else {
+        throw new Error(`Enhanced recommendations API failed: ${response.status}`);
+      }
+    } catch (error) {
+      console.error('❌ Error getting enhanced recommendations:', error);
+      
+      return {
+        response: "Having trouble with recommendations right now. Try again soon or ask about WiFi, parking, or check-in details.",
+        shouldUpdateState: false
+      };
+    }
   }
 
   async updateConversationContext(conversation, messageType) {
@@ -486,6 +552,43 @@ ${contextNote ? 'Reference previous interests naturally if relevant.' : ''}`;
       'things to do', 'attractions', 'activities', 'directions'
     ];
     return this.matchesAnyKeywords(message, keywords);
+  }
+
+  extractGuestContext(message, context, conversation) {
+    const askedAbout = context.askedAbout || [];
+    const lastMessage = conversation.last_message_type;
+    
+    if (lastMessage === 'recommendations') {
+      return message;
+    }
+
+    if (askedAbout.includes('wifi')) {
+      return message;
+    }
+
+    if (askedAbout.includes('parking')) {
+      return message;
+    }
+
+    return message;
+  }
+
+  categorizeRequest(message) {
+    const keywords = [
+      'wifi', 'wi-fi', 'internet', 'password', 'network',
+      'parking', 'park', 'car', 'garage',
+      'check in', 'check out', 'checkin', 'checkout',
+      'beach', 'restaurant', 'food', 'eat', 'dining', 'drink', 'bar',
+      'things to do', 'attractions', 'activities', 'directions'
+    ];
+
+    for (const keyword of keywords) {
+      if (message.toLowerCase().includes(keyword)) {
+        return keyword;
+      }
+    }
+
+    return 'general';
   }
 
   getWelcomeMessage() {

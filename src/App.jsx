@@ -1,10 +1,11 @@
+
 import React from "react";
 import { Routes, Route } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 import { Toaster } from "./components/ui/toaster";
 import ResetPassword from "./pages/ResetPassword";
 import Login from "./Login";
-import Dashboard from "./Dashboard";
+import Dashboard from "./pages/Dashboard";
 import ForgotPassword from "./ForgotPassword";
 import UpdateProfile from "./UpdateProfile";
 import Signup from "./Signup";
