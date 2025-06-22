@@ -1,5 +1,5 @@
 
-import { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 
 // Simple in-memory toast state
 let toastQueue = [];
@@ -38,7 +38,7 @@ export function useToast() {
     };
   }, []);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const unsubscribe = subscribe(setToasts);
     return unsubscribe;
   }, [subscribe]);
