@@ -13,6 +13,7 @@ export default function Login() {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
+  const [resetEmailSent, setResetEmailSent] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -49,27 +50,57 @@ export default function Login() {
 
   const handleForgotPassword = async (e) => {
     e.preventDefault();
+    
+    if (!resetEmail) {
+      toast({
+        variant: "destructive",
+        title: "Email required",
+        description: "Please enter your email address."
+      });
+      return;
+    }
+
     setResetLoading(true);
     
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+      console.log("Sending password reset email to:", resetEmail);
+      
+      const { data, error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
         redirectTo: `${window.location.origin}/reset-password`
       });
       
-      if (error) throw error;
+      console.log("Password reset response:", { data, error });
+      
+      if (error) {
+        console.error("Password reset error:", error);
+        throw error;
+      }
 
       toast({
         title: "Password reset email sent",
-        description: "Check your email for the password reset link."
+        description: "Check your email for the password reset link. If you don't see it, check your spam folder."
       });
-      setShowForgotPassword(false);
-      setResetEmail("");
+      
+      setResetEmailSent(true);
     } catch (err) {
       console.error("Password reset error:", err);
+      
+      let errorMessage = "Failed to send password reset email.";
+      
+      if (err.message?.includes("Email not confirmed")) {
+        errorMessage = "Please verify your email address first before resetting your password.";
+      } else if (err.message?.includes("User not found")) {
+        errorMessage = "No account found with this email address.";
+      } else if (err.message?.includes("Email rate limit")) {
+        errorMessage = "Too many reset attempts. Please wait before trying again.";
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
       toast({
         variant: "destructive",
         title: "Password reset failed",
-        description: err.message
+        description: errorMessage
       });
     } finally {
       setResetLoading(false);
@@ -77,6 +108,52 @@ export default function Login() {
   };
 
   if (showForgotPassword) {
+    if (resetEmailSent) {
+      return (
+        <div className="flex justify-center items-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+          <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md text-center">
+            <div className="mb-6">
+              <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Check Your Email</h2>
+              <p className="text-gray-600 mb-6">
+                We've sent a password reset link to <strong>{resetEmail}</strong>. 
+                Check your email and click the link to reset your password.
+              </p>
+              <p className="text-sm text-gray-500 mb-6">
+                Didn't receive the email? Check your spam folder or try again.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <button 
+                onClick={() => {
+                  setResetEmailSent(false);
+                  setResetEmail("");
+                }}
+                className="w-full text-blue-600 hover:text-blue-700 py-2 border border-blue-600 rounded-md hover:bg-blue-50 transition-colors"
+              >
+                Try Different Email
+              </button>
+              <button 
+                onClick={() => {
+                  setShowForgotPassword(false);
+                  setResetEmailSent(false);
+                  setResetEmail("");
+                }}
+                className="w-full text-gray-600 hover:text-gray-700 py-2"
+              >
+                Back to Login
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="flex justify-center items-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
         <form onSubmit={handleForgotPassword} className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">

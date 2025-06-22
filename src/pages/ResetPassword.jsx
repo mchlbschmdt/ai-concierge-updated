@@ -8,23 +8,56 @@ export default function ResetPassword() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [validToken, setValidToken] = useState(false);
+  const [checkingToken, setCheckingToken] = useState(true);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
-    // Check if we have the necessary tokens in the URL
-    const accessToken = searchParams.get('access_token');
-    const refreshToken = searchParams.get('refresh_token');
-    
-    if (accessToken && refreshToken) {
-      // Set the session with the tokens from the URL
-      supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken
-      });
-    }
-  }, [searchParams]);
+    const checkTokenValidity = async () => {
+      const accessToken = searchParams.get('access_token');
+      const refreshToken = searchParams.get('refresh_token');
+      const type = searchParams.get('type');
+      
+      console.log("Reset password tokens:", { accessToken: !!accessToken, refreshToken: !!refreshToken, type });
+      
+      if (!accessToken || !refreshToken || type !== 'recovery') {
+        console.log("Missing or invalid tokens for password reset");
+        setCheckingToken(false);
+        setValidToken(false);
+        return;
+      }
+
+      try {
+        // Set the session with the recovery tokens
+        const { data, error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken
+        });
+
+        if (error) {
+          console.error("Error setting recovery session:", error);
+          toast({
+            variant: "destructive",
+            title: "Invalid reset link",
+            description: "This password reset link is invalid or has expired. Please request a new one."
+          });
+          setValidToken(false);
+        } else {
+          console.log("Recovery session set successfully");
+          setValidToken(true);
+        }
+      } catch (err) {
+        console.error("Token validation error:", err);
+        setValidToken(false);
+      } finally {
+        setCheckingToken(false);
+      }
+    };
+
+    checkTokenValidity();
+  }, [searchParams, toast]);
 
   const handleResetPassword = async (e) => {
     e.preventDefault();
@@ -54,25 +87,67 @@ export default function ResetPassword() {
         password: password
       });
       
-      if (error) throw error;
+      if (error) {
+        console.error("Password update error:", error);
+        throw error;
+      }
 
       toast({
         title: "Password updated successfully",
         description: "You can now sign in with your new password."
       });
       
+      // Sign out to clear the recovery session
+      await supabase.auth.signOut();
       navigate("/login");
     } catch (err) {
       console.error("Password reset error:", err);
       toast({
         variant: "destructive",
         title: "Password reset failed",
-        description: err.message
+        description: err.message || "An error occurred while updating your password."
       });
     } finally {
       setLoading(false);
     }
   };
+
+  if (checkingToken) {
+    return (
+      <div className="flex justify-center items-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="bg-white p-8 rounded-lg shadow-xl">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="text-center mt-4 text-gray-600">Validating reset link...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!validToken) {
+    return (
+      <div className="flex justify-center items-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+        <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md text-center">
+          <div className="mb-6">
+            <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
+              <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Invalid Reset Link</h2>
+            <p className="text-gray-600 mb-6">
+              This password reset link is invalid or has expired. Please request a new password reset.
+            </p>
+            <button
+              onClick={() => navigate("/login")}
+              className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors"
+            >
+              Back to Login
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex justify-center items-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
