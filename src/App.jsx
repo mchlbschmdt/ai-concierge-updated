@@ -6,11 +6,8 @@ import { Toaster } from "./components/ui/toaster";
 import ResetPassword from "./pages/ResetPassword";
 import Login from "./Login";
 import Dashboard from "./pages/Dashboard";
-import ForgotPassword from "./ForgotPassword";
-import UpdateProfile from "./UpdateProfile";
-import Signup from "./Signup";
+import Register from "./Register";
 import PrivateRoute from "./PrivateRoute";
-import GmailLogin from "./GmailLogin";
 
 export default function App() {
   const { currentUser, loading } = useAuth();
@@ -27,23 +24,13 @@ export default function App() {
     <>
       <Routes>
         <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/signup" element={<Signup />} />
+        <Route path="/register" element={<Register />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/gmail-login" element={<GmailLogin />} />
         <Route
           path="/dashboard"
           element={
             <PrivateRoute>
               <Dashboard />
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/update-profile"
-          element={
-            <PrivateRoute>
-              <UpdateProfile />
             </PrivateRoute>
           }
         />
