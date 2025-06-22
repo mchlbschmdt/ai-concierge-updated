@@ -3,95 +3,28 @@ import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { useGmailAuth } from "../context/GmailAuthContext";
+import { supabase } from "../integrations/supabase/client";
 
 export default function GoogleOAuthButton() {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-  const { updateAuthState } = useGmailAuth();
 
-  // Function to handle Google OAuth
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     try {
-      // Get client ID from the environment or use a default for development
-      const clientId = "622389255458-bfl9jc9fl8mnd6v83pkoef6a6s6tvl5r.apps.googleusercontent.com";
-      const redirectUri = encodeURIComponent(window.location.origin + "/auth/google/callback");
-      const scope = encodeURIComponent("openid email profile https://www.googleapis.com/auth/gmail.readonly");
-      const responseType = "code";
-      const accessType = "offline";
-      const prompt = "consent";
-      
-      // Construct the OAuth URL
-      const oauthUrl = `https://accounts.google.com/o/oauth2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=${responseType}&scope=${scope}&access_type=${accessType}&prompt=${prompt}`;
-      
-      // Open the OAuth popup
-      const width = 600;
-      const height = 600;
-      const left = window.screenX + (window.outerWidth - width) / 2;
-      const top = window.screenY + (window.outerHeight - height) / 2;
-      
-      const authWindow = window.open(
-        oauthUrl,
-        'Google Authentication', 
-        `width=${width},height=${height},left=${left},top=${top}`
-      );
-      
-      if (!authWindow) {
-        toast({
-          title: "Popup Blocked",
-          description: "Please allow popups for this site to authenticate with Google",
-          variant: "destructive"
-        });
-        setIsLoading(false);
-        return;
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/dashboard`
+        }
+      });
+
+      if (error) {
+        throw error;
       }
-      
-      // Set up message listener for the OAuth callback
-      const handleAuthMessage = (event) => {
-        if (event.origin !== window.location.origin) return;
-        
-        if (event.data && event.data.type === 'google-auth') {
-          const { code, error } = event.data;
-          
-          if (code) {
-            toast({
-              title: "Authentication Successful",
-              description: "Successfully authenticated with Google"
-            });
-            
-            // Process token in a real implementation
-            console.log("Auth code received:", code);
-            
-            // For now, we'll mock a successful authentication
-            updateAuthState('user@gmail.com');
-            
-            // In a production app, you would send this code to your server or Supabase Edge Function
-            // to exchange for tokens and store them securely
-          } else if (error) {
-            toast({
-              title: "Authentication Failed",
-              description: error || "Failed to authenticate with Google",
-              variant: "destructive"
-            });
-          }
-          
-          window.removeEventListener('message', handleAuthMessage);
-          setIsLoading(false);
-        }
-      };
-      
-      window.addEventListener('message', handleAuthMessage);
-      
-      // Fallback if window is closed without completing auth
-      const checkWindowClosed = setInterval(() => {
-        if (authWindow.closed) {
-          clearInterval(checkWindowClosed);
-          window.removeEventListener('message', handleAuthMessage);
-          setIsLoading(false);
-        }
-      }, 500);
-      
+
+      // The user will be redirected to Google's consent screen
+      // After approval, they'll be redirected back to our app
     } catch (error) {
       console.error("Google authentication error:", error);
       toast({

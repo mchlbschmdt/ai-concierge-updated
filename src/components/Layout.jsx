@@ -2,21 +2,38 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { auth } from "../firebase";
-import { signOut } from "firebase/auth";
+import { useToast } from "@/components/ui/use-toast";
 import Sidebar from "./Sidebar";
 import Footer from "./Footer";
 
 export default function Layout({ children }) {
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
+  const { currentUser, signOut } = useAuth();
+  const { toast } = useToast();
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
-      navigate("/login");
+      const { error } = await signOut();
+      if (error) {
+        toast({
+          variant: "destructive",
+          title: "Logout Failed",
+          description: error.message
+        });
+      } else {
+        toast({
+          title: "Logged out successfully",
+          description: "See you next time!"
+        });
+        navigate("/login");
+      }
     } catch (error) {
       console.error("Error signing out:", error);
+      toast({
+        variant: "destructive",
+        title: "Logout Failed",
+        description: "An unexpected error occurred"
+      });
     }
   };
 

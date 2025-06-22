@@ -6,6 +6,7 @@ import { useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './Login';
 import Register from './Register';
+import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import Properties from './pages/Properties';
 import PropertyManager from './pages/PropertyManager';
@@ -17,7 +18,15 @@ import AddProperty from './pages/AddProperty';
 import './App.css';
 
 function App() {
-  const { currentUser } = useAuth();
+  const { currentUser, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -31,6 +40,7 @@ function App() {
           path="/register" 
           element={!currentUser ? <Register /> : <Navigate to="/dashboard" />} 
         />
+        <Route path="/reset-password" element={<ResetPassword />} />
         
         {/* Home route - redirect based on auth status */}
         <Route 
