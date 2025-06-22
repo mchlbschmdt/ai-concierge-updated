@@ -256,7 +256,7 @@ export class EnhancedSmsConversationService {
 
   // NEW: Handle specific inquiries with better context tracking
   async handleSpecificInquiry(conversation, property, message, originalMessage) {
-    console.log('Handling specific inquiry with context');
+    console.log('Handling specific inquiry with enhanced context');
 
     // Enhanced WiFi detection
     if (this.matchesAnyKeywords(message, [
@@ -312,21 +312,167 @@ export class EnhancedSmsConversationService {
       };
     }
 
-    // Location/recommendation requests - route to OpenAI with enhanced context
+    // Enhanced location/recommendation requests with context extraction
     if (this.matchesLocationOrRecommendationKeywords(message)) {
-      const result = await this.handleLocationOrRecommendationRequest(property, originalMessage, conversation);
+      const result = await this.getEnhancedRecommendations(property, originalMessage, conversation);
       return {
         ...result,
         messageType: 'recommendations'
       };
     }
 
-    // For any unmatched complex question, send to OpenAI
-    const result = await this.getOpenAIRecommendations(property, `general inquiry: ${originalMessage}`, conversation);
+    // For any unmatched complex question, send to enhanced AI
+    const result = await this.getEnhancedRecommendations(property, `general inquiry: ${originalMessage}`, conversation);
     return {
       ...result,
       messageType: 'general'
     };
+  }
+
+  // NEW: Enhanced recommendations with location context and quality filtering
+  async getEnhancedRecommendations(property, originalMessage, conversation) {
+    console.log(`🎯 Getting enhanced recommendations for: ${originalMessage}`);
+    
+    try {
+      const propertyAddress = property?.address || 'the property';
+      const propertyName = property?.property_name || 'your accommodation';
+      const context = conversation?.conversation_context || {};
+      
+      // Extract guest context for better recommendations
+      const guestContext = this.extractGuestContext(originalMessage, context, conversation);
+      const requestType = this.categorizeRequest(originalMessage);
+      
+      console.log('📍 Guest context extracted:', guestContext);
+      console.log('🏷️ Request type:', requestType);
+
+      const enhancedPayload = {
+        prompt: originalMessage,
+        propertyAddress: `${propertyName}, ${propertyAddress}`,
+        guestContext: guestContext,
+        requestType: requestType
+      };
+
+      const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+        },
+        body: JSON.stringify(enhancedPayload)
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Enhanced recommendations received');
+        
+        // Store recommendations and context for future use
+        await this.updateConversationState(conversation.phone_number, {
+          last_recommendations: data.recommendation,
+          conversation_context: {
+            ...context,
+            lastRecommendationType: requestType,
+            lastGuestContext: guestContext
+          }
+        });
+        
+        return {
+          response: this.ensureSmsLimit(data.recommendation),
+          shouldUpdateState: false
+        };
+      } else {
+        throw new Error(`Enhanced recommendations API failed: ${response.status}`);
+      }
+    } catch (error) {
+      console.error('❌ Error getting enhanced recommendations:', error);
+      
+      return {
+        response: "Having trouble with recommendations right now. Try again soon or ask about WiFi, parking, or check-in details.",
+        shouldUpdateState: false
+      };
+    }
+  }
+
+  // NEW: Extract guest context from message and conversation history
+  extractGuestContext(message, conversationContext, conversation) {
+    const context = {
+      currentLocation: null,
+      timeOfDay: this.getTimeOfDay(),
+      transportMode: null,
+      previousAskedAbout: conversationContext.askedAbout || []
+    };
+
+    // Extract location references from message
+    const locationKeywords = [
+      'at', 'near', 'by', 'around', 'close to', 'walking from', 'driving from',
+      'plaza', 'beach', 'fort', 'airport', 'hotel', 'restaurant'
+    ];
+    
+    const lowerMessage = message.toLowerCase();
+    for (const keyword of locationKeywords) {
+      if (lowerMessage.includes(keyword)) {
+        // Try to extract the location after the keyword
+        const keywordIndex = lowerMessage.indexOf(keyword);
+        const afterKeyword = message.substring(keywordIndex + keyword.length).trim();
+        const locationMatch = afterKeyword.split(/[,.\s]/)[0];
+        if (locationMatch && locationMatch.length > 2) {
+          context.currentLocation = locationMatch;
+          break;
+        }
+      }
+    }
+
+    // Detect transport mode
+    if (this.matchesAnyKeywords(lowerMessage, ['walking', 'walk', 'on foot'])) {
+      context.transportMode = 'walking';
+    } else if (this.matchesAnyKeywords(lowerMessage, ['driving', 'car', 'uber', 'taxi'])) {
+      context.transportMode = 'driving';
+    }
+
+    // Use property address as fallback location
+    if (!context.currentLocation && conversation.property_id) {
+      context.currentLocation = 'property';
+    }
+
+    return context;
+  }
+
+  // NEW: Categorize the type of request for better context
+  categorizeRequest(message) {
+    const lowerMessage = message.toLowerCase();
+    
+    if (this.matchesAnyKeywords(lowerMessage, ['restaurant', 'food', 'eat', 'dining', 'lunch', 'dinner', 'breakfast'])) {
+      return 'dining';
+    }
+    if (this.matchesAnyKeywords(lowerMessage, ['beach', 'ocean', 'swimming', 'sand'])) {
+      return 'beach';
+    }
+    if (this.matchesAnyKeywords(lowerMessage, ['drink', 'bar', 'cocktail', 'beer', 'wine', 'nightlife'])) {
+      return 'nightlife';
+    }
+    if (this.matchesAnyKeywords(lowerMessage, ['coffee', 'cafe', 'espresso', 'cappuccino'])) {
+      return 'coffee';
+    }
+    if (this.matchesAnyKeywords(lowerMessage, ['shop', 'shopping', 'store', 'mall', 'market'])) {
+      return 'shopping';
+    }
+    if (this.matchesAnyKeywords(lowerMessage, ['things to do', 'attractions', 'activities', 'sightseeing', 'tour'])) {
+      return 'attractions';
+    }
+    if (this.matchesAnyKeywords(lowerMessage, ['directions', 'how to get', 'where is', 'location'])) {
+      return 'directions';
+    }
+    
+    return 'general';
+  }
+
+  // NEW: Get current time of day for context
+  getTimeOfDay() {
+    const hour = new Date().getHours();
+    if (hour >= 6 && hour < 11) return 'morning';
+    if (hour >= 11 && hour < 14) return 'lunch';
+    if (hour >= 14 && hour < 17) return 'afternoon';
+    if (hour >= 17 && hour < 21) return 'evening';
+    return 'night';
   }
 
   // NEW: Update conversation context for continuity
@@ -601,10 +747,12 @@ Focus on what they\'re asking about. End with a brief offer to help more.`;
     return keywords.some(keyword => lowerMessage.includes(keyword.toLowerCase()));
   }
 
+  // Enhanced location keyword matching
   matchesLocationOrRecommendationKeywords(message) {
     const locationKeywords = [
       'beach', 'beaches', 'restaurant', 'food', 'eat', 'dining', 'drink', 'bar',
-      'things to do', 'attractions', 'activities', 'directions', 'near', 'close to'
+      'coffee', 'things to do', 'attractions', 'activities', 'directions', 'near', 'close to',
+      'shopping', 'shop', 'mall', 'market', 'nightlife', 'cocktail', 'where'
     ];
     return this.matchesAnyKeywords(message, locationKeywords);
   }
