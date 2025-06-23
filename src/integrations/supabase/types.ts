@@ -62,6 +62,50 @@ export type Database = {
         }
         Relationships: []
       }
+      curated_links: {
+        Row: {
+          category: string
+          created_at: string
+          description: string | null
+          id: string
+          location_id: string
+          title: string
+          updated_at: string
+          url: string | null
+          weight: number | null
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          location_id: string
+          title: string
+          updated_at?: string
+          url?: string | null
+          weight?: number | null
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          location_id?: string
+          title?: string
+          updated_at?: string
+          url?: string | null
+          weight?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "curated_links_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       file_uploads: {
         Row: {
           created_at: string
@@ -146,6 +190,36 @@ export type Database = {
           message?: string
           response?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      locations: {
+        Row: {
+          city: string
+          created_at: string
+          id: string
+          lat: number | null
+          lon: number | null
+          state: string
+          zip: string | null
+        }
+        Insert: {
+          city: string
+          created_at?: string
+          id?: string
+          lat?: number | null
+          lon?: number | null
+          state: string
+          zip?: string | null
+        }
+        Update: {
+          city?: string
+          created_at?: string
+          id?: string
+          lat?: number | null
+          lon?: number | null
+          state?: string
+          zip?: string | null
         }
         Relationships: []
       }
@@ -469,6 +543,85 @@ export type Database = {
         }
         Relationships: []
       }
+      travel_conversations: {
+        Row: {
+          created_at: string
+          id: string
+          location_id: string | null
+          location_json: Json | null
+          name: string | null
+          phone_number: string
+          preferences_json: Json | null
+          step: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          location_id?: string | null
+          location_json?: Json | null
+          name?: string | null
+          phone_number: string
+          preferences_json?: Json | null
+          step?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          location_id?: string | null
+          location_json?: Json | null
+          name?: string | null
+          phone_number?: string
+          preferences_json?: Json | null
+          step?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "travel_conversations_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      travel_messages: {
+        Row: {
+          body: string
+          conversation_id: string
+          created_at: string
+          id: string
+          intent_tag: string | null
+          role: string
+        }
+        Insert: {
+          body: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          intent_tag?: string | null
+          role: string
+        }
+        Update: {
+          body?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          intent_tag?: string | null
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "travel_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "travel_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       common_questions_analytics: {
@@ -493,6 +646,28 @@ export type Database = {
     Functions: {
       hash_security_answer: {
         Args: { answer: string }
+        Returns: string
+      }
+      rpc_get_curated_links: {
+        Args: { _location_id: string; _categories?: string[] }
+        Returns: {
+          id: string
+          category: string
+          title: string
+          description: string
+          url: string
+          weight: number
+        }[]
+      }
+      rpc_upsert_travel_conversation: {
+        Args: {
+          _phone_number: string
+          _name?: string
+          _location_id?: string
+          _location_json?: Json
+          _preferences_json?: Json
+          _step?: string
+        }
         Returns: string
       }
     }
