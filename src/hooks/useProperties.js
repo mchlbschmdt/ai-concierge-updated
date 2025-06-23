@@ -75,11 +75,12 @@ export function useProperties() {
 
   const handlePropertyUpdate = useCallback(async (propertyId, updatedData) => {
     try {
-      await updateProperty(propertyId, updatedData);
+      console.log("Updating property in hook:", propertyId, updatedData);
+      const result = await updateProperty(propertyId, updatedData);
       
-      // Update both local state and cache
+      // Update both local state and cache with the returned data
       const updatedProperties = properties.map(p => 
-        p.id === propertyId ? { ...p, ...updatedData } : p
+        p.id === propertyId ? { ...p, ...result.property } : p
       );
       setProperties(updatedProperties);
       propertiesCache = updatedProperties;
@@ -88,6 +89,8 @@ export function useProperties() {
         title: "Success",
         description: "Property updated successfully"
       });
+      
+      return result;
     } catch (error) {
       console.error("Error updating property:", error);
       toast({

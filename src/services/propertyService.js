@@ -1,3 +1,4 @@
+
 import { supabase } from '../integrations/supabase/client';
 
 export async function fetchProperties() {
@@ -21,20 +22,46 @@ export async function fetchProperties() {
 
 export async function updateProperty(propertyId, propertyData) {
   try {
-    const { error } = await supabase
+    console.log("Updating property with data:", propertyData);
+    
+    // Ensure all fields are included in the update
+    const updateData = {
+      property_name: propertyData.property_name,
+      address: propertyData.address,
+      code: propertyData.code,
+      check_in_time: propertyData.check_in_time,
+      check_out_time: propertyData.check_out_time,
+      wifi_name: propertyData.wifi_name,
+      wifi_password: propertyData.wifi_password,
+      access_instructions: propertyData.access_instructions,
+      directions_to_property: propertyData.directions_to_property,
+      parking_instructions: propertyData.parking_instructions,
+      emergency_contact: propertyData.emergency_contact,
+      house_rules: propertyData.house_rules,
+      amenities: propertyData.amenities,
+      local_recommendations: propertyData.local_recommendations,
+      cleaning_instructions: propertyData.cleaning_instructions,
+      special_notes: propertyData.special_notes,
+      knowledge_base: propertyData.knowledge_base,
+      updated_at: new Date().toISOString()
+    };
+    
+    console.log("Final update data:", updateData);
+    
+    const { data, error } = await supabase
       .from('properties')
-      .update({
-        ...propertyData,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', propertyId);
+      .update(updateData)
+      .eq('id', propertyId)
+      .select()
+      .single();
     
     if (error) {
       console.error("Update error:", error);
       throw new Error(`Failed to update: ${error.message}`);
     }
     
-    return { success: true };
+    console.log("Property updated successfully:", data);
+    return { success: true, property: data };
   } catch (error) {
     console.error("Error in updateProperty:", error);
     throw error;
@@ -75,8 +102,18 @@ export async function addProperty(propertyData) {
       address: propertyData.address,
       check_in_time: propertyData.check_in_time || '4:00 PM',
       check_out_time: propertyData.check_out_time || '11:00 AM',
-      knowledge_base: propertyData.knowledge_base || '',
+      wifi_name: propertyData.wifi_name || '',
+      wifi_password: propertyData.wifi_password || '',
+      access_instructions: propertyData.access_instructions || '',
+      directions_to_property: propertyData.directions_to_property || '',
+      parking_instructions: propertyData.parking_instructions || '',
+      emergency_contact: propertyData.emergency_contact || '',
+      house_rules: propertyData.house_rules || '',
+      amenities: propertyData.amenities || '[]',
       local_recommendations: propertyData.local_recommendations || '',
+      cleaning_instructions: propertyData.cleaning_instructions || '',
+      special_notes: propertyData.special_notes || '',
+      knowledge_base: propertyData.knowledge_base || '',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
