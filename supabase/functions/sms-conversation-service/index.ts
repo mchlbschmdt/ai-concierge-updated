@@ -103,31 +103,32 @@ class EnhancedSmsConversationService {
     }
   }
 
-  getPersonalizedFoodGreeting(message, greeting) {
+  getPersonalizedFoodGreeting(message, greeting, guestName = null) {
     const lowerMessage = message.toLowerCase();
+    const nameToUse = guestName ? `, ${guestName}` : '';
     
     if (this.matchesAnyKeywords(lowerMessage, ['food now', 'hungry', 'eat now', 'dinner now', 'lunch now'])) {
       const urgentPhrases = [
-        `${greeting}! Hungry now? I've got you covered 🙂`,
-        `${greeting}! Ready for a bite? Happy to help 🙂`,
-        `${greeting}! Looks like you're ready for a bite—happy to help 🙂`
+        `${greeting}${nameToUse}! Hungry now? I've got you covered 🙂`,
+        `${greeting}${nameToUse}! Ready for a bite? Happy to help 🙂`,
+        `${greeting}${nameToUse}! Looks like you're ready for a bite—happy to help 🙂`
       ];
       return urgentPhrases[Math.floor(Math.random() * urgentPhrases.length)];
     }
     
     if (this.matchesAnyKeywords(lowerMessage, ['restaurant', 'food', 'eat', 'dining'])) {
-      return `${greeting}! Looking for somewhere great to eat? I've got some perfect spots for you 🙂`;
+      return `${greeting}${nameToUse}! Looking for somewhere great to eat? I've got some perfect spots for you 🙂`;
     }
     
     if (this.matchesAnyKeywords(lowerMessage, ['drink', 'bar', 'cocktail', 'beer'])) {
-      return `${greeting}! Ready for drinks? I know some fantastic spots 🙂`;
+      return `${greeting}${nameToUse}! Ready for drinks? I know some fantastic spots 🙂`;
     }
     
     if (this.matchesAnyKeywords(lowerMessage, ['coffee', 'cafe'])) {
-      return `${greeting}! Need your coffee fix? I've got great recommendations 🙂`;
+      return `${greeting}${nameToUse}! Need your coffee fix? I've got great recommendations 🙂`;
     }
     
-    return `${greeting}! I'd love to help with recommendations 🙂`;
+    return `${greeting}${nameToUse}! I'd love to help with recommendations 🙂`;
   }
 
   getClarifyingQuestion(message) {
@@ -202,6 +203,34 @@ class EnhancedSmsConversationService {
     return "";
   }
 
+  checkIfNameProvided(message, conversation) {
+    // Skip name capture if already confirmed or still getting property ID
+    if (conversation.conversation_state !== 'confirmed' || conversation.conversation_context?.guest_name) {
+      return { hasName: true, extractedName: conversation.conversation_context?.guest_name };
+    }
+
+    // Check if message contains a name pattern
+    const namePatterns = [
+      /^(my name is|i'm|i am|call me) (\w+)/i,
+      /^(\w+)$/,  // Single word response
+      /^hi,? (my name is|i'm|i am) (\w+)/i
+    ];
+
+    for (const pattern of namePatterns) {
+      const match = message.trim().match(pattern);
+      if (match) {
+        const name = match[2] || match[1];
+        // Exclude common non-name responses
+        const excludeWords = ['yes', 'no', 'ok', 'okay', 'sure', 'thanks', 'hello', 'hi', 'hey'];
+        if (!excludeWords.includes(name.toLowerCase()) && name.length > 1) {
+          return { hasName: true, extractedName: name };
+        }
+      }
+    }
+
+    return { hasName: false, extractedName: null };
+  }
+
   async processMessage(phoneNumber, messageBody) {
     console.log('=== PROCESSING ENHANCED MESSAGE ===');
     console.log('Phone:', phoneNumber);
@@ -251,21 +280,53 @@ class EnhancedSmsConversationService {
     const property = await this.getPropertyInfo(conversation.property_id);
     const message = messageBody.trim().toLowerCase();
     const greeting = this.getTimeAwareGreeting(conversation.timezone || 'UTC');
+    const guestName = conversation.conversation_context?.guest_name;
     
     const isGreeting = this.matchesAnyKeywords(message, [
       'hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening'
     ]);
 
+    // Check if we need to capture the guest's name
+    const nameCheck = this.checkIfNameProvided(messageBody, conversation);
+    
+    if (!nameCheck.hasName && !isGreeting && !this.matchesLocationKeywords(message) && 
+        !this.matchesServiceKeywords(message)) {
+      // Ask for name with time-aware greeting
+      const nameRequest = `${greeting}! Happy to help 🙂 Before we dive in, what's your name so I can assist you more personally?`;
+      return {
+        response: this.ensureSmsLimit(nameRequest),
+        shouldUpdateState: false
+      };
+    }
+
+    // If name was just provided, store it and continue
+    if (nameCheck.extractedName && !guestName) {
+      await this.updateConversationState(conversation.phone_number, {
+        conversation_context: {
+          ...conversation.conversation_context,
+          guest_name: nameCheck.extractedName
+        }
+      });
+      
+      const welcomeWithName = `Nice to meet you, ${nameCheck.extractedName}! How can I help with your stay?`;
+      return {
+        response: this.ensureSmsLimit(welcomeWithName),
+        shouldUpdateState: false
+      };
+    }
+
     const contextualFollowUp = this.generateContextualFollowUp(conversation);
 
     if (isGreeting && isPaused) {
-      let response = `${greeting}! Welcome back! ${contextualFollowUp}How can I help?`;
+      const nameToUse = guestName ? `, ${guestName}` : '';
+      let response = `${greeting}${nameToUse}! Welcome back! ${contextualFollowUp}How can I help?`;
       return {
         response: this.ensureSmsLimit(response),
         shouldUpdateState: false
       };
     } else if (isGreeting) {
-      let response = `${greeting}! How can I help with your stay?`;
+      const nameToUse = guestName ? `, ${guestName}` : '';
+      let response = `${greeting}${nameToUse}! How can I help with your stay?`;
       return {
         response: this.ensureSmsLimit(response),
         shouldUpdateState: false
@@ -275,11 +336,23 @@ class EnhancedSmsConversationService {
     return await this.handleSpecificInquiry(conversation, property, message, messageBody);
   }
 
+  matchesServiceKeywords(message) {
+    const serviceKeywords = [
+      'wifi', 'wi-fi', 'internet', 'password', 'network',
+      'parking', 'park', 'car', 'garage',
+      'check in', 'check out', 'checkin', 'checkout'
+    ];
+    return this.matchesAnyKeywords(message, serviceKeywords);
+  }
+
   async handleSpecificInquiry(conversation, property, message, originalMessage) {
+    const guestName = conversation.conversation_context?.guest_name;
+
     // WiFi requests
     if (this.matchesAnyKeywords(message, ['wifi', 'wi-fi', 'internet', 'password', 'network'])) {
       if (property?.wifi_name && property?.wifi_password) {
-        const response = `WiFi: ${property.wifi_name}\nPassword: ${property.wifi_password}\n\nAnything else?`;
+        const nameToUse = guestName ? `, ${guestName}` : '';
+        const response = `Here you go${nameToUse}!\n\nWiFi: ${property.wifi_name}\nPassword: ${property.wifi_password}\n\nAnything else?`;
         await this.updateConversationContext(conversation, 'wifi');
         return {
           response: this.ensureSmsLimit(response),
@@ -297,8 +370,9 @@ class EnhancedSmsConversationService {
     if (this.matchesAnyKeywords(message, ['parking', 'park', 'car', 'garage'])) {
       if (property?.parking_instructions) {
         await this.updateConversationContext(conversation, 'parking');
+        const nameToUse = guestName ? `, ${guestName}` : '';
         return {
-          response: this.ensureSmsLimit(property.parking_instructions + "\n\nOther questions?"),
+          response: this.ensureSmsLimit(property.parking_instructions + `\n\nOther questions${nameToUse}?`),
           shouldUpdateState: false
         };
       } else {
@@ -313,7 +387,8 @@ class EnhancedSmsConversationService {
     if (this.matchesAnyKeywords(message, ['check in', 'check out', 'checkin', 'checkout'])) {
       const checkIn = property?.check_in_time || '4:00 PM';
       const checkOut = property?.check_out_time || '11:00 AM';
-      const response = `Check-in: ${checkIn}\nCheck-out: ${checkOut}\n\nAnything else?`;
+      const nameToUse = guestName ? `, ${guestName}` : '';
+      const response = `Check-in: ${checkIn}\nCheck-out: ${checkOut}\n\nAnything else${nameToUse}?`;
       return {
         response: this.ensureSmsLimit(response),
         shouldUpdateState: false
@@ -338,10 +413,11 @@ class EnhancedSmsConversationService {
       const propertyName = property?.property_name || 'your accommodation';
       const context = conversation?.conversation_context || {};
       const timezone = conversation?.timezone || 'UTC';
+      const guestName = context?.guest_name;
       
       // Get time-aware greeting and personalized opener
       const greeting = this.getTimeAwareGreeting(timezone);
-      const personalizedGreeting = this.getPersonalizedFoodGreeting(originalMessage, greeting);
+      const personalizedGreeting = this.getPersonalizedFoodGreeting(originalMessage, greeting, guestName);
       const clarifyingQuestion = this.getClarifyingQuestion(originalMessage);
       const helpfulOffer = this.getHelpfulOffer(this.categorizeRequest(originalMessage));
       
@@ -441,17 +517,21 @@ CRITICAL REQUIREMENTS:
       const propertyAddress = property?.address || 'the property';
       const context = conversation?.conversation_context || {};
       const previousAskedAbout = context.askedAbout || [];
+      const guestName = context?.guest_name;
       
       let contextNote = '';
       if (previousAskedAbout.length > 0) {
         contextNote = `Guest previously asked about: ${previousAskedAbout.join(', ')}. `;
       }
 
-      const prompt = `You are a local concierge. Guest at ${propertyName}, ${propertyAddress}. ${contextNote}Request: ${type}
+      const guestNameNote = guestName ? `Guest's name is ${guestName}. ` : '';
+
+      const prompt = `You are a local concierge. Guest at ${propertyName}, ${propertyAddress}. ${guestNameNote}${contextNote}Request: ${type}
 
 CRITICAL: Response must be under 160 characters for SMS. Be warm and conversational. If recommendations don't fit, give 1-2 best options briefly.
 
-${contextNote ? 'Reference previous interests naturally if relevant.' : ''}`;
+${contextNote ? 'Reference previous interests naturally if relevant.' : ''}
+${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}`;
 
       const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
         method: 'POST',
@@ -708,7 +788,7 @@ serve(async (req) => {
       JSON.stringify({ 
         status: 'healthy', 
         service: 'enhanced-sms-conversation-service',
-        features: ['continuity', 'personalization', 'time-awareness', 'friendly-format'],
+        features: ['continuity', 'personalization', 'time-awareness', 'friendly-format', 'name-capture'],
         timestamp: new Date().toISOString()
       }),
       {
@@ -787,4 +867,4 @@ serve(async (req) => {
   )
 })
 
-console.log("Enhanced SMS Conversation Service is ready with friendly, time-aware recommendation format")
+console.log("Enhanced SMS Conversation Service is ready with friendly, time-aware recommendation format and name capture")
