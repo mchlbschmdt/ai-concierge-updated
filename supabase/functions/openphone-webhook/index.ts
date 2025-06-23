@@ -389,19 +389,37 @@ serve(async (req) => {
                 const result = await processResponse.json();
                 console.log('✅ Conversation service result:', result);
                 
-                if (result && result.response) {
-                  console.log('💬 Generated response:', result.response);
+                // NEW: Handle both old format (result.response) and new format (result.messages)
+                let responseMessages = [];
+                
+                if (result.messages && Array.isArray(result.messages)) {
+                  // New format: array of message segments
+                  responseMessages = result.messages;
+                  console.log('📱 Using new multi-message format, segments:', responseMessages.length);
+                } else if (result.response) {
+                  // Old format: single response string
+                  responseMessages = [result.response];
+                  console.log('📱 Using legacy single-message format');
+                } else {
+                  console.log('❌ No valid response format found in result');
+                  responseMessages = [];
+                }
+                
+                if (responseMessages.length > 0) {
+                  console.log('💬 Generated response messages:', responseMessages.length);
                   
                   // ALWAYS store the bot response first, regardless of SMS sending success
                   if (smsConversation) {
                     try {
+                      // Store all message segments as a single response
+                      const fullResponse = responseMessages.join(' ');
                       const { error: botStoreError } = await supabase
                         .from('sms_conversation_messages')
                         .insert({
                           id: crypto.randomUUID(),
                           sms_conversation_id: smsConversation.id,
                           role: 'assistant',
-                          content: result.response,
+                          content: fullResponse,
                           timestamp: new Date().toISOString()
                         });
                         
@@ -415,34 +433,56 @@ serve(async (req) => {
                     }
                   }
                   
-                  // Now attempt to send the SMS response
+                  // Now attempt to send the SMS response(s)
                   if (apiKey && apiKey.trim().length > 0) {
-                    console.log('📤 Attempting to send SMS response...');
+                    console.log('📤 Attempting to send SMS responses...');
                     
-                    const smsResult = await sendSmsResponse(apiKey, message.from, message.to, result.response);
+                    // Send each message segment with a small delay between them
+                    let allSent = true;
+                    let lastError = null;
                     
-                    if (smsResult.success) {
-                      console.log('✅ ✅ AUTOMATED RESPONSE SENT SUCCESSFULLY! ✅ ✅');
-                    } else {
-                      console.error('❌ ❌ FAILED TO SEND AUTOMATED RESPONSE ❌ ❌');
-                      console.error('Error:', smsResult.error);
-                      console.error('Status:', smsResult.status);
-                      console.error('Details:', smsResult.details);
+                    for (let i = 0; i < responseMessages.length; i++) {
+                      const messageSegment = responseMessages[i];
+                      console.log(`📤 Sending segment ${i + 1}/${responseMessages.length}:`, messageSegment.substring(0, 50) + '...');
                       
-                      // Fixed error handling - properly check error properties
-                      const errorMessage = typeof smsResult.error === 'string' 
-                        ? smsResult.error 
-                        : smsResult.error?.message || JSON.stringify(smsResult.error);
+                      const smsResult = await sendSmsResponse(apiKey, message.from, message.to, messageSegment);
+                      
+                      if (smsResult.success) {
+                        console.log(`✅ Segment ${i + 1} sent successfully`);
+                        
+                        // Add a small delay between messages to avoid rate limiting
+                        if (i < responseMessages.length - 1) {
+                          await new Promise(resolve => setTimeout(resolve, 1000));
+                        }
+                      } else {
+                        console.error(`❌ Failed to send segment ${i + 1}:`, smsResult.error);
+                        allSent = false;
+                        lastError = smsResult;
+                        break; // Stop sending if one fails
+                      }
+                    }
+                    
+                    if (allSent) {
+                      console.log('✅ ✅ ALL SMS SEGMENTS SENT SUCCESSFULLY! ✅ ✅');
+                    } else {
+                      console.error('❌ ❌ FAILED TO SEND ALL SMS SEGMENTS ❌ ❌');
+                      console.error('Last error:', lastError?.error);
+                      console.error('Status:', lastError?.status);
+                      console.error('Details:', lastError?.details);
                       
                       // Log specific guidance based on error type
+                      const errorMessage = typeof lastError?.error === 'string' 
+                        ? lastError.error 
+                        : lastError?.error?.message || JSON.stringify(lastError?.error);
+                      
                       if (errorMessage.includes('invalid') || errorMessage.includes('expired')) {
                         console.error('🔑 ACTION REQUIRED: Update the OPENPHONE_API_KEY secret in Supabase');
                         console.error('🔍 Go to: Supabase Dashboard > Settings > Edge Functions > Secrets');
                         console.error('🔍 Check your OpenPhone account for a valid API key');
-                      } else if (smsResult.status === 403) {
+                      } else if (lastError?.status === 403) {
                         console.error('🚫 ACTION REQUIRED: API key lacks SMS sending permissions');
                         console.error('🔍 Check your OpenPhone account permissions and plan');
-                      } else if (smsResult.status === 402) {
+                      } else if (lastError?.status === 402) {
                         console.error('💳 ACTION REQUIRED: OpenPhone account has insufficient credits');
                         console.error('🔍 Add credits to your OpenPhone account to send SMS messages');
                         console.error('🔍 Go to: OpenPhone Dashboard > Billing > Add Credits');
@@ -454,7 +494,7 @@ serve(async (req) => {
                     console.error('🔍 Go to: Supabase Dashboard > Settings > Edge Functions > Secrets');
                   }
                 } else {
-                  console.log('❌ No response generated from conversation service');
+                  console.log('❌ No response messages generated from conversation service');
                 }
               } else {
                 console.error('❌ Error from conversation service:', await processResponse.text());
