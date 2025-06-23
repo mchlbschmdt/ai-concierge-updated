@@ -38,6 +38,7 @@ const handler = async (req: Request): Promise<Response> => {
     const { to, subject, type, token, confirmationUrl, resetUrl, magicLinkUrl }: AuthEmailRequest = await req.json();
     
     console.log(`Sending ${type} email to:`, to);
+    console.log("Email send initiated at:", new Date().toISOString());
 
     let html = "";
     
@@ -143,18 +144,45 @@ const handler = async (req: Request): Promise<Response> => {
         throw new Error(`Unknown email type: ${type}`);
     }
 
-    const emailResponse = await resend.emails.send({
-      from: "Hostly AI Concierge <noreply@resend.dev>",
+    // Enhanced email configuration for better deliverability
+    const emailConfig = {
+      from: "Hostly AI Concierge <noreply@hostlyai.com>", // Will fall back to resend.dev if custom domain not set up
       to: [to],
       subject: subject,
       html: html,
+      headers: {
+        'X-Priority': '1',
+        'X-MSMail-Priority': 'High',
+        'Importance': 'high',
+        'X-Mailer': 'Hostly AI Concierge',
+      },
+      tags: [
+        { name: 'category', value: 'auth' },
+        { name: 'type', value: type }
+      ]
+    };
+
+    console.log("Sending email with config:", {
+      from: emailConfig.from,
+      to: emailConfig.to,
+      subject: emailConfig.subject,
+      type: type,
+      timestamp: new Date().toISOString()
     });
 
-    console.log("Email sent successfully:", emailResponse);
+    const emailResponse = await resend.emails.send(emailConfig);
+
+    console.log("Email sent successfully:", {
+      messageId: emailResponse.data?.id,
+      timestamp: new Date().toISOString(),
+      response: emailResponse
+    });
 
     return new Response(JSON.stringify({ 
       success: true, 
-      messageId: emailResponse.data?.id 
+      messageId: emailResponse.data?.id,
+      sentAt: new Date().toISOString(),
+      type: type
     }), {
       status: 200,
       headers: {
@@ -164,11 +192,16 @@ const handler = async (req: Request): Promise<Response> => {
     });
     
   } catch (error: any) {
-    console.error("Error sending auth email:", error);
+    console.error("Error sending auth email:", {
+      error: error.message,
+      stack: error.stack,
+      timestamp: new Date().toISOString()
+    });
     
     return new Response(JSON.stringify({ 
       error: error.message,
-      success: false 
+      success: false,
+      timestamp: new Date().toISOString()
     }), {
       status: 500,
       headers: { 

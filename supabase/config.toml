@@ -1,8 +1,4 @@
 
-# This file configures your Supabase Edge functions.
-# For more details, refer to the docs at:
-# https://supabase.com/docs/guides/functions/config
-
 zutwyyepahbbvrcbsbke = "zutwyyepahbbvrcbsbke"
 
 [functions.health-check]
@@ -36,4 +32,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.google-auth]
+verify_jwt = false
+
+[functions.resend-webhook]
 verify_jwt = false

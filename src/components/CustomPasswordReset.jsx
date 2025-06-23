@@ -3,9 +3,11 @@ import { useState } from "react";
 import { supabase } from "../integrations/supabase/client";
 import { useToast } from "./ui/use-toast";
 import { Button } from "./ui/button";
+import EmailDeliveryStatus from "./EmailDeliveryStatus";
 
 export default function CustomPasswordReset({ resetEmail, onEmailSent, onBack }) {
   const [loading, setLoading] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
   const { toast } = useToast();
 
   const handleCustomPasswordReset = async () => {
@@ -22,6 +24,7 @@ export default function CustomPasswordReset({ resetEmail, onEmailSent, onBack })
     
     try {
       console.log("Sending custom password reset email to:", resetEmail);
+      console.log("Password reset initiated at:", new Date().toISOString());
       
       // First, initiate the password reset with Supabase
       const { data, error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
@@ -36,6 +39,8 @@ export default function CustomPasswordReset({ resetEmail, onEmailSent, onBack })
       // Then send our custom email via the edge function
       const resetUrl = `${window.location.origin}/reset-password`;
       
+      console.log("Calling custom email function at:", new Date().toISOString());
+      
       const { data: emailData, error: emailError } = await supabase.functions.invoke('send-auth-email', {
         body: {
           to: resetEmail,
@@ -49,15 +54,21 @@ export default function CustomPasswordReset({ resetEmail, onEmailSent, onBack })
         console.error("Custom email error:", emailError);
         // Don't throw here - the Supabase reset still worked
         console.log("Falling back to default Supabase email");
+        
+        toast({
+          title: "Password reset email sent",
+          description: "Check your email for the password reset link. Note: Email delivery may take a few minutes."
+        });
       } else {
         console.log("Custom email sent successfully:", emailData);
+        
+        toast({
+          title: "Password reset email sent",
+          description: "Check your email for the password reset link. If you don't see it, check your spam folder."
+        });
       }
 
-      toast({
-        title: "Password reset email sent",
-        description: "Check your email for the password reset link. If you don't see it, check your spam folder."
-      });
-      
+      setEmailSent(true);
       onEmailSent();
       
     } catch (err) {
@@ -84,6 +95,29 @@ export default function CustomPasswordReset({ resetEmail, onEmailSent, onBack })
       setLoading(false);
     }
   };
+
+  const handleResend = async () => {
+    await handleCustomPasswordReset();
+  };
+
+  if (emailSent) {
+    return (
+      <div className="space-y-4">
+        <EmailDeliveryStatus 
+          email={resetEmail} 
+          onResend={handleResend}
+        />
+        
+        <button 
+          type="button"
+          onClick={onBack}
+          className="w-full text-gray-600 hover:text-gray-700 py-2"
+        >
+          Back to Login
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
