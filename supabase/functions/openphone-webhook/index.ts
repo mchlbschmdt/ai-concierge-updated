@@ -9,6 +9,9 @@ const corsHeaders = {
 
 console.log("OpenPhone webhook function starting up...")
 
+// Designated business phone number - all traffic should go through this number
+const BUSINESS_PHONE_NUMBER = '+18333301032';
+
 // Enhanced webhook signature verification with comprehensive approaches
 async function verifyWebhookSignature(body: string, signature: string, secret: string, req: Request): Promise<boolean> {
   try {
@@ -174,6 +177,12 @@ async function sendSmsResponse(apiKey: string, toNumber: string, fromNumber: str
   console.log('- From:', fromNumber);
   console.log('- Message length:', message.length);
 
+  // Enforce business phone number for outgoing messages
+  if (fromNumber !== BUSINESS_PHONE_NUMBER) {
+    console.log(`⚠️ CORRECTING FROM NUMBER: ${fromNumber} → ${BUSINESS_PHONE_NUMBER}`);
+    fromNumber = BUSINESS_PHONE_NUMBER;
+  }
+
   // First validate the API key
   const validation = await validateAndTestOpenPhoneApiKey(apiKey);
   if (!validation.valid) {
@@ -233,6 +242,16 @@ async function sendSmsResponse(apiKey: string, toNumber: string, fromNumber: str
   }
 }
 
+function validateIncomingPhoneNumber(toNumber: string): boolean {
+  if (toNumber === BUSINESS_PHONE_NUMBER) {
+    console.log(`✅ Message sent to correct business number: ${toNumber}`);
+    return true;
+  } else {
+    console.log(`❌ Message sent to invalid number: ${toNumber} (should be ${BUSINESS_PHONE_NUMBER})`);
+    return false;
+  }
+}
+
 serve(async (req) => {
   console.log(`=== OpenPhone Webhook Request ===`);
   console.log(`Method: ${req.method}`);
@@ -253,6 +272,7 @@ serve(async (req) => {
         status: 'healthy', 
         service: 'openphone-webhook',
         message: 'OpenPhone webhook is running',
+        businessPhoneNumber: BUSINESS_PHONE_NUMBER,
         timestamp: new Date().toISOString()
       }),
       {
@@ -298,6 +318,28 @@ serve(async (req) => {
       if (payload.type === 'message.received') {
         const message = payload.data.object
         console.log('Processing incoming message from:', message.from);
+        console.log('Message sent to:', message.to);
+        
+        // VALIDATE INCOMING PHONE NUMBER - CRITICAL SECURITY CHECK
+        if (!validateIncomingPhoneNumber(message.to)) {
+          console.log(`🚫 REJECTING MESSAGE: Not sent to business number ${BUSINESS_PHONE_NUMBER}`);
+          console.log(`🚫 Rejected message from ${message.from} to ${message.to}: "${message.body || message.text || ''}"`);
+          
+          // Return success to webhook but don't process the message
+          return new Response(
+            JSON.stringify({ 
+              success: true, 
+              message: 'Webhook received but message rejected - invalid destination number',
+              businessPhoneNumber: BUSINESS_PHONE_NUMBER,
+              rejectedDestination: message.to,
+              timestamp: new Date().toISOString()
+            }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 200
+            }
+          );
+        }
         
         if (message.direction === 'incoming') {
           console.log('=== PROCESSING INCOMING MESSAGE ===');
@@ -389,7 +431,7 @@ serve(async (req) => {
                 const result = await processResponse.json();
                 console.log('✅ Conversation service result:', result);
                 
-                // NEW: Handle both old format (result.response) and new format (result.messages)
+                // Handle both old format (result.response) and new format (result.messages)
                 let responseMessages = [];
                 
                 if (result.messages && Array.isArray(result.messages)) {
@@ -433,9 +475,10 @@ serve(async (req) => {
                     }
                   }
                   
-                  // Now attempt to send the SMS response(s)
+                  // Now attempt to send the SMS response(s) - ALWAYS use business phone number
                   if (apiKey && apiKey.trim().length > 0) {
                     console.log('📤 Attempting to send SMS responses...');
+                    console.log(`📤 Enforcing outgoing from business number: ${BUSINESS_PHONE_NUMBER}`);
                     
                     // Send each message segment with a small delay between them
                     let allSent = true;
@@ -445,7 +488,8 @@ serve(async (req) => {
                       const messageSegment = responseMessages[i];
                       console.log(`📤 Sending segment ${i + 1}/${responseMessages.length}:`, messageSegment.substring(0, 50) + '...');
                       
-                      const smsResult = await sendSmsResponse(apiKey, message.from, message.to, messageSegment);
+                      // Always use business phone number for outgoing messages
+                      const smsResult = await sendSmsResponse(apiKey, message.from, BUSINESS_PHONE_NUMBER, messageSegment);
                       
                       if (smsResult.success) {
                         console.log(`✅ Segment ${i + 1} sent successfully`);
@@ -512,7 +556,8 @@ serve(async (req) => {
         JSON.stringify({ 
           success: true, 
           received: true,
-          processed_at: new Date().toISOString()
+          processed_at: new Date().toISOString(),
+          businessPhoneNumber: BUSINESS_PHONE_NUMBER
         }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -548,4 +593,4 @@ serve(async (req) => {
   )
 })
 
-console.log("OpenPhone webhook function is ready to serve requests")
+console.log(`OpenPhone webhook function is ready to serve requests through business number: ${BUSINESS_PHONE_NUMBER}`)
