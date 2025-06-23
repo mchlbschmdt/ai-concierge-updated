@@ -56,7 +56,8 @@ serve(async (req) => {
       if (isTravelKeyword(messageBody)) {
         console.log("🌍 Travel keyword detected - forcing fresh start");
         
-        // Force reset to initial state when travel keyword is detected
+        // Clear any corrupted data and force reset to initial state
+        await travelService.clearCorruptedTravelData(phoneNumber);
         const conversation = await travelService.getOrCreateTravelConversation(phoneNumber, true);
         console.log("🌍 Travel conversation reset to initial state:", conversation.id);
         
@@ -92,6 +93,22 @@ serve(async (req) => {
           messages: travelMessages,
           conversationalResponse: true,
           intent: 'travel_guide_continue'
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Check if we have a travel conversation at ASK_LOCATION step (could be corrupted or fresh)
+      if (existingTravelConversation && existingTravelConversation.step === 'ASK_LOCATION') {
+        console.log("🌍 Found travel conversation at ASK_LOCATION, processing message");
+        
+        const travelMessages = await travelService.processMessage(phoneNumber, messageBody);
+        console.log("✅ Travel guide processing result:", travelMessages);
+        
+        return new Response(JSON.stringify({
+          messages: travelMessages,
+          conversationalResponse: true,
+          intent: 'travel_guide_location'
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });

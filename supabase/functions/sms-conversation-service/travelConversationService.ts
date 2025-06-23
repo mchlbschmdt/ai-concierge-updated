@@ -1,3 +1,4 @@
+
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 export interface TravelConversation {
@@ -24,6 +25,42 @@ export interface TravelMessage {
 export class TravelConversationService {
   constructor(private supabase: SupabaseClient) {}
 
+  private isTravelKeyword(message: string): boolean {
+    const normalizedMessage = message.trim().toLowerCase();
+    const travelKeywords = [
+      'travel',
+      'travel guide',
+      'travel help', 
+      'local guide'
+    ];
+    
+    return travelKeywords.some(keyword => normalizedMessage === keyword);
+  }
+
+  private isValidLocationInput(message: string): boolean {
+    // Don't process travel keywords as location data
+    if (this.isTravelKeyword(message)) {
+      return false;
+    }
+    
+    // Basic validation for city, state format or ZIP code
+    const cityStateRegex = /^[a-zA-Z\s]+,\s*[A-Z]{2}$/i;
+    const zipRegex = /^\d{5}$/;
+    
+    return cityStateRegex.test(message.trim()) || zipRegex.test(message.trim());
+  }
+
+  private isValidNameInput(message: string): boolean {
+    // Don't process travel keywords as name data
+    if (this.isTravelKeyword(message)) {
+      return false;
+    }
+    
+    // Basic validation for name (should be reasonable length and contain letters)
+    const trimmed = message.trim();
+    return trimmed.length >= 2 && trimmed.length <= 50 && /[a-zA-Z]/.test(trimmed);
+  }
+
   async getExistingTravelConversation(phoneNumber: string): Promise<TravelConversation | null> {
     console.log('Checking for existing travel conversation for:', phoneNumber);
     
@@ -41,17 +78,50 @@ export class TravelConversationService {
     return existing;
   }
 
+  async clearCorruptedTravelData(phoneNumber: string): Promise<void> {
+    console.log('🧹 Clearing corrupted travel data for:', phoneNumber);
+    
+    try {
+      // Delete the corrupted conversation entirely
+      const { error } = await this.supabase
+        .from('travel_conversations')
+        .delete()
+        .eq('phone_number', phoneNumber);
+      
+      if (error) {
+        console.error('Error clearing corrupted travel data:', error);
+      } else {
+        console.log('✅ Successfully cleared corrupted travel data');
+      }
+    } catch (error) {
+      console.error('Error in clearCorruptedTravelData:', error);
+    }
+  }
+
   async getOrCreateTravelConversation(phoneNumber: string, forceReset: boolean = false): Promise<TravelConversation> {
     console.log('Getting or creating travel conversation for:', phoneNumber, 'forceReset:', forceReset);
     
     const existing = await this.getExistingTravelConversation(phoneNumber);
     
+    // Check if existing conversation has corrupted data (travel keywords stored as actual data)
     if (existing && !forceReset) {
-      console.log('Found existing travel conversation:', existing);
-      return existing;
+      const hasCorruptedData = (
+        this.isTravelKeyword(existing.name || '') ||
+        (existing.location_json && this.isTravelKeyword(existing.location_json.city || '')) ||
+        (existing.preferences_json && this.isTravelKeyword(existing.preferences_json.vibe || ''))
+      );
+      
+      if (hasCorruptedData) {
+        console.log('🚨 Detected corrupted travel data, clearing and resetting...');
+        await this.clearCorruptedTravelData(phoneNumber);
+        // Continue to create fresh conversation below
+      } else {
+        console.log('Found existing clean travel conversation:', existing);
+        return existing;
+      }
     }
 
-    // If forceReset is true or no existing conversation, create/reset to initial state
+    // If forceReset is true, corrupted data detected, or no existing conversation, create/reset to initial state
     console.log('Creating/resetting travel conversation to initial state');
     
     const { data: conversationId, error: rpcError } = await this.supabase.rpc('rpc_upsert_travel_conversation', {
@@ -138,6 +208,12 @@ export class TravelConversationService {
   async geocodeLocation(locationString: string): Promise<any> {
     console.log('Geocoding location:', locationString);
     
+    // Validate input before processing
+    if (!this.isValidLocationInput(locationString)) {
+      console.log('Invalid location input, rejecting:', locationString);
+      return null;
+    }
+    
     // Simple geocoding logic - in production you'd use Google Maps API or similar
     const cityStateRegex = /^([^,]+),?\s*([A-Z]{2})\s*(\d{5})?$/i;
     const zipRegex = /^\d{5}$/;
@@ -221,13 +297,20 @@ export class TravelConversationService {
     switch (conversation.step) {
       case 'ASK_LOCATION':
         console.log('🌍 Processing location step');
+        
+        // Validate that this isn't a travel keyword being processed as location
+        if (this.isTravelKeyword(messageBody)) {
+          response = "Hi there! 🌎 Where will you be exploring?\nJust drop a city & state or ZIP code.";
+          break;
+        }
+        
         const location = await this.geocodeLocation(messageBody);
         if (location) {
           console.log('🌍 Location found:', location);
           console.log('🌍 Updating conversation with location_id:', location.id);
           
           await this.updateTravelConversation(phoneNumber, {
-            location_id: location.id, // Pass only the UUID string, not the entire object
+            location_id: location.id,
             location_json: location,
             step: 'ASK_NAME'
           });
@@ -239,6 +322,18 @@ export class TravelConversationService {
 
       case 'ASK_NAME':
         console.log('🌍 Processing name step');
+        
+        // Validate that this isn't a travel keyword being processed as name
+        if (this.isTravelKeyword(messageBody)) {
+          response = "What's your name so I can personalize your recommendations?";
+          break;
+        }
+        
+        if (!this.isValidNameInput(messageBody)) {
+          response = "What's your name so I can personalize your recommendations?";
+          break;
+        }
+        
         const name = messageBody.trim();
         await this.updateTravelConversation(phoneNumber, {
           name,
@@ -249,6 +344,13 @@ export class TravelConversationService {
 
       case 'ASK_PREFS':
         console.log('🌍 Processing preferences step');
+        
+        // Validate that this isn't a travel keyword being processed as preferences
+        if (this.isTravelKeyword(messageBody)) {
+          response = "What kind of experience are you looking for today?";
+          break;
+        }
+        
         const preferences = { vibe: messageBody.toLowerCase() };
         await this.updateTravelConversation(phoneNumber, {
           preferences_json: preferences,
@@ -262,6 +364,15 @@ export class TravelConversationService {
 
       case 'ASSIST':
         console.log('🌍 Processing assistance step');
+        
+        // Check if user wants to restart with travel keyword
+        if (this.isTravelKeyword(messageBody)) {
+          // Reset to initial state
+          await this.getOrCreateTravelConversation(phoneNumber, true);
+          response = "Hi there! 🌎 Where will you be exploring?\nJust drop a city & state or ZIP code.";
+          break;
+        }
+        
         // Handle ongoing assistance
         const assistRecs = await this.getRecommendations(conversation.location_id!, messageBody);
         response = assistRecs + "\n\nAnything else you'd like to explore?";
