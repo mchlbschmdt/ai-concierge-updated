@@ -14,6 +14,7 @@ import GuestManager from "./pages/GuestManager";
 import MessagesDashboard from "./pages/MessagesDashboard";
 import EmailManagement from "./pages/EmailManagement";
 import SmsTestingDashboard from "./pages/SmsTestingDashboard";
+import AddProperty from "./pages/AddProperty";
 
 export default function App() {
   const { currentUser, loading } = useAuth();
@@ -51,6 +52,14 @@ export default function App() {
           element={
             <PrivateRoute>
               <Properties />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/dashboard/add-property"
+          element={
+            <PrivateRoute>
+              <AddProperty />
             </PrivateRoute>
           }
         />

@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Loader2, Save } from "lucide-react";
+import Layout from '../components/Layout';
 import useAddPropertyForm from '../hooks/useAddPropertyForm';
 import BasicInfoSection from '../components/property-forms/BasicInfoSection';
 import WifiAccessSection from '../components/property-forms/WifiAccessSection';
@@ -29,49 +30,51 @@ export default function AddProperty() {
   };
 
   return (
-    <div className="p-6 max-w-4xl mx-auto bg-white rounded-lg shadow-sm">
-      <h1 className="text-2xl font-bold mb-6 text-primary">Add New Vacation Rental Property</h1>
-      <form className="space-y-6" onSubmit={onSubmit}>
-        
-        <BasicInfoSection form={form} handleChange={handleChange} />
-        
-        <WifiAccessSection form={form} handleChange={handleChange} />
-        
-        <DirectionsParkingSection form={form} handleChange={handleChange} />
-        
-        <EmergencyContactSection form={form} handleChange={handleChange} />
-        
-        <HouseRulesAmenitiesSection 
-          form={form} 
-          handleChange={handleChange} 
-          handleAmenityToggle={handleAmenityToggle} 
-        />
-        
-        <AdditionalInfoSection form={form} handleChange={handleChange} />
-        
-        <FileUploadSection 
-          onFileChange={setSelectedFile} 
-          uploadProgress={uploadProgress} 
-        />
-        
-        <Button 
-          type="submit" 
-          className="w-full flex items-center justify-center gap-2 py-3 text-lg"
-          disabled={loading}
-        >
-          {loading ? (
-            <>
-              <Loader2 className="h-5 w-5 animate-spin" />
-              {selectedFile ? 'Uploading...' : 'Adding Property...'}
-            </>
-          ) : (
-            <>
-              <Save className="h-5 w-5" />
-              Save Property
-            </>
-          )}
-        </Button>
-      </form>
-    </div>
+    <Layout>
+      <div className="p-6 max-w-4xl mx-auto bg-white rounded-lg shadow-sm">
+        <h1 className="text-2xl font-bold mb-6 text-primary">Add New Vacation Rental Property</h1>
+        <form className="space-y-6" onSubmit={onSubmit}>
+          
+          <BasicInfoSection form={form} handleChange={handleChange} />
+          
+          <WifiAccessSection form={form} handleChange={handleChange} />
+          
+          <DirectionsParkingSection form={form} handleChange={handleChange} />
+          
+          <EmergencyContactSection form={form} handleChange={handleChange} />
+          
+          <HouseRulesAmenitiesSection 
+            form={form} 
+            handleChange={handleChange} 
+            handleAmenityToggle={handleAmenityToggle} 
+          />
+          
+          <AdditionalInfoSection form={form} handleChange={handleChange} />
+          
+          <FileUploadSection 
+            onFileChange={setSelectedFile} 
+            uploadProgress={uploadProgress} 
+          />
+          
+          <Button 
+            type="submit" 
+            className="w-full flex items-center justify-center gap-2 py-3 text-lg"
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <Loader2 className="h-5 w-5 animate-spin" />
+                {selectedFile ? 'Uploading...' : 'Adding Property...'}
+              </>
+            ) : (
+              <>
+                <Save className="h-5 w-5" />
+                Save Property
+              </>
+            )}
+          </Button>
+        </form>
+      </div>
+    </Layout>
   );
 }
