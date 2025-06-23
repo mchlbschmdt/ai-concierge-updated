@@ -71,40 +71,32 @@ export class EnhancedConversationService {
       console.log("🔍 Current conversation state:", conversation.conversation_state);
       
       if (ResetHandler.isResetCommand(cleanMessage)) {
-        console.log("🔄 Reset command detected");
+        console.log("🔄 Reset command detected - performing complete conversation reset");
         
         try {
           const context = conversation.conversation_context || {};
-          const hasHistory = context.recommendation_history && 
-            Object.keys(context.recommendation_history).length > 0;
+          console.log("📋 Current context before reset:", context);
           
-          // FIX: Pass the guest name properly from conversation
-          const resetResponse = ResetHandler.generateResetResponse(
-            conversation.guest_name, // Use guest_name from conversation object
-            context.reset_count || 0,
-            hasHistory
-          );
+          // Get complete reset updates including conversation state changes
+          const resetUpdates = ResetHandler.getCompleteResetUpdates(context);
+          console.log("🔄 Applying complete reset updates:", resetUpdates);
           
+          // Apply the complete reset to the conversation
+          await this.conversationManager.updateConversationState(phoneNumber, resetUpdates);
+          console.log("✅ Conversation completely reset to awaiting_property_id state");
+          
+          // Generate consistent reset response asking for property code
+          const resetResponse = ResetHandler.generateResetResponse();
           console.log("🔄 Generated reset response:", resetResponse);
-          
-          const clearedContext = ResetHandler.clearRecommendationHistory(context);
-          clearedContext.reset_count = (context.reset_count || 0) + 1;
-          
-          await this.conversationManager.updateConversationState(phoneNumber, {
-            conversation_context: clearedContext,
-            last_recommendations: null
-          });
           
           console.log("📝 Formatting reset response with MultiPartResponseFormatter");
           const messages = MultiPartResponseFormatter.formatResponse(resetResponse);
           console.log("✅ Reset response formatted successfully:", messages);
-          return { messages, resetDetected: true };
+          return { messages, resetDetected: true, conversationReset: true };
         } catch (resetError) {
-          console.error("❌ Error processing reset command:", resetError);
+          console.error("❌ Error processing complete reset command:", resetError);
           // Provide a safe fallback for reset commands
-          const fallbackResponse = conversation.guest_name 
-            ? `${conversation.guest_name}, no problem! What can I help you with?`
-            : "No problem! What can I help you with?";
+          const fallbackResponse = "No problem! I've reset our conversation. Please send me your property code to get started.";
           const messages = [fallbackResponse];
           return { messages, resetDetected: true, error: 'reset_fallback' };
         }

@@ -28,61 +28,64 @@ export class ResetHandler {
     return isReset;
   }
 
-  static generateResetResponse(guestName?: string, resetCount?: number, hasHistory?: boolean): string {
-    console.log('🔄 ResetHandler.generateResetResponse called with:', {
-      guestName,
-      resetCount,
-      hasHistory
-    });
+  static generateResetResponse(): string {
+    console.log('🔄 ResetHandler.generateResetResponse called');
     
-    const namePrefix = guestName ? `${guestName}, ` : '';
-    
-    // Use a single, consistent response template to avoid confusion
-    let response: string;
-    
-    if (hasHistory) {
-      // When we have previous recommendations, emphasize variety
-      response = `${namePrefix}no problem! Let's explore some completely different options. What would you like to try - different dining spots, activities, or local gems?`;
-    } else {
-      // Standard reset response - consistent and helpful
-      response = `${namePrefix}no problem! What would you like to explore? I can help with dining, activities, local spots, or property details.`;
-    }
+    // Use a single, consistent response template asking for property code
+    const response = "No problem! I've reset our conversation. Please send me your property code to get started.";
     
     console.log('✅ Generated consistent reset response:', response);
     return response;
   }
 
-  static clearRecommendationHistory(context: any): any {
-    console.log('🧹 ResetHandler.clearRecommendationHistory called');
+  static getCompleteResetUpdates(context: any): any {
+    console.log('🧹 ResetHandler.getCompleteResetUpdates called');
     
     try {
-      // Preserve global blacklist but clear session data
+      // Preserve global blacklist but clear everything else for a complete reset
       const globalBlacklist = context?.global_recommendation_blacklist || [];
       
-      const clearedContext = {
-        ...context,
-        recommendation_history: {}, // Clear session recommendations
-        recent_intents: ['conversation_reset'],
-        last_intent: 'conversation_reset',
-        conversation_depth: 0,
-        last_interaction: new Date().toISOString(),
-        last_response_type: 'reset_response',
-        global_recommendation_blacklist: globalBlacklist // Preserve cross-session blacklist
+      const resetUpdates = {
+        conversation_state: 'awaiting_property_id',
+        property_id: null,
+        property_confirmed: false,
+        guest_name: null,
+        conversation_context: {
+          recommendation_history: {},
+          recent_intents: ['conversation_reset'],
+          last_intent: 'conversation_reset',
+          conversation_depth: 0,
+          last_interaction: new Date().toISOString(),
+          last_response_type: 'reset_response',
+          global_recommendation_blacklist: globalBlacklist,
+          reset_count: (context?.reset_count || 0) + 1
+        },
+        last_recommendations: null,
+        last_message_type: null
       };
       
-      console.log('✅ Successfully cleared context:', clearedContext);
-      return clearedContext;
+      console.log('✅ Successfully prepared complete reset updates:', resetUpdates);
+      return resetUpdates;
     } catch (error) {
-      console.error('❌ Error clearing recommendation history:', error);
-      // Return a safe default context
+      console.error('❌ Error preparing reset updates:', error);
+      // Return a safe default reset state
       return {
-        recommendation_history: {},
-        recent_intents: ['conversation_reset'],
-        last_intent: 'conversation_reset',
-        conversation_depth: 0,
-        last_interaction: new Date().toISOString(),
-        last_response_type: 'reset_response',
-        global_recommendation_blacklist: []
+        conversation_state: 'awaiting_property_id',
+        property_id: null,
+        property_confirmed: false,
+        guest_name: null,
+        conversation_context: {
+          recommendation_history: {},
+          recent_intents: ['conversation_reset'],
+          last_intent: 'conversation_reset',
+          conversation_depth: 0,
+          last_interaction: new Date().toISOString(),
+          last_response_type: 'reset_response',
+          global_recommendation_blacklist: [],
+          reset_count: 1
+        },
+        last_recommendations: null,
+        last_message_type: null
       };
     }
   }
