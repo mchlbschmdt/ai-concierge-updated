@@ -1,3 +1,4 @@
+
 import { Conversation } from './types.ts';
 
 export class NameHandler {
@@ -63,6 +64,65 @@ export class NameHandler {
 
     console.log('❌ No valid name pattern found');
     return { hasName: false, extractedName: null };
+  }
+
+  static detectAndExtractName(message: string): { nameDetected: boolean, extractedName: string | null } {
+    console.log('🔍 NameHandler.detectAndExtractName called with:', message);
+    
+    // Check if message contains a name pattern
+    const namePatterns = [
+      /^(?:my name is|i'm|i am|call me)\s+([a-zA-Z]+)/i,
+      /^hi,?\s*(?:my name is|i'm|i am)\s+([a-zA-Z]+)/i,
+      /^hello,?\s*(?:my name is|i'm|i am)\s+([a-zA-Z]+)/i,
+      /^([a-zA-Z]+)$/,  // Single word response (could be a name)
+      /^it's\s+([a-zA-Z]+)/i,
+      /^this is\s+([a-zA-Z]+)/i
+    ];
+
+    const cleanMessage = message.trim();
+    console.log('🔍 Checking patterns against clean message:', cleanMessage);
+    
+    for (const pattern of namePatterns) {
+      const match = cleanMessage.match(pattern);
+      if (match) {
+        const potentialName = match[1];
+        console.log('🔍 Potential name found:', potentialName);
+        
+        // Enhanced exclusion list
+        const excludeWords = [
+          'yes', 'no', 'ok', 'okay', 'sure', 'thanks', 'hello', 'hi', 'hey',
+          'good', 'great', 'fine', 'wifi', 'parking', 'restaurant', 'beach',
+          'food', 'help', 'information', 'directions', 'check', 'time',
+          'what', 'where', 'when', 'how', 'can', 'could', 'would', 'should',
+          'need', 'want', 'like', 'love', 'hate', 'know', 'think', 'see'
+        ];
+        
+        if (!excludeWords.includes(potentialName.toLowerCase()) && 
+            potentialName.length > 1 && 
+            potentialName.length < 20 &&
+            /^[a-zA-Z]+$/.test(potentialName)) {
+          
+          const formattedName = potentialName.charAt(0).toUpperCase() + potentialName.slice(1).toLowerCase();
+          console.log('✅ Valid name detected and formatted:', formattedName);
+          return { nameDetected: true, extractedName: formattedName };
+        }
+      }
+    }
+
+    console.log('❌ No valid name pattern found');
+    return { nameDetected: false, extractedName: null };
+  }
+
+  static generateNameResponse(name: string): string {
+    const responses = [
+      `Nice to meet you, ${name}! How can I help you today?`,
+      `Hello ${name}! What can I assist you with?`,
+      `Hi ${name}! I'm here to help with any questions about your stay.`,
+      `Great to meet you, ${name}! What would you like to know?`,
+      `Welcome ${name}! How can I make your stay better?`
+    ];
+
+    return responses[Math.floor(Math.random() * responses.length)];
   }
 
   static detectNameRefusal(message: string): boolean {

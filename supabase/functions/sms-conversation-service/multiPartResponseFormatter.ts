@@ -38,6 +38,41 @@ export class MultiPartResponseFormatter {
     return { responses, helpOffer };
   }
 
+  static formatResponse(response: string): string[] {
+    // Simple wrapper that returns the response as an array of messages
+    if (!response || response.trim() === '') {
+      return ["I'm here to help! What can I assist you with?"];
+    }
+    
+    // Split long responses into multiple messages if needed (optional)
+    const maxLength = 1600; // SMS character limit consideration
+    if (response.length <= maxLength) {
+      return [response];
+    }
+    
+    // Split at sentence boundaries for long responses
+    const sentences = response.split(/(?<=[.!?])\s+/);
+    const messages: string[] = [];
+    let currentMessage = '';
+    
+    for (const sentence of sentences) {
+      if (currentMessage.length + sentence.length + 1 <= maxLength) {
+        currentMessage += (currentMessage ? ' ' : '') + sentence;
+      } else {
+        if (currentMessage) {
+          messages.push(currentMessage);
+        }
+        currentMessage = sentence;
+      }
+    }
+    
+    if (currentMessage) {
+      messages.push(currentMessage);
+    }
+    
+    return messages.length > 0 ? messages : [response];
+  }
+
   private static generateHelpOffer(intents: string[]): string {
     const offers = [
       "Need anything else while you're planning?",
