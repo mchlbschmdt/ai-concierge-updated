@@ -42,18 +42,25 @@ export class TravelConversationService {
     return existing;
   }
 
-  async getOrCreateTravelConversation(phoneNumber: string): Promise<TravelConversation> {
-    console.log('Getting or creating travel conversation for:', phoneNumber);
+  async getOrCreateTravelConversation(phoneNumber: string, forceReset: boolean = false): Promise<TravelConversation> {
+    console.log('Getting or creating travel conversation for:', phoneNumber, 'forceReset:', forceReset);
     
     const existing = await this.getExistingTravelConversation(phoneNumber);
-    if (existing) {
+    
+    if (existing && !forceReset) {
       console.log('Found existing travel conversation:', existing);
       return existing;
     }
 
-    // Create new travel conversation
+    // If forceReset is true or no existing conversation, create/reset to initial state
+    console.log('Creating/resetting travel conversation to initial state');
+    
     const conversationId = await this.supabase.rpc('rpc_upsert_travel_conversation', {
       _phone_number: phoneNumber,
+      _name: null,
+      _location_id: null,
+      _location_json: null,
+      _preferences_json: null,
       _step: 'ASK_LOCATION'
     });
 
@@ -71,7 +78,7 @@ export class TravelConversationService {
       throw fetchError;
     }
 
-    console.log('Created new travel conversation:', newConversation);
+    console.log('Created/reset travel conversation:', newConversation);
     return newConversation;
   }
 

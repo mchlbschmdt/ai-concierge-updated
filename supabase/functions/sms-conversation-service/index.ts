@@ -54,11 +54,11 @@ serve(async (req) => {
 
       // Check if this is a travel keyword to switch to travel mode
       if (isTravelKeyword(messageBody)) {
-        console.log("🌍 Travel keyword detected - initializing travel guide mode");
+        console.log("🌍 Travel keyword detected - forcing fresh start");
         
-        // Create/reset travel conversation to initial state
-        const conversation = await travelService.getOrCreateTravelConversation(phoneNumber);
-        console.log("🌍 Travel conversation created/found:", conversation.id);
+        // Force reset to initial state when travel keyword is detected
+        const conversation = await travelService.getOrCreateTravelConversation(phoneNumber, true);
+        console.log("🌍 Travel conversation reset to initial state:", conversation.id);
         
         // Store the keyword message
         await travelService.addTravelMessage(conversation.id, 'user', messageBody);
@@ -69,7 +69,7 @@ serve(async (req) => {
         // Store AI response
         await travelService.addTravelMessage(conversation.id, 'ai', initialGreeting);
         
-        console.log("✅ Travel guide initialized with greeting");
+        console.log("✅ Travel guide initialized with fresh start");
         
         return new Response(JSON.stringify({
           messages: [initialGreeting],
