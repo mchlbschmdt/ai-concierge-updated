@@ -1,27 +1,9 @@
-// ✅ Step 1: Firestore Setup
-// You should already have a `messages` collection from previous logging.
-// Now create a new collection for manual FAQs.
-
-// 🔹 Firestore: Create collection `faqs`
-// Each document should have:
-// - property_id (string)
-// - question_keywords (array of strings)
-// - answer (string)
-
-// Example document:
-// {
-//   property_id: "PROP-12345",
-//   question_keywords: ["checkout", "late checkout"],
-//   answer: "Standard checkout is at 10 AM. Late checkout is available upon request."
-// }
-
-// ✅ Step 2: Frontend - Display Messages + Insights
-// File: src/pages/MessagesDashboard.jsx
 
 import React, { useEffect, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
-import { db } from "../firebase";
+import { db } from "./firebase";
 import { Card, CardContent } from "@/components/ui/card";
+import Layout from "./components/Layout";
 
 function getTopKeywords(messages) {
   const keywordCounts = {};
@@ -58,37 +40,39 @@ export default function MessagesDashboard() {
   const topKeywords = getTopKeywords(messages);
 
   return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-bold">Guest Message Logs</h1>
+    <Layout>
+      <div className="p-6 space-y-6">
+        <h1 className="text-2xl font-bold">Guest Message Logs</h1>
 
-      {loading ? (
-        <p>Loading...</p>
-      ) : (
-        <>
-          <div>
-            <h2 className="text-xl font-semibold mb-2">Top Keywords</h2>
-            <ul className="list-disc list-inside">
-              {topKeywords.map(([word, count]) => (
-                <li key={word}>{word} ({count})</li>
+        {loading ? (
+          <p>Loading...</p>
+        ) : (
+          <>
+            <div>
+              <h2 className="text-xl font-semibold mb-2">Top Keywords</h2>
+              <ul className="list-disc list-inside">
+                {topKeywords.map(([word, count]) => (
+                  <li key={word}>{word} ({count})</li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {messages.map((msg) => (
+                <Card key={msg.id}>
+                  <CardContent>
+                    <p><strong>📱 {msg.phone}</strong></p>
+                    <p><strong>🏠 {msg.property_name}</strong></p>
+                    <p><strong>💬 Guest:</strong> {msg.message}</p>
+                    <p><strong>🤖 Reply:</strong> {msg.response}</p>
+                    <p className="text-sm text-gray-500">🕒 {new Date(msg.timestamp?.seconds * 1000).toLocaleString()}</p>
+                  </CardContent>
+                </Card>
               ))}
-            </ul>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {messages.map((msg) => (
-              <Card key={msg.id}>
-                <CardContent>
-                  <p><strong>📱 {msg.phone}</strong></p>
-                  <p><strong>🏠 {msg.property_name}</strong></p>
-                  <p><strong>💬 Guest:</strong> {msg.message}</p>
-                  <p><strong>🤖 Reply:</strong> {msg.response}</p>
-                  <p className="text-sm text-gray-500">🕒 {new Date(msg.timestamp?.seconds * 1000).toLocaleString()}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
+            </div>
+          </>
+        )}
+      </div>
+    </Layout>
   );
 }

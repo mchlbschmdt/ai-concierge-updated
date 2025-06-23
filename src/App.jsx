@@ -8,6 +8,12 @@ import Login from "./Login";
 import Dashboard from "./pages/Dashboard";
 import Register from "./Register";
 import PrivateRoute from "./PrivateRoute";
+import Properties from "./pages/Properties";
+import PropertyManager from "./pages/PropertyManager";
+import GuestManager from "./pages/GuestManager";
+import MessagesDashboard from "./pages/MessagesDashboard";
+import EmailManagement from "./pages/EmailManagement";
+import SmsTestingDashboard from "./pages/SmsTestingDashboard";
 
 export default function App() {
   const { currentUser, loading } = useAuth();
@@ -37,6 +43,54 @@ export default function App() {
           element={
             <PrivateRoute>
               <Dashboard />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/dashboard/properties"
+          element={
+            <PrivateRoute>
+              <Properties />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/dashboard/properties-manager"
+          element={
+            <PrivateRoute>
+              <PropertyManager />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/dashboard/guests-manager"
+          element={
+            <PrivateRoute>
+              <GuestManager />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/dashboard/messages"
+          element={
+            <PrivateRoute>
+              <MessagesDashboard />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/dashboard/email-management"
+          element={
+            <PrivateRoute>
+              <EmailManagement />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/dashboard/sms-testing"
+          element={
+            <PrivateRoute>
+              <SmsTestingDashboard />
             </PrivateRoute>
           }
         />
