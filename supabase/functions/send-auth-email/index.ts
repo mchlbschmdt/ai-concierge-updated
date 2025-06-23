@@ -144,9 +144,9 @@ const handler = async (req: Request): Promise<Response> => {
         throw new Error(`Unknown email type: ${type}`);
     }
 
-    // Enhanced email configuration for better deliverability
+    // Use Resend's default domain that's already verified
     const emailConfig = {
-      from: "Hostly AI Concierge <noreply@hostlyai.com>", // Will fall back to resend.dev if custom domain not set up
+      from: "Hostly AI Concierge <noreply@resend.dev>",
       to: [to],
       subject: subject,
       html: html,
@@ -155,6 +155,7 @@ const handler = async (req: Request): Promise<Response> => {
         'X-MSMail-Priority': 'High',
         'Importance': 'high',
         'X-Mailer': 'Hostly AI Concierge',
+        'Reply-To': 'noreply@resend.dev'
       },
       tags: [
         { name: 'category', value: 'auth' },
@@ -172,17 +173,23 @@ const handler = async (req: Request): Promise<Response> => {
 
     const emailResponse = await resend.emails.send(emailConfig);
 
+    if (emailResponse.error) {
+      console.error("Resend API error:", emailResponse.error);
+      throw new Error(`Email sending failed: ${emailResponse.error.message}`);
+    }
+
     console.log("Email sent successfully:", {
       messageId: emailResponse.data?.id,
       timestamp: new Date().toISOString(),
-      response: emailResponse
+      status: 'sent'
     });
 
     return new Response(JSON.stringify({ 
       success: true, 
       messageId: emailResponse.data?.id,
       sentAt: new Date().toISOString(),
-      type: type
+      type: type,
+      status: 'sent'
     }), {
       status: 200,
       headers: {
