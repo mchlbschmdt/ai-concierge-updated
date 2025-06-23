@@ -1,4 +1,3 @@
-
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 export interface TravelConversation {
@@ -55,7 +54,7 @@ export class TravelConversationService {
     // If forceReset is true or no existing conversation, create/reset to initial state
     console.log('Creating/resetting travel conversation to initial state');
     
-    const conversationId = await this.supabase.rpc('rpc_upsert_travel_conversation', {
+    const { data: conversationId, error: rpcError } = await this.supabase.rpc('rpc_upsert_travel_conversation', {
       _phone_number: phoneNumber,
       _name: null,
       _location_id: null,
@@ -63,6 +62,11 @@ export class TravelConversationService {
       _preferences_json: null,
       _step: 'ASK_LOCATION'
     });
+
+    if (rpcError) {
+      console.error('Error calling rpc_upsert_travel_conversation:', rpcError);
+      throw rpcError;
+    }
 
     if (!conversationId) {
       throw new Error('Failed to create travel conversation');
@@ -88,14 +92,19 @@ export class TravelConversationService {
   ): Promise<TravelConversation> {
     console.log('Updating travel conversation for:', phoneNumber, 'with updates:', updates);
 
-    const conversationId = await this.supabase.rpc('rpc_upsert_travel_conversation', {
+    const { data: conversationId, error: rpcError } = await this.supabase.rpc('rpc_upsert_travel_conversation', {
       _phone_number: phoneNumber,
-      _name: updates.name,
-      _location_id: updates.location_id,
-      _location_json: updates.location_json,
-      _preferences_json: updates.preferences_json,
-      _step: updates.step
+      _name: updates.name || null,
+      _location_id: updates.location_id || null,
+      _location_json: updates.location_json || null,
+      _preferences_json: updates.preferences_json || null,
+      _step: updates.step || null
     });
+
+    if (rpcError) {
+      console.error('Error calling rpc_upsert_travel_conversation:', rpcError);
+      throw rpcError;
+    }
 
     const { data, error } = await this.supabase
       .from('travel_conversations')
