@@ -16,6 +16,11 @@ export class ConversationalResponseGenerator {
       return this.generateFollowUpResponse(intent, conversationFlow, property, message, namePrefix);
     }
 
+    // Handle recommendation intents - ROUTE TO RECOMMENDATION SERVICE
+    if (this.isRecommendationIntent(intent)) {
+      return this.generateRecommendationPrompt(intent, property, message, namePrefix);
+    }
+
     // Generate contextual response based on conversation history
     if (conversationFlow.conversationDepth > 1) {
       return this.generateContextAwareResponse(intent, conversationFlow, property, message, namePrefix);
@@ -23,6 +28,25 @@ export class ConversationalResponseGenerator {
 
     // First-time responses
     return this.generateFirstTimeResponse(intent, property, namePrefix);
+  }
+
+  private static isRecommendationIntent(intent: string): boolean {
+    const recommendationIntents = [
+      'ask_food_recommendations',
+      'ask_activities', 
+      'ask_grocery_stores'
+    ];
+    return recommendationIntents.includes(intent);
+  }
+
+  private static generateRecommendationPrompt(
+    intent: string,
+    property: any,
+    message: string,
+    namePrefix: string
+  ): string {
+    // This signals to the main service to use the recommendation service
+    return 'USE_RECOMMENDATION_SERVICE';
   }
 
   private static generateFollowUpResponse(
@@ -41,7 +65,11 @@ export class ConversationalResponseGenerator {
           return `${namePrefix}for early check-in, I'd recommend calling the property directly. They can let you know if your room is ready ahead of the standard time. Would you like their contact information?`;
         }
         if (lowerMessage.includes('contact') || lowerMessage.includes('who')) {
-          return `${namePrefix}you can reach the property at [property phone] or email [property email]. They're usually responsive about early check-in requests!`;
+          const contact = property?.emergency_contact;
+          if (contact) {
+            return `${namePrefix}you can reach the property at ${contact}. They're usually responsive about early check-in requests!`;
+          }
+          return `${namePrefix}let me get you the property contact information for early check-in requests.`;
         }
         break;
 
@@ -57,7 +85,7 @@ export class ConversationalResponseGenerator {
           if (parkingDetails) {
             return `${namePrefix}here are the specific parking details: ${parkingDetails}. Any other questions about parking?`;
           }
-          return `${namePrefix}let me get you the exact parking location. You can contact the property at [contact info] for specific spot assignments.`;
+          return `${namePrefix}let me get you the exact parking location. You can contact the property for specific spot assignments.`;
         }
         break;
 
@@ -85,6 +113,15 @@ export class ConversationalResponseGenerator {
     const lastTopic = conversationFlow.currentTopic;
     const conversationDepth = conversationFlow.conversationDepth;
 
+    // Handle contact requests after check-in discussions
+    if (intent === 'ask_emergency_contact' && lastTopic?.intent === 'ask_checkin_time') {
+      const contact = property?.emergency_contact;
+      if (contact) {
+        return `${namePrefix}you can reach the property at ${contact} for early check-in or any other questions!`;
+      }
+      return `${namePrefix}let me get you the property contact information.`;
+    }
+
     // If they're asking the same thing again, acknowledge it
     if (lastTopic && conversationFlow.recentTopics.filter(t => t.intent === intent).length > 1) {
       return this.generateRepeatQuestionResponse(intent, namePrefix, conversationDepth);
@@ -109,6 +146,13 @@ export class ConversationalResponseGenerator {
         }
         return `${namePrefix}WiFi info should be in your check-in instructions. If you can't find it, I can help you contact the property.`;
 
+      case 'ask_emergency_contact':
+        const contact = property?.emergency_contact;
+        if (contact) {
+          return `${namePrefix}you can reach the property at ${contact}. They're available to help with any questions or issues!`;
+        }
+        return `${namePrefix}let me get you the property contact information.`;
+
       default:
         return this.generateSmartDefault(namePrefix, conversationFlow, intent);
     }
@@ -127,6 +171,13 @@ export class ConversationalResponseGenerator {
           return `${namePrefix}here's your WiFi:\nNetwork: ${property.wifi_name}\nPassword: ${property.wifi_password}`;
         }
         return `${namePrefix}WiFi details are in your check-in instructions. Let me know if you need help finding them!`;
+
+      case 'ask_emergency_contact':
+        const contact = property?.emergency_contact;
+        if (contact) {
+          return `${namePrefix}you can reach the property at ${contact} for any questions or assistance!`;
+        }
+        return `${namePrefix}let me get you the property contact information.`;
       
       default:
         return `${namePrefix}I'm here to help with your stay! What would you like to know?`;
@@ -142,6 +193,10 @@ export class ConversationalResponseGenerator {
       'ask_wifi': [
         `${namePrefix}the WiFi info is the same as before. Are you having connection issues?`,
         `${namePrefix}WiFi details haven't changed. Need troubleshooting help?`
+      ],
+      'ask_emergency_contact': [
+        `${namePrefix}the contact information is the same as before. Do you need help with something specific?`,
+        `${namePrefix}contact details haven't changed. What can they help you with?`
       ]
     };
 
@@ -157,7 +212,7 @@ export class ConversationalResponseGenerator {
     // Reference the conversation naturally
     if (flow.recentTopics.length > 0) {
       const lastIntent = flow.recentTopics[flow.recentTopics.length - 1].intent;
-      return `${namePrefix}along with what we just discussed about ${this.getIntentFriendlyName(lastIntent)}, I can also help with ${this.getIntentFriendlyName(intent)}. What would you like to know?`;
+      return `${namePrefix}along with what we discussed about ${this.getIntentFriendlyName(lastIntent)}, I can also help with ${this.getIntentFriendlyName(intent)}. What would you like to know?`;
     }
 
     return `${namePrefix}happy to help with ${this.getIntentFriendlyName(intent)}! What specific information do you need?`;
@@ -169,7 +224,10 @@ export class ConversationalResponseGenerator {
       'ask_checkout_time': 'check-out', 
       'ask_wifi': 'WiFi',
       'ask_parking': 'parking',
-      'ask_food_recommendations': 'dining options'
+      'ask_food_recommendations': 'dining options',
+      'ask_activities': 'local activities',
+      'ask_grocery_stores': 'shopping',
+      'ask_emergency_contact': 'property contact'
     };
     
     return names[intent] || 'your stay';

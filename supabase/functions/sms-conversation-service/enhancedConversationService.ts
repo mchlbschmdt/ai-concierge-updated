@@ -1,435 +1,241 @@
-import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { ConversationManager } from './conversationManager.ts';
-import { PropertyService } from './propertyService.ts';
-import { FuzzyMatchingService } from './fuzzyMatchingService.ts';
+
+import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { IntentRecognitionService } from './intentRecognitionService.ts';
+import { ConversationMemoryManager } from './conversationMemoryManager.ts';
+import { ConversationContextTracker } from './conversationContextTracker.ts';
+import { ConversationalResponseGenerator } from './conversationalResponseGenerator.ts';
 import { RecommendationService } from './recommendationService.ts';
 import { ResponseGenerator } from './responseGenerator.ts';
-import { IntentRecognitionService } from './intentRecognitionService.ts';
-import { ResetHandler } from './resetHandler.ts';
-import { NameHandler } from './nameHandler.ts';
-import { MultiPartResponseFormatter } from './multiPartResponseFormatter.ts';
-import { ConversationMemoryManager } from './conversationMemoryManager.ts';
-import { TravelConversationService } from './travelConversationService.ts';
-import { ConversationContextTracker, ConversationFlow } from './conversationContextTracker.ts';
-import { ConversationalResponseGenerator } from './conversationalResponseGenerator.ts';
+import { MessageUtils } from './messageUtils.ts';
+import { Property } from './types.ts';
 
 export class EnhancedConversationService {
-  private conversationManager: ConversationManager;
-  private propertyService: PropertyService;
-  private fuzzyMatchingService: FuzzyMatchingService;
-  private recommendationService: RecommendationService;
-  private responseGenerator: ResponseGenerator;
-  private travelService: TravelConversationService;
+  constructor(
+    private supabase: SupabaseClient,
+    private conversationManager: any,
+    private recommendationService: RecommendationService
+  ) {}
 
-  constructor(private supabase: SupabaseClient) {
-    this.conversationManager = new ConversationManager(supabase);
-    this.propertyService = new PropertyService(supabase);
-    this.fuzzyMatchingService = new FuzzyMatchingService();
-    this.recommendationService = new RecommendationService(supabase);
-    this.responseGenerator = new ResponseGenerator();
-    this.travelService = new TravelConversationService(supabase);
-  }
+  async processMessage(
+    message: string,
+    phoneNumber: string,
+    conversation: any,
+    property: Property | null
+  ): Promise<{ messages: string[]; conversationalResponse: boolean; intent: string }> {
+    console.log('🎯 Enhanced Conversation Service V2.0 - Processing message:', message);
 
-  async processMessage(phoneNumber: string, messageBody: string): Promise<any> {
-    console.log("=== ENHANCED CONVERSATION SERVICE DEBUGGING ===");
-    console.log("Phone:", phoneNumber);
-    console.log("Message:", messageBody);
-
-    try {
-      const cleanMessage = messageBody.trim();
-      console.log("📝 Clean message:", cleanMessage);
-      
-      // Check if this is a travel trigger
-      const travelCode = Deno.env.get('DEFAULT_TRAVEL_CODE') || 'TRAVEL';
-      if (cleanMessage.toUpperCase() === travelCode.toUpperCase()) {
-        console.log("🌎 Travel mode triggered!");
-        const messages = await this.travelService.processMessage(phoneNumber, cleanMessage);
-        return { messages, mode: 'travel' };
-      }
-
-      // Check if we have an existing travel conversation
-      try {
-        const { data: existingTravel } = await this.supabase
-          .from('travel_conversations')
-          .select('*')
-          .eq('phone_number', phoneNumber)
-          .maybeSingle();
-
-        if (existingTravel && existingTravel.step !== 'ASK_LOCATION') {
-          console.log("🌎 Continuing travel conversation");
-          const messages = await this.travelService.processMessage(phoneNumber, cleanMessage);
-          return { messages, mode: 'travel' };
-        }
-      } catch (error) {
-        console.log("ℹ️ No existing travel conversation, proceeding with property mode");
-      }
-
-      // Get or create conversation with enhanced error handling
-      console.log("🔍 Getting or creating conversation...");
-      let conversation;
-      try {
-        conversation = await this.conversationManager.getOrCreateConversation(phoneNumber);
-        console.log("✅ Conversation retrieved:", {
-          id: conversation.id,
-          state: conversation.conversation_state,
-          property_id: conversation.property_id,
-          property_confirmed: conversation.property_confirmed,
-          guest_name: conversation.guest_name
-        });
-      } catch (convError) {
-        console.error("❌ CRITICAL: Failed to get conversation:", convError);
-        const fallbackResponse = "I'm having trouble accessing your conversation. Please try again or text 'reset' to start over.";
-        return { messages: [fallbackResponse], error: 'conversation_access_error' };
-      }
-
-      // Handle reset commands first
-      if (ResetHandler.isResetCommand(cleanMessage)) {
-        console.log("🔄 Reset command detected - performing complete conversation reset");
-        
-        try {
-          const context = conversation.conversation_context || {};
-          console.log("📋 Current context before reset:", context);
-          
-          const resetUpdates = ResetHandler.getCompleteResetUpdates(context);
-          console.log("🔄 Applying complete reset updates:", resetUpdates);
-          
-          await this.conversationManager.updateConversationState(phoneNumber, resetUpdates);
-          console.log("✅ Conversation completely reset to awaiting_property_id state");
-          
-          const resetResponse = ResetHandler.generateResetResponse();
-          console.log("🔄 Generated reset response:", resetResponse);
-          
-          const messages = MultiPartResponseFormatter.formatResponse(resetResponse);
-          console.log("✅ Reset response formatted successfully:", messages);
-          return { messages, resetDetected: true, conversationReset: true };
-        } catch (resetError) {
-          console.error("❌ Error processing complete reset command:", resetError);
-          const fallbackResponse = "Hi! I'm your Hostly AI Concierge. I can help with property info, local recommendations, and more! To get started, please send me your property code (the numbers from your booking confirmation).";
-          return { messages: [fallbackResponse], resetDetected: true, error: 'reset_fallback' };
-        }
-      }
-
-      // Check if message looks like a property code (numbers)
-      const possiblePropertyCode = cleanMessage.match(/\d+/)?.[0];
-      console.log("🔍 Possible property code detected:", possiblePropertyCode);
-
-      // FIXED PROPERTY CODE HANDLING - Must be awaiting_property_id to process property codes
-      if (conversation.conversation_state === 'awaiting_property_id' && possiblePropertyCode) {
-        console.log("🏠 Processing property ID input in correct state...");
-        
-        try {
-          console.log("🔍 Looking up property with code:", possiblePropertyCode);
-          const propertyResult = await this.propertyService.findPropertyByCode(possiblePropertyCode);
-          console.log("🏠 Property lookup result:", propertyResult);
-          
-          if (propertyResult) {
-            console.log("✅ Property found:", propertyResult.property_name);
-            
-            // CRITICAL FIX: Update conversation state to awaiting_confirmation (NOT confirmed)
-            await this.conversationManager.updateConversationState(phoneNumber, {
-              property_id: propertyResult.property_id,
-              conversation_state: 'awaiting_confirmation', // THIS IS THE KEY FIX
-              conversation_context: {
-                ...conversation.conversation_context,
-                pending_property: propertyResult
-              }
-            });
-            
-            const confirmationResponse = `Great! You're staying at ${propertyResult.property_name}, ${propertyResult.address}. Correct? Reply Y or N.`;
-            console.log("📝 Generated confirmation response:", confirmationResponse);
-            const messages = MultiPartResponseFormatter.formatResponse(confirmationResponse);
-            return { messages, propertyFound: true, awaitingConfirmation: true };
-          } else {
-            console.log("❌ Property not found for code:", possiblePropertyCode);
-            const errorResponse = `I couldn't find property code ${possiblePropertyCode}. Please check your booking confirmation and try again.`;
-            const messages = MultiPartResponseFormatter.formatResponse(errorResponse);
-            return { messages, propertyNotFound: true };
-          }
-        } catch (propertyError) {
-          console.error("❌ Error in property lookup:", propertyError);
-          const fallbackResponse = "I'm having trouble finding that property code. Could you try again?";
-          return { messages: [fallbackResponse], error: 'property_lookup_error' };
-        }
-      }
-
-      // Handle if property code sent but not in correct state
-      if (possiblePropertyCode && conversation.conversation_state !== 'awaiting_property_id') {
-        console.log("⚠️ Property code sent but conversation not in awaiting_property_id state");
-        const contextualResponse = this.generateContextualResponse(conversation, cleanMessage);
-        const messages = MultiPartResponseFormatter.formatResponse(contextualResponse);
-        return { messages, contextualResponse: true };
-      }
-
-      // HANDLE CONFIRMATION RESPONSES
-      if (conversation.conversation_state === 'awaiting_confirmation') {
-        console.log("🎯 Processing confirmation response");
-        
-        const normalizedInput = cleanMessage.toLowerCase().trim();
-        const isYes = ['y', 'yes', 'yeah', 'yep', 'correct', 'right', 'true', '1', 'ok', 'okay', 'yup', 'sure', 'absolutely', 'definitely'].includes(normalizedInput);
-        const isNo = ['n', 'no', 'nope', 'wrong', 'incorrect', 'false', '0', 'nah', 'negative'].includes(normalizedInput);
-
-        if (isYes) {
-          console.log("✅ User confirmed property");
-          
-          await this.conversationManager.updateConversationState(phoneNumber, {
-            property_confirmed: true,
-            conversation_state: 'confirmed',
-            conversation_context: {
-              ...conversation.conversation_context,
-              property_confirmed_at: new Date().toISOString(),
-              conversationFlow: { conversationDepth: 0, recentTopics: [] } // Initialize conversation flow
-            }
-          });
-          
-          const welcomeResponse = "Perfect! I'm your Hostly AI Concierge. I can help with property info, local recommendations, and more! What's your name so I can personalize our conversation?";
-          console.log("📝 Generated welcome response:", welcomeResponse);
-          const messages = MultiPartResponseFormatter.formatResponse(welcomeResponse);
-          return { messages, propertyConfirmed: true, askingForName: true };
-          
-        } else if (isNo) {
-          console.log("❌ User rejected property - resetting to awaiting_property_id");
-          
-          await this.conversationManager.updateConversationState(phoneNumber, {
-            property_id: null,
-            conversation_state: 'awaiting_property_id',
-            conversation_context: {
-              ...conversation.conversation_context,
-              pending_property: null
-            }
-          });
-          
-          const retryResponse = "No problem! Let's try again. Please send me your correct property code (the numbers from your booking confirmation).";
-          const messages = MultiPartResponseFormatter.formatResponse(retryResponse);
-          return { messages, propertyRejected: true };
-          
-        } else {
-          console.log("❓ Unclear confirmation response");
-          const clarificationResponse = "Please reply with Y for Yes or N for No to confirm if this is the correct property.";
-          const messages = MultiPartResponseFormatter.formatResponse(clarificationResponse);
-          return { messages, needsClarification: true };
-        }
-      }
-
-      // ENHANCED CONFIRMED GUEST PROCESSING
-      if (conversation.conversation_state === 'confirmed') {
-        console.log("🎯 Processing confirmed guest message with enhanced conversation flow");
-        
-        // Validate we have property information
-        if (!conversation.property_id) {
-          console.error("❌ CRITICAL: Confirmed conversation missing property_id");
-          const errorResponse = "I'm sorry, I seem to have lost your property information. Please send me your property code again.";
-          
-          // Reset conversation state
-          await this.conversationManager.updateConversationState(phoneNumber, {
-            conversation_state: 'awaiting_property_id',
-            property_confirmed: false
-          });
-          
-          return { messages: [errorResponse], error: 'missing_property_id' };
-        }
-
-        // Get property information for processing
-        let property;
-        try {
-          console.log("🏠 Fetching property information for ID:", conversation.property_id);
-          property = await this.propertyService.getPropertyById(conversation.property_id);
-          console.log("✅ Property retrieved:", property ? property.property_name : 'null');
-        } catch (propertyError) {
-          console.error("❌ Error fetching property:", propertyError);
-          const errorResponse = "I'm having trouble accessing your property information. Please try again.";
-          return { messages: [errorResponse], error: 'property_fetch_error' };
-        }
-
-        if (!property) {
-          console.error("❌ CRITICAL: Property not found in database for ID:", conversation.property_id);
-          const errorResponse = "I'm sorry, I couldn't find your property information. Please send me your property code again.";
-          
-          // Reset conversation state
-          await this.conversationManager.updateConversationState(phoneNumber, {
-            conversation_state: 'awaiting_property_id',
-            property_confirmed: false,
-            property_id: null
-          });
-          
-          return { messages: [errorResponse], error: 'property_not_found_in_db' };
-        }
-
-        try {
-          // Get current conversation flow
-          const currentFlow: ConversationFlow = conversation.conversation_context?.conversationFlow || {
-            conversationDepth: 0,
-            recentTopics: []
-          };
-
-          // Handle name detection first
-          const nameDetection = NameHandler.detectAndExtractName(cleanMessage);
-          if (nameDetection.nameDetected && nameDetection.extractedName) {
-            console.log("👋 Name detected:", nameDetection.extractedName);
-            
-            await this.conversationManager.updateConversationState(phoneNumber, {
-              guest_name: nameDetection.extractedName,
-              conversation_context: {
-                ...conversation.conversation_context,
-                name_provided: true,
-                name_provided_at: new Date().toISOString()
-              }
-            });
-            
-            const nameResponse = `Great to meet you, ${nameDetection.extractedName}! How can I assist you today?`;
-            const messages = MultiPartResponseFormatter.formatResponse(nameResponse);
-            return { messages, nameDetected: true };
-          }
-          
-          // Recognize intent with enhanced context
-          const intentResult = IntentRecognitionService.recognizeIntent(cleanMessage);
-          console.log("🎯 Intent recognition result:", intentResult);
-
-          // Check for follow-up intent
-          const followUpIntent = ConversationContextTracker.detectFollowUpIntent(cleanMessage, currentFlow);
-          const finalIntent = followUpIntent || intentResult.intent;
-          
-          console.log("🔄 Final intent (with follow-up detection):", finalIntent);
-
-          // Generate conversational response
-          const conversationalResponse = ConversationalResponseGenerator.generateContextualResponse(
-            finalIntent,
-            currentFlow,
-            property,
-            cleanMessage,
-            conversation.guest_name
-          );
-
-          // Update conversation flow context
-          const updatedFlow = ConversationContextTracker.updateConversationFlow(
-            currentFlow,
-            finalIntent,
-            cleanMessage,
-            conversationalResponse
-          );
-
-          // Update conversation state with new flow
-          await this.conversationManager.updateConversationState(phoneNumber, {
-            conversation_context: {
-              ...conversation.conversation_context,
-              conversationFlow: updatedFlow,
-              last_intent: finalIntent,
-              last_response: conversationalResponse
-            }
-          });
-
-          console.log("✅ Updated conversation flow:", updatedFlow);
-          
-          const messages = MultiPartResponseFormatter.formatResponse(conversationalResponse);
-          return { messages, conversationalResponse: true, intent: finalIntent };
-          
-        } catch (confirmedError) {
-          console.error("❌ Error processing confirmed guest message:", confirmedError);
-          const fallbackResponse = conversation.guest_name 
-            ? `${conversation.guest_name}, I'm here to help! What can I assist you with?`
-            : "I'm here to help! What can I assist you with?";
-          return { messages: [fallbackResponse], error: 'confirmed_processing_error' };
-        }
-      }
-
-      console.log("❓ Unhandled conversation state:", conversation.conversation_state);
-      const defaultResponse = "Hi! I'm your Hostly AI Concierge. To get started, please send me your property code (the numbers from your booking confirmation).";
-      const messages = MultiPartResponseFormatter.formatResponse(defaultResponse);
-      return { messages, unhandled: true };
-
-    } catch (error) {
-      console.error("❌ CRITICAL ERROR in EnhancedConversationService:", error);
-      console.error("❌ Error stack:", error.stack);
-      
-      // Enhanced fallback based on the type of error
-      let errorMessage = "Hi! I'm your Hostly AI Concierge. ";
-      
-      if (error.message?.includes('property')) {
-        errorMessage += "To get started, please send me your property code (the numbers from your booking confirmation).";
-      } else if (error.message?.includes('recommendation')) {
-        errorMessage += "I can help with property info, local recommendations, and more! What can I assist you with?";
-      } else {
-        errorMessage += "I can help with property info, local recommendations, and more! What can I assist you with?";
-      }
-      
-      console.log("🚨 Using enhanced error fallback response:", errorMessage);
-      return { messages: [errorMessage], error: 'service_error', details: error.message };
+    if (!property) {
+      console.log('❌ No property found for conversation');
+      return {
+        messages: ["I need your property code to assist you. Please send your unique property code to get started."],
+        conversationalResponse: false,
+        intent: 'missing_property'
+      };
     }
-  }
 
-  private generateContextualResponse(conversation: any, message: string, property?: any): string {
-    const guestName = conversation.guest_name;
-    const namePrefix = guestName ? `${guestName}, ` : '';
-    const context = conversation.conversation_context || {};
-    const lastIntent = context.last_intent;
-    
-    // Recognize current intent
+    // Recognize intent
     const intentResult = IntentRecognitionService.recognizeIntent(message);
-    console.log("🎯 Intent recognition result:", intentResult);
-    
-    // Handle specific property questions with detailed responses
-    if (intentResult.intent.includes('checkin') && property) {
-      const checkInTime = property.check_in_time || '4:00 PM';
+    console.log('🧠 Intent recognized:', intentResult);
+
+    // Handle conversation reset
+    if (intentResult.intent === 'conversation_reset') {
+      const resetResult = ConversationMemoryManager.handleConversationReset(
+        conversation.conversation_context,
+        conversation.conversation_context?.guest_name
+      );
       
-      // Check if this is about early check-in
-      if (message.toLowerCase().includes('early')) {
-        return `${namePrefix}standard check-in is at ${checkInTime}. For early check-in, I'd recommend contacting the property directly. They may be able to accommodate depending on availability. Would you like me to help with anything else for your stay?`;
+      await this.conversationManager.updateConversationState(phoneNumber, {
+        conversation_context: resetResult.context
+      });
+
+      return {
+        messages: [resetResult.response],
+        conversationalResponse: true,
+        intent: 'conversation_reset'
+      };
+    }
+
+    // Check for repetition prevention
+    if (ConversationMemoryManager.shouldPreventRepetition(conversation.conversation_context, intentResult.intent)) {
+      const repetitionResponse = ConversationMemoryManager.generateRepetitionResponse(
+        intentResult.intent, 
+        conversation.conversation_context?.guest_name
+      );
+      return {
+        messages: [repetitionResponse],
+        conversationalResponse: true,
+        intent: intentResult.intent
+      };
+    }
+
+    // Handle recommendation intents with property data first, then OpenAI
+    if (this.isRecommendationIntent(intentResult.intent)) {
+      console.log('🍽️ Processing recommendation request');
+      
+      // First check if property has specific recommendations
+      const propertyRecommendations = this.checkPropertyRecommendations(property, intentResult.intent, message);
+      
+      if (propertyRecommendations) {
+        console.log('🏠 Using property-specific recommendations');
+        
+        // Update conversation memory with property recommendation
+        const updatedContext = ConversationMemoryManager.updateMemory(
+          conversation.conversation_context,
+          intentResult.intent,
+          'property_recommendation',
+          { type: intentResult.intent, content: propertyRecommendations }
+        );
+
+        await this.conversationManager.updateConversationState(phoneNumber, {
+          conversation_context: updatedContext,
+          last_message_type: intentResult.intent,
+          last_recommendations: propertyRecommendations
+        });
+
+        return {
+          messages: [MessageUtils.ensureSmsLimit(propertyRecommendations)],
+          conversationalResponse: true,
+          intent: intentResult.intent
+        };
       } else {
-        return `${namePrefix}check-in is at ${checkInTime}. Let me know if you need early check-in or have other questions about your arrival!`;
+        console.log('🤖 Using OpenAI recommendations');
+        // Use OpenAI recommendations service
+        const result = await this.recommendationService.getEnhancedRecommendations(property, message, conversation);
+        
+        // Update conversation memory with OpenAI recommendation
+        const updatedContext = ConversationMemoryManager.updateMemory(
+          conversation.conversation_context,
+          intentResult.intent,
+          'openai_recommendation',
+          { type: intentResult.intent, content: result.response }
+        );
+
+        await this.conversationManager.updateConversationState(phoneNumber, {
+          conversation_context: updatedContext,
+          last_message_type: intentResult.intent
+        });
+
+        return {
+          messages: [result.response],
+          conversationalResponse: true,
+          intent: intentResult.intent
+        };
       }
     }
-    
-    if (intentResult.intent.includes('checkout') && property) {
-      const checkOutTime = property.check_out_time || '11:00 AM';
-      return `${namePrefix}check-out is at ${checkOutTime}. Need help with late checkout or anything else for your departure?`;
+
+    // Check for follow-up intents
+    const followUpIntent = ConversationContextTracker.detectFollowUpIntent(
+      message, 
+      conversation.conversation_context?.conversationFlow || {}
+    );
+
+    const finalIntent = followUpIntent || intentResult.intent;
+    console.log('🔄 Final intent after follow-up detection:', finalIntent);
+
+    // Update conversation flow
+    const existingFlow = conversation.conversation_context?.conversationFlow || {};
+    const response = ConversationalResponseGenerator.generateContextualResponse(
+      finalIntent,
+      existingFlow,
+      property,
+      message,
+      conversation.conversation_context?.guest_name
+    );
+
+    // Check if we need to use recommendation service
+    if (response === 'USE_RECOMMENDATION_SERVICE') {
+      console.log('🔄 Routing to recommendation service');
+      const result = await this.recommendationService.getEnhancedRecommendations(property, message, conversation);
+      
+      const updatedContext = ConversationMemoryManager.updateMemory(
+        conversation.conversation_context,
+        finalIntent,
+        'openai_recommendation',
+        { type: finalIntent, content: result.response }
+      );
+
+      await this.conversationManager.updateConversationState(phoneNumber, {
+        conversation_context: updatedContext,
+        last_message_type: finalIntent
+      });
+
+      return {
+        messages: [result.response],
+        conversationalResponse: true,
+        intent: finalIntent
+      };
     }
-    
-    if (intentResult.intent.includes('wifi') && property) {
-      if (property.wifi_name && property.wifi_password) {
-        return `${namePrefix}here are your WiFi details:\n\nNetwork: ${property.wifi_name}\nPassword: ${property.wifi_password}\n\nLet me know if you need help connecting!`;
-      } else {
-        return `${namePrefix}WiFi details should be in your check-in instructions. Contact the property if you need assistance.`;
-      }
-    }
-    
-    if (intentResult.intent.includes('parking') && property) {
-      if (property.parking_instructions) {
-        return `${namePrefix}here are the parking details:\n\n${property.parking_instructions}\n\nAny other questions?`;
-      } else {
-        return `${namePrefix}check your booking confirmation for parking information or contact the property directly.`;
-      }
-    }
-    
-    if (intentResult.intent.includes('access') && property) {
-      if (property.access_instructions) {
-        return `${namePrefix}here are the access details:\n\n${property.access_instructions}\n\nIf you have trouble, contact our emergency line!`;
-      } else {
-        return `${namePrefix}access details should be in your check-in instructions. Contact the property if you need assistance.`;
-      }
-    }
-    
-    // Handle greetings more conversationally
-    if (intentResult.intent === 'greeting') {
-      if (lastIntent) {
-        return `${namePrefix}hello! How can I help you today? I can assist with property questions, local recommendations, or anything else about your stay.`;
-      } else {
-        return `${namePrefix}hi there! What can I help you with today?`;
-      }
-    }
-    
-    // Handle follow-up questions more naturally
-    if (lastIntent === 'ask_checkin_time' && (message.toLowerCase().includes('early') || message.toLowerCase().includes('before'))) {
-      return `${namePrefix}for early check-in requests, I'd recommend contacting the property directly. They'll let you know if they can accommodate based on availability. Is there anything else I can help you with?`;
-    }
-    
-    // Default contextual response
-    const helpfulResponses = [
-      `${namePrefix}I'm here to help! I can assist with property information, local recommendations, check-in details, or any other questions about your stay. What would you like to know?`,
-      `${namePrefix}happy to help! What can I assist you with? I can provide property details, local dining suggestions, directions, or answer other questions about your stay.`,
-      `${namePrefix}I'd love to help! Are you looking for property information, local recommendations, or do you have other questions about your stay?`
+
+    // Update conversation flow and memory
+    const updatedFlow = ConversationContextTracker.updateConversationFlow(
+      existingFlow,
+      finalIntent,
+      message,
+      response
+    );
+
+    const updatedContext = ConversationMemoryManager.updateMemory(
+      conversation.conversation_context,
+      finalIntent,
+      'conversational_response'
+    );
+
+    // Merge the updated flow into the context
+    updatedContext.conversationFlow = updatedFlow;
+
+    await this.conversationManager.updateConversationState(phoneNumber, {
+      conversation_context: updatedContext,
+      last_message_type: finalIntent
+    });
+
+    return {
+      messages: [MessageUtils.ensureSmsLimit(response)],
+      conversationalResponse: true,
+      intent: finalIntent
+    };
+  }
+
+  private isRecommendationIntent(intent: string): boolean {
+    const recommendationIntents = [
+      'ask_food_recommendations',
+      'ask_activities',
+      'ask_grocery_stores'
     ];
+    return recommendationIntents.includes(intent);
+  }
+
+  private checkPropertyRecommendations(property: Property, intent: string, message: string): string | null {
+    const localRecs = property.local_recommendations;
     
-    // Rotate responses to avoid repetition
-    const responseIndex = (context.conversation_depth || 0) % helpfulResponses.length;
-    return helpfulResponses[responseIndex];
+    if (!localRecs) {
+      return null;
+    }
+
+    const lowerMessage = message.toLowerCase();
+    const guestName = property.knowledge_base?.guest_name;
+    const namePrefix = guestName ? `${guestName}, ` : '';
+
+    // Check for food/restaurant recommendations
+    if (intent === 'ask_food_recommendations') {
+      if (localRecs.includes('restaurant') || localRecs.includes('food') || localRecs.includes('dining')) {
+        return `${namePrefix}here are my top local dining recommendations: ${localRecs}\n\nWould you like directions to any of these places?`;
+      }
+    }
+
+    // Check for activities
+    if (intent === 'ask_activities') {
+      if (localRecs.includes('activity') || localRecs.includes('attraction') || localRecs.includes('visit')) {
+        return `${namePrefix}here are some great local activities: ${localRecs}\n\nNeed more details about any of these?`;
+      }
+    }
+
+    // Check for grocery/shopping
+    if (intent === 'ask_grocery_stores') {
+      if (localRecs.includes('grocery') || localRecs.includes('store') || localRecs.includes('market')) {
+        return `${namePrefix}here are nearby shopping options: ${localRecs}\n\nWant directions to any of these stores?`;
+      }
+    }
+
+    return null;
   }
 }

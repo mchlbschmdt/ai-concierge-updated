@@ -25,16 +25,20 @@ export class RecommendationService {
       const requestType = this.categorizeRequest(originalMessage);
       const previousRecommendations = conversation?.last_recommendations || null;
       
+      // Get recommendation context from memory manager to avoid repetition
+      const memoryContext = this.getRecommendationMemoryContext(context);
+      
       console.log('📍 Guest context extracted:', guestContext);
       console.log('🏷️ Request type:', requestType);
       console.log('📝 Previous recommendations:', previousRecommendations);
+      console.log('🧠 Memory context:', memoryContext);
 
       const enhancedPayload = {
         prompt: `${originalMessage}
 
 ENHANCED RESPONSE FORMAT REQUIRED:
 1. Start with: "${personalizedGreeting}"
-2. Provide 1-2 recommendations with format: "Name (distance, rating★): Brief description—${ResponseGenerator.getDistanceFraming('0.3')}"
+2. Provide 2-3 recommendations with format: "Name (distance, rating★): Brief description—${ResponseGenerator.getDistanceFraming('0.3')}"
 3. Ask: "${clarifyingQuestion}"
 4. End with: "${helpfulOffer}"
 
@@ -43,11 +47,13 @@ CRITICAL REQUIREMENTS:
 - Include exact distance (e.g., "0.2 mi")
 - Use distance framing: ≤0.5mi="just a quick walk", 0.5-1.5mi="short Uber/bike ride", >1.5mi="quick drive"
 - Keep total response under 160 characters
-- Be conversational and helpful`,
+- Be conversational and helpful
+- ${memoryContext ? `AVOID REPEATING: ${memoryContext}` : ''}`,
         propertyAddress: `${propertyName}, ${propertyAddress}`,
         guestContext: guestContext,
         requestType: requestType,
-        previousRecommendations: previousRecommendations
+        previousRecommendations: previousRecommendations,
+        memoryContext: memoryContext
       };
 
       const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
@@ -103,10 +109,12 @@ CRITICAL REQUIREMENTS:
       }
 
       const guestNameNote = guestName ? `Guest's name is ${guestName}. ` : '';
+      const memoryContext = this.getRecommendationMemoryContext(context);
+      const avoidRepetition = memoryContext ? `AVOID these previously mentioned places: ${memoryContext}. ` : '';
 
-      const prompt = `You are a local concierge. Guest at ${propertyName}, ${propertyAddress}. ${guestNameNote}${contextNote}Request: ${type}
+      const prompt = `You are a local concierge. Guest at ${propertyName}, ${propertyAddress}. ${guestNameNote}${contextNote}${avoidRepetition}Request: ${type}
 
-CRITICAL: Response must be under 160 characters for SMS. Be warm and conversational. If recommendations don't fit, give 1-2 best options briefly.
+CRITICAL: Response must be under 160 characters for SMS. Be warm and conversational. Give 2-3 fresh recommendations that haven't been mentioned before.
 
 ${contextNote ? 'Reference previous interests naturally if relevant.' : ''}
 ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}`;
@@ -141,6 +149,19 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
         shouldUpdateState: false
       };
     }
+  }
+
+  private getRecommendationMemoryContext(context: any): string {
+    if (!context) return '';
+    
+    // Get global blacklist from memory manager
+    const globalBlacklist = context.global_recommendation_blacklist || [];
+    if (globalBlacklist.length > 0) {
+      const recentBlacklist = globalBlacklist.slice(-8); // Last 8 places to avoid
+      return recentBlacklist.join(', ');
+    }
+    
+    return '';
   }
 
   private extractGuestContext(message: string, context: any, conversation: Conversation): string {

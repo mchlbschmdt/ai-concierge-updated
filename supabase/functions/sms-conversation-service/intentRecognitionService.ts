@@ -98,12 +98,55 @@ export class IntentRecognitionService {
   }
 
   private static detectSingleIntent(message: string): { intent: string; confidence: number } {
-    // Checkout/Check-in times
+    // Enhanced recommendation detection - HIGHEST PRIORITY for user engagement
+    if (this.matchesKeywords(message, [
+      'food', 'restaurant', 'eat', 'dining', 'hungry', 'meal', 'lunch', 'dinner', 'breakfast',
+      'where to eat', 'good food', 'best restaurant', 'food recommendations', 'places to eat',
+      'restaurants near', 'food near', 'somewhere to eat', 'grab a bite', 'get food'
+    ])) {
+      return { intent: 'ask_food_recommendations', confidence: 0.95 };
+    }
+
+    if (this.matchesKeywords(message, [
+      'things to do', 'activities', 'attractions', 'fun', 'sightseeing', 'entertainment',
+      'what to do', 'places to visit', 'tourist spots', 'local attractions', 'activities near',
+      'stuff to do', 'interesting places', 'worth visiting', 'recommendations for activities'
+    ])) {
+      return { intent: 'ask_activities', confidence: 0.95 };
+    }
+
+    if (this.matchesKeywords(message, [
+      'grocery', 'groceries', 'store', 'shopping', 'market', 'supermarket',
+      'buy food', 'get groceries', 'food store', 'convenience store', 'shop for food'
+    ])) {
+      return { intent: 'ask_grocery_stores', confidence: 0.9 };
+    }
+
+    if (this.matchesKeywords(message, [
+      'drink', 'bar', 'cocktail', 'beer', 'wine', 'nightlife', 'drinks',
+      'places to drink', 'good bars', 'cocktail bar', 'brewery', 'wine bar'
+    ])) {
+      return { intent: 'ask_food_recommendations', confidence: 0.9 }; // Handle drinks as food recommendations
+    }
+
+    // Contact and emergency - HIGH PRIORITY for property management
+    if (this.matchesKeywords(message, [
+      'contact', 'phone', 'call', 'number', 'reach', 'contact info', 'contact information',
+      'phone number', 'how to contact', 'who to call', 'contact details', 'get in touch'
+    ])) {
+      return { intent: 'ask_emergency_contact', confidence: 0.95 };
+    }
+
+    if (this.matchesKeywords(message, ['emergency', 'help', 'problem', 'issue', 'urgent'])) {
+      return { intent: 'ask_emergency_contact', confidence: 0.95 };
+    }
+
+    // Property basics
     if (this.matchesKeywords(message, ['checkout', 'check out', 'check-out', 'when do i leave', 'departure time'])) {
       return { intent: 'ask_checkout_time', confidence: 0.95 };
     }
     
-    if (this.matchesKeywords(message, ['checkin', 'check in', 'check-in', 'arrival time', 'when can i arrive'])) {
+    if (this.matchesKeywords(message, ['checkin', 'check in', 'check-in', 'arrival time', 'when can i arrive', 'early check'])) {
       return { intent: 'ask_checkin_time', confidence: 0.95 };
     }
 
@@ -125,26 +168,6 @@ export class IntentRecognitionService {
     // Directions
     if (this.matchesKeywords(message, ['directions', 'how to get', 'address', 'location', 'where is'])) {
       return { intent: 'ask_directions', confidence: 0.85 };
-    }
-
-    // Emergency
-    if (this.matchesKeywords(message, ['emergency', 'contact', 'help', 'problem', 'issue'])) {
-      return { intent: 'ask_emergency_contact', confidence: 0.9 };
-    }
-
-    // Food recommendations
-    if (this.matchesKeywords(message, ['food', 'restaurant', 'eat', 'dining', 'hungry', 'meal'])) {
-      return { intent: 'ask_food_recommendations', confidence: 0.85 };
-    }
-
-    // Grocery/shopping
-    if (this.matchesKeywords(message, ['grocery', 'groceries', 'store', 'shopping', 'market'])) {
-      return { intent: 'ask_grocery_stores', confidence: 0.85 };
-    }
-
-    // Activities/attractions
-    if (this.matchesKeywords(message, ['things to do', 'activities', 'attractions', 'fun', 'sightseeing'])) {
-      return { intent: 'ask_activities', confidence: 0.85 };
     }
 
     // Basic greetings
