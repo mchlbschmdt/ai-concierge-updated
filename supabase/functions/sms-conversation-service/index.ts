@@ -7,6 +7,7 @@ import { ResponseGenerator } from './responseGenerator.ts'
 import { NameHandler } from './nameHandler.ts'
 import { RecommendationService } from './recommendationService.ts'
 import { Conversation, Property, ProcessMessageResult } from './types.ts'
+import { EnhancedConversationService } from './enhancedConversationService.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -24,11 +25,17 @@ class EnhancedSmsConversationService {
   private conversationManager: ConversationManager;
   private propertyService: PropertyService;
   private recommendationService: RecommendationService;
+  private enhancedService: EnhancedConversationService;
 
   constructor(supabase: any) {
     this.conversationManager = new ConversationManager(supabase);
     this.propertyService = new PropertyService(supabase);
     this.recommendationService = new RecommendationService(supabase, this.conversationManager);
+    this.enhancedService = new EnhancedConversationService(
+      this.conversationManager, 
+      this.propertyService, 
+      this.recommendationService
+    );
   }
 
   async processMessage(phoneNumber: string, messageBody: string): Promise<MultiMessageResult> {
@@ -62,7 +69,9 @@ class EnhancedSmsConversationService {
           break;
         
         case 'confirmed':
-          result = await this.handleConfirmedGuestInquiry(conversation, messageBody, isPaused);
+          // Use enhanced conversation service for confirmed guests
+          const property = await this.propertyService.getPropertyInfo(conversation.property_id!);
+          result = await this.enhancedService.processEnhancedMessage(conversation, messageBody, property!);
           break;
         
         default:
