@@ -1,3 +1,4 @@
+
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 export interface TravelConversation {
@@ -78,7 +79,7 @@ export class TravelConversationService {
     phoneNumber: string, 
     updates: Partial<Pick<TravelConversation, 'name' | 'location_id' | 'location_json' | 'preferences_json' | 'step'>>
   ): Promise<TravelConversation> {
-    console.log('Updating travel conversation for:', phoneNumber, updates);
+    console.log('Updating travel conversation for:', phoneNumber, 'with updates:', updates);
 
     const conversationId = await this.supabase.rpc('rpc_upsert_travel_conversation', {
       _phone_number: phoneNumber,
@@ -191,6 +192,8 @@ export class TravelConversationService {
   }
 
   async processMessage(phoneNumber: string, messageBody: string): Promise<string[]> {
+    console.log('🌍 Travel service processing message for:', phoneNumber, 'message:', messageBody);
+    
     const conversation = await this.getOrCreateTravelConversation(phoneNumber);
     
     // Store user message
@@ -201,10 +204,14 @@ export class TravelConversationService {
 
     switch (conversation.step) {
       case 'ASK_LOCATION':
+        console.log('🌍 Processing location step');
         const location = await this.geocodeLocation(messageBody);
         if (location) {
+          console.log('🌍 Location found:', location);
+          console.log('🌍 Updating conversation with location_id:', location.id);
+          
           await this.updateTravelConversation(phoneNumber, {
-            location_id: location.id,
+            location_id: location.id, // Pass only the UUID string, not the entire object
             location_json: location,
             step: 'ASK_NAME'
           });
@@ -215,6 +222,7 @@ export class TravelConversationService {
         break;
 
       case 'ASK_NAME':
+        console.log('🌍 Processing name step');
         const name = messageBody.trim();
         await this.updateTravelConversation(phoneNumber, {
           name,
@@ -224,6 +232,7 @@ export class TravelConversationService {
         break;
 
       case 'ASK_PREFS':
+        console.log('🌍 Processing preferences step');
         const preferences = { vibe: messageBody.toLowerCase() };
         await this.updateTravelConversation(phoneNumber, {
           preferences_json: preferences,
@@ -236,12 +245,14 @@ export class TravelConversationService {
         break;
 
       case 'ASSIST':
+        console.log('🌍 Processing assistance step');
         // Handle ongoing assistance
         const assistRecs = await this.getRecommendations(conversation.location_id!, messageBody);
         response = assistRecs + "\n\nAnything else you'd like to explore?";
         break;
 
       default:
+        console.log('🌍 Default case - asking for location');
         response = "Hi there! 🌎 Where will you be exploring?\nJust drop a city & state or ZIP code.";
         nextStep = 'ASK_LOCATION';
     }
@@ -249,6 +260,7 @@ export class TravelConversationService {
     // Store AI response
     await this.addTravelMessage(conversation.id, 'ai', response);
 
+    console.log('🌍 Travel service response:', response);
     return [response];
   }
 
