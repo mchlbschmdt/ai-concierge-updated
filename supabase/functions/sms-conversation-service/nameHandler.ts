@@ -1,15 +1,18 @@
-
 import { Conversation } from './types.ts';
 
 export class NameHandler {
   static checkIfNameProvided(message: string, conversation: Conversation): { hasName: boolean, extractedName: string | null } {
+    console.log('🔍 NameHandler.checkIfNameProvided called with:', { message, guestName: conversation.conversation_context?.guest_name });
+    
     // If guest name is already captured, return it
     if (conversation.conversation_context?.guest_name) {
+      console.log('✅ Guest name already exists:', conversation.conversation_context.guest_name);
       return { hasName: true, extractedName: conversation.conversation_context.guest_name };
     }
 
     // Only try to capture name if we're in confirmed state and don't have a name yet
     if (conversation.conversation_state !== 'confirmed') {
+      console.log('❌ Not in confirmed state, not capturing name');
       return { hasName: false, extractedName: null }; // Don't capture name before confirmation
     }
 
@@ -24,11 +27,14 @@ export class NameHandler {
     ];
 
     const cleanMessage = message.trim();
+    console.log('🔍 Checking patterns against clean message:', cleanMessage);
     
     for (const pattern of namePatterns) {
       const match = cleanMessage.match(pattern);
+      console.log('🔍 Pattern test:', pattern, 'Match:', match);
       if (match) {
         const potentialName = match[1];
+        console.log('🔍 Potential name found:', potentialName);
         
         // Enhanced exclusion list - things that are definitely not names
         const excludeWords = [
@@ -47,15 +53,21 @@ export class NameHandler {
           
           // Capitalize first letter
           const formattedName = potentialName.charAt(0).toUpperCase() + potentialName.slice(1).toLowerCase();
-          return { hasName: false, extractedName: formattedName }; // Return false for hasName, but provide extracted name
+          console.log('✅ Valid name detected and formatted:', formattedName);
+          return { hasName: true, extractedName: formattedName }; // FIXED: Return true for hasName
+        } else {
+          console.log('❌ Name rejected - excluded word or invalid format');
         }
       }
     }
 
+    console.log('❌ No valid name pattern found');
     return { hasName: false, extractedName: null };
   }
 
   static detectNameRefusal(message: string): boolean {
+    console.log('🚫 NameHandler.detectNameRefusal called with:', message);
+    
     const refusalPatterns = [
       /^no$/i,
       /^nope$/i,
@@ -77,7 +89,9 @@ export class NameHandler {
     ];
 
     const cleanMessage = message.trim();
-    return refusalPatterns.some(pattern => pattern.test(cleanMessage));
+    const isRefusal = refusalPatterns.some(pattern => pattern.test(cleanMessage));
+    console.log('🚫 Name refusal detected:', isRefusal);
+    return isRefusal;
   }
 
   static generateCleverRefusalResponse(): string {
@@ -110,40 +124,59 @@ export class NameHandler {
   }
 
   static shouldAskForName(message: string, conversation: Conversation): boolean {
+    console.log('🤔 NameHandler.shouldAskForName called');
+    console.log('🤔 Context:', {
+      hasGuestName: !!conversation.conversation_context?.guest_name,
+      state: conversation.conversation_state,
+      nameRequestMade: conversation.conversation_context?.name_request_made
+    });
+    
     // Don't ask for name if already have it
     if (conversation.conversation_context?.guest_name) {
+      console.log('❌ Already have guest name');
       return false;
     }
 
     // Don't ask for name if not confirmed yet
     if (conversation.conversation_state !== 'confirmed') {
+      console.log('❌ Not confirmed state');
       return false;
     }
 
     // Don't ask for name if this message is providing a name
     const nameCheck = this.checkIfNameProvided(message, conversation);
     if (nameCheck.extractedName) {
+      console.log('❌ Message contains name');
       return false;
     }
 
     // Don't ask for name if they refused
     if (this.detectNameRefusal(message)) {
+      console.log('❌ Name refused in this message');
       return false;
     }
 
     // Don't ask for name if it's just a greeting
     const greetingKeywords = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening'];
     if (this.isSimpleGreeting(message, greetingKeywords)) {
+      console.log('❌ Simple greeting detected');
       return false;
     }
 
     // Don't ask for name if they're making a direct service request
     if (this.isDirectServiceRequest(message)) {
+      console.log('❌ Direct service request detected');
       return false;
     }
 
-    // Only ask for name if it's a general inquiry and we haven't asked recently
-    return !conversation.conversation_context?.name_request_made;
+    // Don't ask for name if we've already asked
+    if (conversation.conversation_context?.name_request_made) {
+      console.log('❌ Name request already made');
+      return false;
+    }
+
+    console.log('✅ Should ask for name');
+    return true;
   }
 
   static isDirectServiceRequest(message: string): boolean {

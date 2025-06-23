@@ -103,12 +103,13 @@ class EnhancedSmsConversationService {
     console.log('- Guest name:', guestName);
     console.log('- Message:', message);
     console.log('- Is paused conversation:', isPaused);
+    console.log('- Name request made:', conversation.conversation_context?.name_request_made);
     
     const isGreeting = MessageUtils.matchesAnyKeywords(message, [
       'hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening'
     ]);
 
-    // Check for name-related responses
+    // Check for name-related responses FIRST
     const nameCheck = NameHandler.checkIfNameProvided(messageBody, conversation);
     const nameRefusal = NameHandler.detectNameRefusal(messageBody);
     const isDirectServiceRequest = NameHandler.isDirectServiceRequest(messageBody);
@@ -117,8 +118,8 @@ class EnhancedSmsConversationService {
     console.log('🚫 Name refusal:', nameRefusal);
     console.log('🔧 Direct service request:', isDirectServiceRequest);
     
-    // If name was just provided, store it and acknowledge
-    if (nameCheck.extractedName && !guestName) {
+    // PRIORITY 1: Handle name capture
+    if (nameCheck.hasName && nameCheck.extractedName && !guestName) {
       console.log('✅ Name captured, storing:', nameCheck.extractedName);
       await this.conversationManager.updateConversationState(conversation.phone_number, {
         conversation_context: {
@@ -135,7 +136,7 @@ class EnhancedSmsConversationService {
       };
     }
 
-    // Handle name refusal with clever response
+    // PRIORITY 2: Handle name refusal with clever response
     if (nameRefusal && !guestName) {
       console.log('🎭 Name refused, generating clever response');
       await this.conversationManager.updateConversationState(conversation.phone_number, {
@@ -153,7 +154,7 @@ class EnhancedSmsConversationService {
       };
     }
 
-    // Handle direct questions/service requests without name
+    // PRIORITY 3: Handle direct questions/service requests without name (but mark as interacted)
     if (isDirectServiceRequest && !guestName && !conversation.conversation_context?.name_request_made) {
       console.log('🎯 Direct service request without name, generating fun response');
       const directResponse = NameHandler.generateDirectQuestionResponse();
@@ -179,7 +180,7 @@ class EnhancedSmsConversationService {
       return await this.handleStructuredRecommendations(conversation, property!, messageBody, message, null);
     }
 
-    // Handle greetings (with name if we have it)
+    // PRIORITY 4: Handle greetings (with name if we have it)
     if (isGreeting) {
       const nameToUse = guestName ? `, ${guestName}` : '';
       let response;
@@ -197,7 +198,7 @@ class EnhancedSmsConversationService {
       };
     }
 
-    // Ask for name gently (only if we haven't asked before and it's not a direct request)
+    // PRIORITY 5: Ask for name gently (only if we should)
     if (NameHandler.shouldAskForName(messageBody, conversation)) {
       console.log('🏷️ Gently asking for name');
       await this.conversationManager.updateConversationState(conversation.phone_number, {
@@ -214,13 +215,13 @@ class EnhancedSmsConversationService {
       };
     }
 
-    // Handle specific service requests (WiFi, parking, etc.)
+    // PRIORITY 6: Handle specific service requests (WiFi, parking, etc.)
     const serviceResponse = await this.handleServiceRequests(conversation, property!, message, guestName);
     if (serviceResponse) {
       return serviceResponse;
     }
 
-    // Handle location/recommendation requests with the structured format
+    // PRIORITY 7: Handle location/recommendation requests with the structured format
     if (MessageUtils.matchesLocationKeywords(message) || 
         MessageUtils.matchesAnyKeywords(message, ['restaurant', 'food', 'eat', 'drink', 'bar', 'coffee', 'activities'])) {
       
@@ -228,7 +229,7 @@ class EnhancedSmsConversationService {
       return await this.handleStructuredRecommendations(conversation, property!, messageBody, message, guestName);
     }
 
-    // Default contextual response
+    // PRIORITY 8: Default contextual response
     return await this.recommendationService.getContextualRecommendations(property!, `general: ${messageBody}`, conversation);
   }
 
