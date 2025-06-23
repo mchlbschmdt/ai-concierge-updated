@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { ConversationManager } from './conversationManager.ts'
@@ -380,7 +381,7 @@ class EnhancedSmsConversationService {
       });
 
       const greeting = ResponseGenerator.getTimeAwareGreeting(timezone);
-      const response = `${greeting}! I'm your AI concierge. I can help with WiFi, parking, directions, and local tips. What do you need?`;
+      const response = `${greeting}—I'm your Hostly AI Concierge! I can help with property info, local tips, and more! May I have your name?`;
       
       return {
         response: response,
