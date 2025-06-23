@@ -1,5 +1,13 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { ConversationManager } from './conversationManager.ts'
+import { PropertyService } from './propertyService.ts'
+import { MessageUtils } from './messageUtils.ts'
+import { ResponseGenerator } from './responseGenerator.ts'
+import { NameHandler } from './nameHandler.ts'
+import { RecommendationService } from './recommendationService.ts'
+import { Conversation, Property, ProcessMessageResult } from './types.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -8,245 +16,33 @@ const corsHeaders = {
 
 console.log("Enhanced SMS Conversation Service starting up...")
 
-// Enhanced SMS Conversation Service with friendly, time-aware recommendations
 class EnhancedSmsConversationService {
-  constructor(supabase) {
-    this.supabase = supabase;
-    this.SMS_CHAR_LIMIT = 160;
+  private conversationManager: ConversationManager;
+  private propertyService: PropertyService;
+  private recommendationService: RecommendationService;
+
+  constructor(supabase: any) {
+    this.conversationManager = new ConversationManager(supabase);
+    this.propertyService = new PropertyService(supabase);
+    this.recommendationService = new RecommendationService(supabase, this.conversationManager);
   }
 
-  async getOrCreateConversation(phoneNumber) {
-    console.log('Getting or creating conversation for:', phoneNumber);
-    
-    const { data: existing, error } = await this.supabase
-      .from('sms_conversations')
-      .select('*')
-      .eq('phone_number', phoneNumber)
-      .maybeSingle();
-
-    if (error) {
-      console.error('Error fetching conversation:', error);
-    }
-
-    if (existing) {
-      console.log('Found existing conversation:', existing);
-      return existing;
-    }
-
-    const { data: newConversation, error: createError } = await this.supabase
-      .from('sms_conversations')
-      .insert({
-        phone_number: phoneNumber,
-        conversation_state: 'awaiting_property_id',
-        conversation_context: {},
-        preferences: {},
-        timezone: 'UTC',
-        last_interaction_timestamp: new Date().toISOString()
-      })
-      .select()
-      .single();
-
-    if (createError) {
-      console.error('Failed to create conversation:', createError);
-      throw new Error(`Failed to create conversation: ${createError.message}`);
-    }
-
-    console.log('Created new conversation:', newConversation);
-    return newConversation;
-  }
-
-  async updateConversationState(phoneNumber, updates) {
-    console.log('Updating conversation state for:', phoneNumber);
-    
-    const { data, error } = await this.supabase
-      .from('sms_conversations')
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString(),
-        last_interaction_timestamp: new Date().toISOString()
-      })
-      .eq('phone_number', phoneNumber)
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Failed to update conversation:', error);
-      throw new Error(`Failed to update conversation: ${error.message}`);
-    }
-
-    return data;
-  }
-
-  isConversationPaused(lastInteractionTimestamp) {
-    if (!lastInteractionTimestamp) return false;
-    
-    const now = new Date();
-    const lastInteraction = new Date(lastInteractionTimestamp);
-    const diffMinutes = (now - lastInteraction) / (1000 * 60);
-    
-    return diffMinutes > 30;
-  }
-
-  getTimeAwareGreeting(timezone = 'UTC') {
-    try {
-      const now = new Date();
-      const localTime = new Date(now.toLocaleString("en-US", {timeZone: timezone}));
-      const hour = localTime.getHours();
-      
-      if (hour >= 5 && hour < 12) return 'Good morning';
-      if (hour >= 12 && hour < 17) return 'Good afternoon';
-      if (hour >= 17 && hour < 22) return 'Good evening';
-      return 'Hello';
-    } catch (error) {
-      console.error('Error getting time-aware greeting:', error);
-      return 'Hello';
-    }
-  }
-
-  getPersonalizedFoodGreeting(message, greeting, guestName = null) {
-    const lowerMessage = message.toLowerCase();
-    const nameToUse = guestName ? `, ${guestName}` : '';
-    
-    if (this.matchesAnyKeywords(lowerMessage, ['food now', 'hungry', 'eat now', 'dinner now', 'lunch now'])) {
-      const urgentPhrases = [
-        `${greeting}${nameToUse}! Hungry now? I've got you covered 🙂`,
-        `${greeting}${nameToUse}! Ready for a bite? Happy to help 🙂`,
-        `${greeting}${nameToUse}! Looks like you're ready for a bite—happy to help 🙂`
-      ];
-      return urgentPhrases[Math.floor(Math.random() * urgentPhrases.length)];
-    }
-    
-    if (this.matchesAnyKeywords(lowerMessage, ['restaurant', 'food', 'eat', 'dining'])) {
-      return `${greeting}${nameToUse}! Looking for somewhere great to eat? I've got some perfect spots for you 🙂`;
-    }
-    
-    if (this.matchesAnyKeywords(lowerMessage, ['drink', 'bar', 'cocktail', 'beer'])) {
-      return `${greeting}${nameToUse}! Ready for drinks? I know some fantastic spots 🙂`;
-    }
-    
-    if (this.matchesAnyKeywords(lowerMessage, ['coffee', 'cafe'])) {
-      return `${greeting}${nameToUse}! Need your coffee fix? I've got great recommendations 🙂`;
-    }
-    
-    return `${greeting}${nameToUse}! I'd love to help with recommendations 🙂`;
-  }
-
-  getClarifyingQuestion(message) {
-    const lowerMessage = message.toLowerCase();
-    
-    if (this.matchesAnyKeywords(lowerMessage, ['food', 'restaurant', 'eat', 'dining', 'hungry'])) {
-      const questions = [
-        "Are you in the mood for something quick and casual, or more of a sit-down vibe?",
-        "Any cravings—pizza, seafood, tacos?",
-        "Feeling like something quick or a nice sit-down meal?"
-      ];
-      return questions[Math.floor(Math.random() * questions.length)];
-    }
-    
-    if (this.matchesAnyKeywords(lowerMessage, ['drink', 'bar', 'cocktail'])) {
-      return "Looking for craft cocktails, casual drinks, or maybe rooftop vibes?";
-    }
-    
-    if (this.matchesAnyKeywords(lowerMessage, ['things to do', 'activities'])) {
-      return "Interested in outdoor activities, cultural spots, or nightlife?";
-    }
-    
-    return "What kind of vibe are you going for?";
-  }
-
-  getDistanceFraming(distance) {
-    const distanceNum = parseFloat(distance);
-    
-    if (distanceNum <= 0.5) {
-      return "just a quick walk from where you are";
-    } else if (distanceNum <= 1.5) {
-      return "best reached with a short Uber or bike ride";
-    } else {
-      return "a great spot if you're up for a quick drive";
-    }
-  }
-
-  getHelpfulOffer(requestType) {
-    const offers = [
-      "Would you like directions?",
-      "Want more options like these?",
-      "Need help with anything else—activities, parking, WiFi?"
-    ];
-    
-    if (requestType === 'dining') {
-      return "Would you like directions or more dining options?";
-    }
-    
-    return offers[Math.floor(Math.random() * offers.length)];
-  }
-
-  ensureSmsLimit(response) {
-    if (response.length <= this.SMS_CHAR_LIMIT) {
-      return response;
-    }
-    return response.substring(0, this.SMS_CHAR_LIMIT - 3) + '...';
-  }
-
-  generateContextualFollowUp(conversation) {
-    const lastRecommendations = conversation.last_recommendations;
-    const lastMessageType = conversation.last_message_type;
-
-    if (lastMessageType === 'recommendations' && lastRecommendations) {
-      const followUps = [
-        "Hope you enjoyed my suggestions! ",
-        "Did my recommendations work out? ",
-        "Hope those spots were great! "
-      ];
-      return followUps[Math.floor(Math.random() * followUps.length)];
-    }
-
-    return "";
-  }
-
-  checkIfNameProvided(message, conversation) {
-    // Skip name capture if already confirmed or still getting property ID
-    if (conversation.conversation_state !== 'confirmed' || conversation.conversation_context?.guest_name) {
-      return { hasName: true, extractedName: conversation.conversation_context?.guest_name };
-    }
-
-    // Check if message contains a name pattern
-    const namePatterns = [
-      /^(my name is|i'm|i am|call me) (\w+)/i,
-      /^(\w+)$/,  // Single word response
-      /^hi,? (my name is|i'm|i am) (\w+)/i
-    ];
-
-    for (const pattern of namePatterns) {
-      const match = message.trim().match(pattern);
-      if (match) {
-        const name = match[2] || match[1];
-        // Exclude common non-name responses
-        const excludeWords = ['yes', 'no', 'ok', 'okay', 'sure', 'thanks', 'hello', 'hi', 'hey'];
-        if (!excludeWords.includes(name.toLowerCase()) && name.length > 1) {
-          return { hasName: true, extractedName: name };
-        }
-      }
-    }
-
-    return { hasName: false, extractedName: null };
-  }
-
-  async processMessage(phoneNumber, messageBody) {
+  async processMessage(phoneNumber: string, messageBody: string): Promise<ProcessMessageResult> {
     console.log('=== PROCESSING ENHANCED MESSAGE ===');
     console.log('Phone:', phoneNumber);
     console.log('Message:', messageBody);
     
     try {
-      const conversation = await this.getOrCreateConversation(phoneNumber);
+      const conversation = await this.conversationManager.getOrCreateConversation(phoneNumber);
       const cleanMessage = messageBody.trim().toLowerCase();
-      const isPaused = this.isConversationPaused(conversation.last_interaction_timestamp);
+      const isPaused = MessageUtils.isConversationPaused(conversation.last_interaction_timestamp);
 
       console.log('Current state:', conversation.conversation_state);
       console.log('Is paused:', isPaused);
 
       // Handle reset commands
       if (cleanMessage === 'reset' || cleanMessage === 'restart' || cleanMessage === 'start over') {
-        await this.resetConversation(phoneNumber);
+        await this.conversationManager.resetConversation(phoneNumber);
         return {
           response: "I've reset our conversation. Please text your property ID to get started.",
           shouldUpdateState: true
@@ -264,7 +60,7 @@ class EnhancedSmsConversationService {
           return await this.handleConfirmedGuestInquiry(conversation, messageBody, isPaused);
         
         default:
-          await this.resetConversation(phoneNumber);
+          await this.conversationManager.resetConversation(phoneNumber);
           return this.getWelcomeMessage();
       }
     } catch (error) {
@@ -276,32 +72,32 @@ class EnhancedSmsConversationService {
     }
   }
 
-  async handleConfirmedGuestInquiry(conversation, messageBody, isPaused) {
-    const property = await this.getPropertyInfo(conversation.property_id);
+  async handleConfirmedGuestInquiry(conversation: Conversation, messageBody: string, isPaused: boolean): Promise<ProcessMessageResult> {
+    const property = await this.propertyService.getPropertyInfo(conversation.property_id!);
     const message = messageBody.trim().toLowerCase();
-    const greeting = this.getTimeAwareGreeting(conversation.timezone || 'UTC');
+    const greeting = ResponseGenerator.getTimeAwareGreeting(conversation.timezone || 'UTC');
     const guestName = conversation.conversation_context?.guest_name;
     
-    const isGreeting = this.matchesAnyKeywords(message, [
+    const isGreeting = MessageUtils.matchesAnyKeywords(message, [
       'hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening'
     ]);
 
     // Check if we need to capture the guest's name
-    const nameCheck = this.checkIfNameProvided(messageBody, conversation);
+    const nameCheck = NameHandler.checkIfNameProvided(messageBody, conversation);
     
-    if (!nameCheck.hasName && !isGreeting && !this.matchesLocationKeywords(message) && 
-        !this.matchesServiceKeywords(message)) {
+    if (!nameCheck.hasName && !isGreeting && !MessageUtils.matchesLocationKeywords(message) && 
+        !MessageUtils.matchesServiceKeywords(message)) {
       // Ask for name with time-aware greeting
       const nameRequest = `${greeting}! Happy to help 🙂 Before we dive in, what's your name so I can assist you more personally?`;
       return {
-        response: this.ensureSmsLimit(nameRequest),
+        response: MessageUtils.ensureSmsLimit(nameRequest),
         shouldUpdateState: false
       };
     }
 
     // If name was just provided, store it and continue
     if (nameCheck.extractedName && !guestName) {
-      await this.updateConversationState(conversation.phone_number, {
+      await this.conversationManager.updateConversationState(conversation.phone_number, {
         conversation_context: {
           ...conversation.conversation_context,
           guest_name: nameCheck.extractedName
@@ -310,52 +106,43 @@ class EnhancedSmsConversationService {
       
       const welcomeWithName = `Nice to meet you, ${nameCheck.extractedName}! How can I help with your stay?`;
       return {
-        response: this.ensureSmsLimit(welcomeWithName),
+        response: MessageUtils.ensureSmsLimit(welcomeWithName),
         shouldUpdateState: false
       };
     }
 
-    const contextualFollowUp = this.generateContextualFollowUp(conversation);
+    const contextualFollowUp = ResponseGenerator.generateContextualFollowUp(conversation);
 
     if (isGreeting && isPaused) {
       const nameToUse = guestName ? `, ${guestName}` : '';
       let response = `${greeting}${nameToUse}! Welcome back! ${contextualFollowUp}How can I help?`;
       return {
-        response: this.ensureSmsLimit(response),
+        response: MessageUtils.ensureSmsLimit(response),
         shouldUpdateState: false
       };
     } else if (isGreeting) {
       const nameToUse = guestName ? `, ${guestName}` : '';
       let response = `${greeting}${nameToUse}! How can I help with your stay?`;
       return {
-        response: this.ensureSmsLimit(response),
+        response: MessageUtils.ensureSmsLimit(response),
         shouldUpdateState: false
       };
     }
 
-    return await this.handleSpecificInquiry(conversation, property, message, messageBody);
+    return await this.handleSpecificInquiry(conversation, property!, message, messageBody);
   }
 
-  matchesServiceKeywords(message) {
-    const serviceKeywords = [
-      'wifi', 'wi-fi', 'internet', 'password', 'network',
-      'parking', 'park', 'car', 'garage',
-      'check in', 'check out', 'checkin', 'checkout'
-    ];
-    return this.matchesAnyKeywords(message, serviceKeywords);
-  }
-
-  async handleSpecificInquiry(conversation, property, message, originalMessage) {
+  async handleSpecificInquiry(conversation: Conversation, property: Property, message: string, originalMessage: string): Promise<ProcessMessageResult> {
     const guestName = conversation.conversation_context?.guest_name;
 
     // WiFi requests
-    if (this.matchesAnyKeywords(message, ['wifi', 'wi-fi', 'internet', 'password', 'network'])) {
+    if (MessageUtils.matchesAnyKeywords(message, ['wifi', 'wi-fi', 'internet', 'password', 'network'])) {
       if (property?.wifi_name && property?.wifi_password) {
         const nameToUse = guestName ? `, ${guestName}` : '';
         const response = `Here you go${nameToUse}!\n\nWiFi: ${property.wifi_name}\nPassword: ${property.wifi_password}\n\nAnything else?`;
-        await this.updateConversationContext(conversation, 'wifi');
+        await this.conversationManager.updateConversationContext(conversation, 'wifi');
         return {
-          response: this.ensureSmsLimit(response),
+          response: MessageUtils.ensureSmsLimit(response),
           shouldUpdateState: false
         };
       } else {
@@ -367,12 +154,12 @@ class EnhancedSmsConversationService {
     }
 
     // Parking requests
-    if (this.matchesAnyKeywords(message, ['parking', 'park', 'car', 'garage'])) {
+    if (MessageUtils.matchesAnyKeywords(message, ['parking', 'park', 'car', 'garage'])) {
       if (property?.parking_instructions) {
-        await this.updateConversationContext(conversation, 'parking');
+        await this.conversationManager.updateConversationContext(conversation, 'parking');
         const nameToUse = guestName ? `, ${guestName}` : '';
         return {
-          response: this.ensureSmsLimit(property.parking_instructions + `\n\nOther questions${nameToUse}?`),
+          response: MessageUtils.ensureSmsLimit(property.parking_instructions + `\n\nOther questions${nameToUse}?`),
           shouldUpdateState: false
         };
       } else {
@@ -384,188 +171,28 @@ class EnhancedSmsConversationService {
     }
 
     // Check-in/out times
-    if (this.matchesAnyKeywords(message, ['check in', 'check out', 'checkin', 'checkout'])) {
+    if (MessageUtils.matchesAnyKeywords(message, ['check in', 'check out', 'checkin', 'checkout'])) {
       const checkIn = property?.check_in_time || '4:00 PM';
       const checkOut = property?.check_out_time || '11:00 AM';
       const nameToUse = guestName ? `, ${guestName}` : '';
       const response = `Check-in: ${checkIn}\nCheck-out: ${checkOut}\n\nAnything else${nameToUse}?`;
       return {
-        response: this.ensureSmsLimit(response),
+        response: MessageUtils.ensureSmsLimit(response),
         shouldUpdateState: false
       };
     }
 
-    // Location/recommendation requests - NEW ENHANCED FORMAT
-    if (this.matchesLocationKeywords(message)) {
-      await this.updateConversationContext(conversation, 'recommendations');
-      return await this.getEnhancedRecommendations(property, originalMessage, conversation);
+    // Location/recommendation requests
+    if (MessageUtils.matchesLocationKeywords(message)) {
+      await this.conversationManager.updateConversationContext(conversation, 'recommendations');
+      return await this.recommendationService.getEnhancedRecommendations(property, originalMessage, conversation);
     }
 
     // Default to contextual response
-    return await this.getContextualRecommendations(property, `general: ${originalMessage}`, conversation);
+    return await this.recommendationService.getContextualRecommendations(property, `general: ${originalMessage}`, conversation);
   }
 
-  async getEnhancedRecommendations(property, originalMessage, conversation) {
-    console.log(`🎯 Getting enhanced recommendations for: ${originalMessage}`);
-    
-    try {
-      const propertyAddress = property?.address || 'the property';
-      const propertyName = property?.property_name || 'your accommodation';
-      const context = conversation?.conversation_context || {};
-      const timezone = conversation?.timezone || 'UTC';
-      const guestName = context?.guest_name;
-      
-      // Get time-aware greeting and personalized opener
-      const greeting = this.getTimeAwareGreeting(timezone);
-      const personalizedGreeting = this.getPersonalizedFoodGreeting(originalMessage, greeting, guestName);
-      const clarifyingQuestion = this.getClarifyingQuestion(originalMessage);
-      const helpfulOffer = this.getHelpfulOffer(this.categorizeRequest(originalMessage));
-      
-      // Extract guest context for better recommendations
-      const guestContext = this.extractGuestContext(originalMessage, context, conversation);
-      const requestType = this.categorizeRequest(originalMessage);
-      
-      // Get previous recommendations for follow-up detection
-      const previousRecommendations = conversation?.last_recommendations || null;
-      
-      console.log('📍 Guest context extracted:', guestContext);
-      console.log('🏷️ Request type:', requestType);
-      console.log('📝 Previous recommendations:', previousRecommendations);
-
-      const enhancedPayload = {
-        prompt: `${originalMessage}
-
-ENHANCED RESPONSE FORMAT REQUIRED:
-1. Start with: "${personalizedGreeting}"
-2. Provide 1-2 recommendations with format: "Name (distance, rating★): Brief description—${this.getDistanceFraming('0.3')}"
-3. Ask: "${clarifyingQuestion}"
-4. End with: "${helpfulOffer}"
-
-CRITICAL REQUIREMENTS:
-- Only show places with 4.0+ ratings
-- Include exact distance (e.g., "0.2 mi")
-- Use distance framing: ≤0.5mi="just a quick walk", 0.5-1.5mi="short Uber/bike ride", >1.5mi="quick drive"
-- Keep total response under 160 characters
-- Be conversational and helpful`,
-        propertyAddress: `${propertyName}, ${propertyAddress}`,
-        guestContext: guestContext,
-        requestType: requestType,
-        previousRecommendations: previousRecommendations
-      };
-
-      const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
-        },
-        body: JSON.stringify(enhancedPayload)
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log('✅ Enhanced recommendations received');
-        
-        // Store recommendations and context for future use
-        await this.updateConversationState(conversation.phone_number, {
-          last_recommendations: data.recommendation,
-          conversation_context: {
-            ...context,
-            lastRecommendationType: requestType,
-            lastGuestContext: guestContext
-          }
-        });
-        
-        return {
-          response: this.ensureSmsLimit(data.recommendation),
-          shouldUpdateState: false
-        };
-      } else {
-        throw new Error(`Enhanced recommendations API failed: ${response.status}`);
-      }
-    } catch (error) {
-      console.error('❌ Error getting enhanced recommendations:', error);
-      
-      return {
-        response: "Having trouble with recommendations right now. Try again soon or ask about WiFi, parking, or check-in details.",
-        shouldUpdateState: false
-      };
-    }
-  }
-
-  async updateConversationContext(conversation, messageType) {
-    try {
-      const context = conversation.conversation_context || {};
-      const askedAbout = context.askedAbout || [];
-      
-      if (messageType && !askedAbout.includes(messageType)) {
-        askedAbout.push(messageType);
-      }
-
-      await this.updateConversationState(conversation.phone_number, {
-        conversation_context: { ...context, askedAbout },
-        last_message_type: messageType
-      });
-    } catch (error) {
-      console.error('Error updating context:', error);
-    }
-  }
-
-  async getContextualRecommendations(property, type, conversation) {
-    try {
-      const propertyName = property?.property_name || 'your accommodation';
-      const propertyAddress = property?.address || 'the property';
-      const context = conversation?.conversation_context || {};
-      const previousAskedAbout = context.askedAbout || [];
-      const guestName = context?.guest_name;
-      
-      let contextNote = '';
-      if (previousAskedAbout.length > 0) {
-        contextNote = `Guest previously asked about: ${previousAskedAbout.join(', ')}. `;
-      }
-
-      const guestNameNote = guestName ? `Guest's name is ${guestName}. ` : '';
-
-      const prompt = `You are a local concierge. Guest at ${propertyName}, ${propertyAddress}. ${guestNameNote}${contextNote}Request: ${type}
-
-CRITICAL: Response must be under 160 characters for SMS. Be warm and conversational. If recommendations don't fit, give 1-2 best options briefly.
-
-${contextNote ? 'Reference previous interests naturally if relevant.' : ''}
-${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}`;
-
-      const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
-        },
-        body: JSON.stringify({ prompt })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        
-        await this.updateConversationState(conversation.phone_number, {
-          last_recommendations: data.recommendation
-        });
-        
-        return {
-          response: this.ensureSmsLimit(data.recommendation),
-          shouldUpdateState: false
-        };
-      } else {
-        throw new Error(`OpenAI API failed: ${response.status}`);
-      }
-    } catch (error) {
-      console.error('Error getting recommendations:', error);
-      return {
-        response: "Having trouble with recommendations. Try asking about WiFi, parking, or check-in details.",
-        shouldUpdateState: false
-      };
-    }
-  }
-
-  async handlePropertyIdInput(conversation, input) {
+  async handlePropertyIdInput(conversation: Conversation, input: string): Promise<ProcessMessageResult> {
     const propertyCode = input.match(/\d+/)?.[0];
     
     if (!propertyCode) {
@@ -576,7 +203,7 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
     }
 
     try {
-      const property = await this.findPropertyByCode(propertyCode);
+      const property = await this.propertyService.findPropertyByCode(propertyCode);
       
       if (!property) {
         return {
@@ -585,14 +212,14 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
         };
       }
 
-      await this.updateConversationState(conversation.phone_number, {
+      await this.conversationManager.updateConversationState(conversation.phone_number, {
         property_id: property.property_id || property.id,
         conversation_state: 'awaiting_confirmation'
       });
 
       const response = `Great! You're staying at ${property.property_name}, ${property.address}. Correct? Reply Y or N.`;
       return {
-        response: this.ensureSmsLimit(response),
+        response: MessageUtils.ensureSmsLimit(response),
         shouldUpdateState: true
       };
     } catch (error) {
@@ -603,30 +230,30 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
     }
   }
 
-  async handleConfirmation(conversation, input) {
+  async handleConfirmation(conversation: Conversation, input: string): Promise<ProcessMessageResult> {
     const normalizedInput = input.toLowerCase().trim();
     const isYes = ['y', 'yes', 'yeah', 'yep', 'correct', 'right', 'ok', 'okay'].includes(normalizedInput);
     const isNo = ['n', 'no', 'nope', 'wrong', 'incorrect'].includes(normalizedInput);
 
     if (isYes) {
-      const property = await this.getPropertyInfo(conversation.property_id);
-      const timezone = this.guessTimezoneFromAddress(property?.address) || 'UTC';
+      const property = await this.propertyService.getPropertyInfo(conversation.property_id!);
+      const timezone = MessageUtils.guessTimezoneFromAddress(property?.address) || 'UTC';
       
-      await this.updateConversationState(conversation.phone_number, {
+      await this.conversationManager.updateConversationState(conversation.phone_number, {
         property_confirmed: true,
         conversation_state: 'confirmed',
         timezone: timezone
       });
 
-      const greeting = this.getTimeAwareGreeting(timezone);
+      const greeting = ResponseGenerator.getTimeAwareGreeting(timezone);
       const response = `${greeting}! I'm your AI concierge. I can help with WiFi, parking, directions, and local tips. What do you need?`;
       
       return {
-        response: this.ensureSmsLimit(response),
+        response: MessageUtils.ensureSmsLimit(response),
         shouldUpdateState: true
       };
     } else if (isNo) {
-      await this.updateConversationState(conversation.phone_number, {
+      await this.conversationManager.updateConversationState(conversation.phone_number, {
         property_id: null,
         conversation_state: 'awaiting_property_id'
       });
@@ -643,131 +270,7 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
     }
   }
 
-  guessTimezoneFromAddress(address) {
-    if (!address) return 'UTC';
-    
-    const addressLower = address.toLowerCase();
-    const timezoneMap = {
-      'san juan': 'America/Puerto_Rico',
-      'puerto rico': 'America/Puerto_Rico',
-      'miami': 'America/New_York',
-      'new york': 'America/New_York',
-      'los angeles': 'America/Los_Angeles',
-      'chicago': 'America/Chicago'
-    };
-
-    for (const [location, timezone] of Object.entries(timezoneMap)) {
-      if (addressLower.includes(location)) {
-        return timezone;
-      }
-    }
-
-    return 'UTC';
-  }
-
-  async resetConversation(phoneNumber) {
-    return await this.updateConversationState(phoneNumber, {
-      conversation_state: 'awaiting_property_id',
-      property_id: null,
-      property_confirmed: false,
-      conversation_context: {},
-      last_message_type: null,
-      last_recommendations: null
-    });
-  }
-
-  async findPropertyByCode(code) {
-    const { data: property, error } = await this.supabase
-      .from('properties')
-      .select('*')
-      .eq('code', code.toString())
-      .maybeSingle();
-
-    if (error && error.code !== 'PGRST116') {
-      throw new Error(`Database error: ${error.message}`);
-    }
-
-    if (property) {
-      return {
-        property_id: property.id,
-        property_name: property.property_name,
-        address: property.address,
-        check_in_time: property.check_in_time || '4:00 PM',
-        check_out_time: property.check_out_time || '11:00 AM'
-      };
-    }
-
-    return null;
-  }
-
-  async getPropertyInfo(propertyId) {
-    if (!propertyId) return null;
-
-    try {
-      const { data: property, error } = await this.supabase
-        .from('properties')
-        .select('*')
-        .eq('id', propertyId)
-        .maybeSingle();
-
-      return error ? null : property;
-    } catch (error) {
-      console.error('Error getting property info:', error);
-      return null;
-    }
-  }
-
-  matchesAnyKeywords(message, keywords) {
-    const lowerMessage = message.toLowerCase();
-    return keywords.some(keyword => lowerMessage.includes(keyword.toLowerCase()));
-  }
-
-  matchesLocationKeywords(message) {
-    const keywords = [
-      'beach', 'restaurant', 'food', 'eat', 'dining', 'drink', 'bar',
-      'things to do', 'attractions', 'activities', 'directions'
-    ];
-    return this.matchesAnyKeywords(message, keywords);
-  }
-
-  extractGuestContext(message, context, conversation) {
-    const askedAbout = context.askedAbout || [];
-    const lastMessage = conversation.last_message_type;
-    
-    if (lastMessage === 'recommendations') {
-      return message;
-    }
-
-    if (askedAbout.includes('wifi')) {
-      return message;
-    }
-
-    if (askedAbout.includes('parking')) {
-      return message;
-    }
-
-    return message;
-  }
-
-  categorizeRequest(message) {
-    const keywords = [
-      'wifi', 'wi-fi', 'internet', 'password', 'network',
-      'parking', 'park', 'car', 'garage',
-      'check in', 'check out', 'checkin', 'checkout',
-      'beach', 'restaurant', 'food', 'eat', 'dining', 'drink', 'bar',
-      'things to do', 'attractions', 'activities', 'directions'
-    ];
-
-    for (const keyword of keywords) {
-      if (message.toLowerCase().includes(keyword)) {
-        return keyword;
-      }
-    }
-
-    return 'general';
-  }
-
-  getWelcomeMessage() {
+  getWelcomeMessage(): ProcessMessageResult {
     return {
       response: "Welcome! Text your property ID to get started. Text 'reset' anytime to restart.",
       shouldUpdateState: false
@@ -812,7 +315,7 @@ serve(async (req) => {
 
       switch (body.action) {
         case 'getOrCreateConversation':
-          const conversation = await service.getOrCreateConversation(body.phoneNumber);
+          const conversation = await service.conversationManager.getOrCreateConversation(body.phoneNumber);
           return new Response(
             JSON.stringify({ conversation }),
             {
