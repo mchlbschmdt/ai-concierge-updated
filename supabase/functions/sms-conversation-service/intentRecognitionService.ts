@@ -10,6 +10,15 @@ export class IntentRecognitionService {
   static recognizeIntent(message: string): IntentResult {
     const lowerMessage = message.toLowerCase().trim();
     
+    // Reset/restart commands - HIGH PRIORITY
+    if (this.matchesKeywords(lowerMessage, [
+      'reset', 'restart', 'start over', 'something else', 'different options',
+      'what else', 'other recommendations', 'try again', 'nevermind',
+      'change topic', 'something different', 'new suggestions'
+    ])) {
+      return { intent: 'conversation_reset', confidence: 0.95, isMultiPart: false };
+    }
+    
     // Multi-part detection - check for "and" patterns
     const hasMultipleParts = this.detectMultipleRequests(lowerMessage);
     

@@ -26,6 +26,24 @@ export class EnhancedConversationService {
     const intentResult = IntentRecognitionService.recognizeIntent(messageBody);
     console.log('🎯 Intent recognized:', intentResult);
     
+    // Handle conversation reset first
+    if (intentResult.intent === 'conversation_reset') {
+      console.log('🔄 Processing conversation reset');
+      const resetResult = ConversationMemoryManager.handleConversationReset(
+        conversation.conversation_context, 
+        guestName
+      );
+      
+      await conversationManager.updateConversationState(conversation.phone_number, {
+        conversation_context: resetResult.context
+      });
+
+      return {
+        messages: [resetResult.response],
+        shouldUpdateState: true
+      };
+    }
+    
     // Check for repetition prevention
     if (ConversationMemoryManager.shouldPreventRepetition(conversation.conversation_context, intentResult.intent)) {
       console.log('🔄 Preventing repetition for intent:', intentResult.intent);
@@ -86,7 +104,7 @@ export class EnhancedConversationService {
       } else {
         // Use OpenAI for this part
         try {
-          const openAIResponse = await this.getOpenAIResponse(property, intent, originalMessage, guestName);
+          const openAIResponse = await this.getOpenAIResponse(property, intent, originalMessage, guestName, conversation);
           openAIResponses.set(intent, openAIResponse);
         } catch (error) {
           console.error('OpenAI error for intent:', intent, error);
@@ -160,13 +178,23 @@ export class EnhancedConversationService {
     // Fall back to OpenAI for complex queries
     console.log('🤖 Using OpenAI for intent:', intent);
     try {
-      const openAIResponse = await this.getOpenAIResponse(property, intent, message, guestName);
+      const openAIResponse = await this.getOpenAIResponse(property, intent, message, guestName, conversation);
+      
+      // Track recommendation if this was a recommendation type
+      let recommendationData;
+      if (['ask_food_recommendations', 'ask_activities', 'ask_grocery_stores'].includes(intent)) {
+        recommendationData = {
+          type: intent,
+          content: openAIResponse.substring(0, 50) + '...' // Store abbreviated version
+        };
+      }
       
       // Update conversation memory
       const updatedContext = ConversationMemoryManager.updateMemory(
         conversation.conversation_context,
         intent,
-        'openai_response'
+        'openai_response',
+        recommendationData
       );
 
       await conversationManager.updateConversationState(conversation.phone_number, {
@@ -191,9 +219,10 @@ export class EnhancedConversationService {
     }
   }
 
-  private async getOpenAIResponse(property: any, intent: string, message: string, guestName?: string): Promise<string> {
+  private async getOpenAIResponse(property: any, intent: string, message: string, guestName?: string, conversation?: any): Promise<string> {
     const propertyContext = this.buildPropertyContext(property);
-    const prompt = this.buildIntentSpecificPrompt(intent, message, propertyContext, guestName);
+    const conversationContext = ConversationMemoryManager.getRecommendationContext(conversation?.conversation_context);
+    const prompt = this.buildIntentSpecificPrompt(intent, message, propertyContext, guestName, conversationContext);
 
     const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
       method: 'POST',
@@ -223,19 +252,20 @@ export class EnhancedConversationService {
     return context.join('\n');
   }
 
-  private buildIntentSpecificPrompt(intent: string, message: string, propertyContext: string, guestName?: string): string {
+  private buildIntentSpecificPrompt(intent: string, message: string, propertyContext: string, guestName?: string, conversationContext?: string): string {
     const nameContext = guestName ? `The guest's name is ${guestName}.` : '';
+    const previousContext = conversationContext ? `\n\nIMPORTANT: ${conversationContext} Please provide DIFFERENT recommendations to avoid repetition.` : '';
     
     const intentPrompts: Record<string, string> = {
-      'ask_food_recommendations': `You are a local expert providing restaurant recommendations. ${nameContext} ${propertyContext}\n\nProvide 2-3 specific restaurant recommendations with names, brief descriptions, and why locals love them. Keep it under 160 words for SMS. Guest asked: ${message}`,
+      'ask_food_recommendations': `You are a local expert providing restaurant recommendations. ${nameContext} ${propertyContext}${previousContext}\n\nProvide 2-3 specific restaurant recommendations with names, brief descriptions, and why locals love them. Keep it under 160 words for SMS. Guest asked: ${message}`,
       
-      'ask_grocery_stores': `You are a local expert providing grocery store recommendations. ${nameContext} ${propertyContext}\n\nProvide 2-3 nearby grocery store options with names and brief descriptions. Keep it under 160 words for SMS. Guest asked: ${message}`,
+      'ask_grocery_stores': `You are a local expert providing grocery store recommendations. ${nameContext} ${propertyContext}${previousContext}\n\nProvide 2-3 nearby grocery store options with names and brief descriptions. Keep it under 160 words for SMS. Guest asked: ${message}`,
       
-      'ask_activities': `You are a local expert providing activity and attraction recommendations. ${nameContext} ${propertyContext}\n\nProvide 2-3 specific activities or attractions with names and brief descriptions. Keep it under 160 words for SMS. Guest asked: ${message}`,
+      'ask_activities': `You are a local expert providing activity and attraction recommendations. ${nameContext} ${propertyContext}${previousContext}\n\nProvide 2-3 specific activities or attractions with names and brief descriptions. Keep it under 160 words for SMS. Guest asked: ${message}`,
       
       'greeting': `You are a friendly concierge assistant. ${nameContext} Respond warmly and offer to help with their stay. Keep it brief and welcoming. Guest said: ${message}`,
       
-      'general_inquiry': `You are a helpful concierge assistant. ${nameContext} ${propertyContext}\n\nProvide a helpful response to their question. Keep it concise for SMS (under 160 words). Guest asked: ${message}`
+      'general_inquiry': `You are a helpful concierge assistant. ${nameContext} ${propertyContext}${previousContext}\n\nProvide a helpful response to their question. Keep it concise for SMS (under 160 words). Guest asked: ${message}`
     };
 
     return intentPrompts[intent] || intentPrompts['general_inquiry'];
