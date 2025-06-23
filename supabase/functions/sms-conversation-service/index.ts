@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { corsHeaders } from './corsHeaders.ts';
@@ -7,7 +8,7 @@ import { FuzzyMatchingService } from './fuzzyMatchingService.ts';
 import { EnhancedConversationService } from './enhancedConversationService.ts';
 import { NameHandler } from './nameHandler.ts';
 
-console.log("Enhanced SMS Conversation Service starting up...");
+console.log("Enhanced SMS Conversation Service starting up - Version 2.0...");
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -18,19 +19,19 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  console.log("=== Enhanced SMS Conversation Service Request ===");
+  console.log("=== Enhanced SMS Conversation Service Request - Version 2.0 ===");
   console.log("Method:", req.method);
 
   try {
     const { action, phoneNumber, messageBody } = await req.json();
-    console.log("Enhanced SMS Service - Action:", action);
+    console.log("Enhanced SMS Service V2.0 - Action:", action);
 
     const conversationManager = new ConversationManager(supabase);
     const propertyService = new PropertyService(supabase);
     const enhancedService = new EnhancedConversationService(supabase);
 
     if (action === 'processMessage') {
-      console.log("=== PROCESSING ENHANCED MESSAGE ===");
+      console.log("=== PROCESSING ENHANCED MESSAGE V2.0 ===");
       console.log("Phone:", phoneNumber);
       console.log("Message:", messageBody);
 
@@ -39,19 +40,19 @@ serve(async (req) => {
 
       // For confirmed guests, always use enhanced service
       if (conversation.conversation_state === 'confirmed') {
-        console.log("🔍 Processing confirmed guest with enhanced service");
+        console.log("🔍 Processing confirmed guest with enhanced service V2.0");
         
         const result = await enhancedService.processMessage(phoneNumber, messageBody);
-        console.log("✅ Enhanced processing result:", result);
+        console.log("✅ Enhanced processing result V2.0:", result);
         
         return new Response(JSON.stringify(result), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
 
-      // For non-confirmed states, use basic processing
+      // For non-confirmed states, use enhanced processing
       const result = await enhancedService.processMessage(phoneNumber, messageBody);
-      console.log("✅ Basic processing result:", result);
+      console.log("✅ Enhanced processing result V2.0:", result);
       
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -70,7 +71,7 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('Error in enhanced SMS conversation service:', error);
+    console.error('Error in enhanced SMS conversation service V2.0:', error);
     return new Response(JSON.stringify({ 
       error: 'Internal server error',
       details: error.message 
@@ -81,4 +82,4 @@ serve(async (req) => {
   }
 });
 
-console.log("Enhanced SMS Conversation Service is ready with intent recognition, multi-part handling, and property data prioritization");
+console.log("Enhanced SMS Conversation Service V2.0 is ready with improved reset messages, property confirmation, and name collection");
