@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { ConversationManager } from './conversationManager.ts'
@@ -109,13 +108,14 @@ class EnhancedSmsConversationService {
       'hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening'
     ]);
 
-    // 1. TIME-AWARE GREETING + NAME CAPTURE
     // Check if we need to capture the guest's name first
     const nameCheck = NameHandler.checkIfNameProvided(messageBody, conversation);
     
+    console.log('🏷️ Name check result:', nameCheck);
+    
     // If name was just provided, store it and acknowledge
     if (nameCheck.extractedName && !guestName) {
-      console.log('✅ Name captured:', nameCheck.extractedName);
+      console.log('✅ Name captured, storing:', nameCheck.extractedName);
       await this.conversationManager.updateConversationState(conversation.phone_number, {
         conversation_context: {
           ...conversation.conversation_context,

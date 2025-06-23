@@ -10,17 +10,17 @@ export class NameHandler {
 
     // Only try to capture name if we're in confirmed state and don't have a name yet
     if (conversation.conversation_state !== 'confirmed') {
-      return { hasName: true, extractedName: null }; // Don't capture name before confirmation
+      return { hasName: false, extractedName: null }; // Don't capture name before confirmation
     }
 
     // Check if message contains a name pattern
     const namePatterns = [
-      /^(?:my name is|i'm|i am|call me)\s+(\w+)/i,
-      /^hi,?\s*(?:my name is|i'm|i am)\s+(\w+)/i,
-      /^hello,?\s*(?:my name is|i'm|i am)\s+(\w+)/i,
-      /^(\w+)$/,  // Single word response (could be a name)
-      /^it's\s+(\w+)/i,
-      /^this is\s+(\w+)/i
+      /^(?:my name is|i'm|i am|call me)\s+([a-zA-Z]+)/i,
+      /^hi,?\s*(?:my name is|i'm|i am)\s+([a-zA-Z]+)/i,
+      /^hello,?\s*(?:my name is|i'm|i am)\s+([a-zA-Z]+)/i,
+      /^([a-zA-Z]+)$/,  // Single word response (could be a name)
+      /^it's\s+([a-zA-Z]+)/i,
+      /^this is\s+([a-zA-Z]+)/i
     ];
 
     const cleanMessage = message.trim();
@@ -47,7 +47,7 @@ export class NameHandler {
           
           // Capitalize first letter
           const formattedName = potentialName.charAt(0).toUpperCase() + potentialName.slice(1).toLowerCase();
-          return { hasName: true, extractedName: formattedName };
+          return { hasName: false, extractedName: formattedName }; // Return false for hasName, but provide extracted name
         }
       }
     }
