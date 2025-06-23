@@ -97,7 +97,7 @@ const App = () => (
             } />
           </Routes>
         </BrowserRouter>
-      </ProtectedRoute>
+      </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );
