@@ -108,10 +108,14 @@ class EnhancedSmsConversationService {
       'hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening'
     ]);
 
-    // Check if we need to capture the guest's name first
+    // Check for name-related responses
     const nameCheck = NameHandler.checkIfNameProvided(messageBody, conversation);
+    const nameRefusal = NameHandler.detectNameRefusal(messageBody);
+    const isDirectServiceRequest = NameHandler.isDirectServiceRequest(messageBody);
     
     console.log('🏷️ Name check result:', nameCheck);
+    console.log('🚫 Name refusal:', nameRefusal);
+    console.log('🔧 Direct service request:', isDirectServiceRequest);
     
     // If name was just provided, store it and acknowledge
     if (nameCheck.extractedName && !guestName) {
@@ -119,7 +123,8 @@ class EnhancedSmsConversationService {
       await this.conversationManager.updateConversationState(conversation.phone_number, {
         conversation_context: {
           ...conversation.conversation_context,
-          guest_name: nameCheck.extractedName
+          guest_name: nameCheck.extractedName,
+          name_request_made: true
         }
       });
       
@@ -130,18 +135,48 @@ class EnhancedSmsConversationService {
       };
     }
 
-    // If we should ask for name (not a greeting, no name provided, no name stored, and it's a request)
-    if (!guestName && 
-        !isGreeting && 
-        !MessageUtils.matchesAnyKeywords(message, ['wifi', 'wi-fi', 'password', 'internet', 'parking']) &&
-        !nameCheck.extractedName) {
+    // Handle name refusal with clever response
+    if (nameRefusal && !guestName) {
+      console.log('🎭 Name refused, generating clever response');
+      await this.conversationManager.updateConversationState(conversation.phone_number, {
+        conversation_context: {
+          ...conversation.conversation_context,
+          guest_name: 'Mystery Guest',
+          name_request_made: true
+        }
+      });
       
-      console.log('🏷️ Asking for name before proceeding');
-      const nameRequest = `${greeting}! Happy to help 🙂 Before we dive in, what's your name so I can assist you more personally?`;
+      const cleverResponse = NameHandler.generateCleverRefusalResponse();
       return {
-        response: nameRequest,
+        response: cleverResponse,
         shouldUpdateState: false
       };
+    }
+
+    // Handle direct questions/service requests without name
+    if (isDirectServiceRequest && !guestName && !conversation.conversation_context?.name_request_made) {
+      console.log('🎯 Direct service request without name, generating fun response');
+      const directResponse = NameHandler.generateDirectQuestionResponse();
+      
+      // Handle the actual request after the fun opening
+      const serviceResponse = await this.handleServiceRequests(conversation, property!, message, null);
+      if (serviceResponse) {
+        // Mark that we've interacted so we don't ask for name later
+        await this.conversationManager.updateConversationState(conversation.phone_number, {
+          conversation_context: {
+            ...conversation.conversation_context,
+            name_request_made: true
+          }
+        });
+        
+        return {
+          response: `${directResponse} ${serviceResponse.response}`,
+          shouldUpdateState: serviceResponse.shouldUpdateState
+        };
+      }
+      
+      // If no specific service response, handle as location/recommendation request
+      return await this.handleStructuredRecommendations(conversation, property!, messageBody, message, null);
     }
 
     // Handle greetings (with name if we have it)
@@ -158,6 +193,23 @@ class EnhancedSmsConversationService {
       
       return {
         response: response,
+        shouldUpdateState: false
+      };
+    }
+
+    // Ask for name gently (only if we haven't asked before and it's not a direct request)
+    if (NameHandler.shouldAskForName(messageBody, conversation)) {
+      console.log('🏷️ Gently asking for name');
+      await this.conversationManager.updateConversationState(conversation.phone_number, {
+        conversation_context: {
+          ...conversation.conversation_context,
+          name_request_made: true
+        }
+      });
+      
+      const nameRequest = `${greeting}! Happy to help 🙂 Before we dive in, what's your name so I can assist you more personally? (Or feel free to jump right into your questions!)`;
+      return {
+        response: nameRequest,
         shouldUpdateState: false
       };
     }
@@ -381,7 +433,7 @@ class EnhancedSmsConversationService {
       });
 
       const greeting = ResponseGenerator.getTimeAwareGreeting(timezone);
-      const response = `${greeting}—I'm your Hostly AI Concierge! I can help with property info, local tips, and more! May I have your name?`;
+      const response = `${greeting}—I'm your Hostly AI Concierge! I can help with property info, local tips, and more! How can I assist you today?`;
       
       return {
         response: response,
