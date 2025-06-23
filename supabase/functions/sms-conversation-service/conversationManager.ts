@@ -1,4 +1,3 @@
-
 import { Conversation, Property } from './types.ts';
 
 export class ConversationManager {
@@ -42,6 +41,23 @@ export class ConversationManager {
 
     console.log('Created new conversation:', newConversation);
     return newConversation;
+  }
+
+  async getExistingConversation(phoneNumber: string): Promise<any | null> {
+    console.log('Checking for existing property conversation for:', phoneNumber);
+    
+    const { data: existing, error } = await this.supabase
+      .from('sms_conversations')
+      .select('*')
+      .eq('phone_number', phoneNumber)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error fetching existing conversation:', error);
+      return null;
+    }
+
+    return existing;
   }
 
   async updateConversationState(phoneNumber: string, updates: any): Promise<Conversation> {

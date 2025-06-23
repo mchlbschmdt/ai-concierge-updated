@@ -8,6 +8,7 @@ import { FuzzyMatchingService } from './fuzzyMatchingService.ts';
 import { EnhancedConversationService } from './enhancedConversationService.ts';
 import { TravelConversationService } from './travelConversationService.ts';
 import { NameHandler } from './nameHandler.ts';
+import { ResetHandler } from './resetHandler.ts';
 
 console.log("Enhanced SMS Conversation Service starting up - Version 2.1 with Travel Guide...");
 
@@ -28,6 +29,29 @@ function isTravelKeyword(message: string): boolean {
   ];
   
   return travelKeywords.some(keyword => normalizedMessage === keyword);
+}
+
+function isResetCommand(message: string): boolean {
+  const lowerMessage = message.toLowerCase().trim();
+  const resetKeywords = [
+    'reset', 'restart', 'start over', 'something else', 'different options',
+    'what else', 'other recommendations', 'try again', 'nevermind',
+    'change topic', 'something different', 'new suggestions', 'new recommendation',
+    'different recommendation', 'other options', 'start fresh', 'clear',
+    'different suggestions', 'other places', 'something new'
+  ];
+  
+  // Check for exact word matches using word boundaries
+  return resetKeywords.some(keyword => {
+    if (keyword.includes(' ')) {
+      // Multi-word phrases - check if the entire phrase exists
+      return lowerMessage.includes(keyword);
+    } else {
+      // Single words - use word boundary regex for exact matches
+      const wordRegex = new RegExp(`\\b${keyword}\\b`);
+      return wordRegex.test(lowerMessage);
+    }
+  });
 }
 
 serve(async (req) => {
@@ -52,7 +76,55 @@ serve(async (req) => {
       console.log("Phone:", phoneNumber);
       console.log("Message:", messageBody);
 
-      // Check if this is a travel keyword to switch to travel mode
+      // PRIORITY 1: Check for reset commands FIRST - before any other processing
+      if (isResetCommand(messageBody)) {
+        console.log("🔄 Reset command detected - clearing all conversations");
+        
+        // Check what type of conversation exists to provide appropriate reset response
+        const existingTravelConversation = await travelService.getExistingTravelConversation(phoneNumber);
+        const existingPropertyConversation = await conversationManager.getExistingConversation(phoneNumber);
+        
+        // Clear travel conversation if it exists
+        if (existingTravelConversation) {
+          console.log("🌍 Clearing travel conversation");
+          await travelService.clearCorruptedTravelData(phoneNumber);
+        }
+        
+        // Clear property conversation if it exists
+        if (existingPropertyConversation) {
+          console.log("🏠 Clearing property conversation");
+          const resetUpdates = ResetHandler.getCompleteResetUpdates(existingPropertyConversation.conversation_context);
+          await conversationManager.updateConversationState(phoneNumber, resetUpdates);
+        }
+        
+        // Return appropriate reset response
+        let resetResponse;
+        if (existingTravelConversation && !existingPropertyConversation) {
+          // Was in travel mode only
+          resetResponse = "Hi there! 🌎 I can help you explore places or with property stays. Send 'TRAVEL' for travel guide or your property code for property help.";
+        } else if (existingPropertyConversation && !existingTravelConversation) {
+          // Was in property mode only
+          resetResponse = ResetHandler.generateResetResponse();
+        } else if (existingTravelConversation && existingPropertyConversation) {
+          // Had both types
+          resetResponse = "Hi! I can help with travel recommendations or property stays. Send 'TRAVEL' for travel guide or your property code for property help.";
+        } else {
+          // No existing conversations
+          resetResponse = "Hi! I'm your AI assistant. Send 'TRAVEL' for travel recommendations or your property code for property help.";
+        }
+        
+        console.log("✅ Reset completed - returning fresh start response");
+        
+        return new Response(JSON.stringify({
+          messages: [resetResponse],
+          conversationalResponse: true,
+          intent: 'conversation_reset'
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // PRIORITY 2: Check if this is a travel keyword to switch to travel mode
       if (isTravelKeyword(messageBody)) {
         console.log("🌍 Travel keyword detected - forcing fresh start");
         
@@ -81,7 +153,7 @@ serve(async (req) => {
         });
       }
 
-      // Check if we have an existing travel conversation that's NOT in the initial state
+      // PRIORITY 3: Check if we have an existing travel conversation that's NOT in the initial state
       const existingTravelConversation = await travelService.getExistingTravelConversation(phoneNumber);
       if (existingTravelConversation && existingTravelConversation.step !== 'ASK_LOCATION') {
         console.log("🌍 Continuing existing travel conversation");
@@ -98,7 +170,7 @@ serve(async (req) => {
         });
       }
 
-      // Check if we have a travel conversation at ASK_LOCATION step (could be corrupted or fresh)
+      // PRIORITY 4: Check if we have a travel conversation at ASK_LOCATION step (could be corrupted or fresh)
       if (existingTravelConversation && existingTravelConversation.step === 'ASK_LOCATION') {
         console.log("🌍 Found travel conversation at ASK_LOCATION, processing message");
         
@@ -114,7 +186,7 @@ serve(async (req) => {
         });
       }
 
-      // Continue with property-based conversation flow
+      // PRIORITY 5: Continue with property-based conversation flow
       const conversation = await conversationManager.getOrCreateConversation(phoneNumber);
       console.log("Current state:", conversation.conversation_state);
 
