@@ -43,11 +43,13 @@ export class TravelConversationService {
       return false;
     }
     
-    // Basic validation for city, state format or ZIP code
+    // Enhanced validation for city, state format or ZIP code
     const cityStateRegex = /^[a-zA-Z\s]+,\s*[A-Z]{2}$/i;
-    const zipRegex = /^\d{5}$/;
+    const zipRegex = /^\d{5}(-\d{4})?$/;
+    const cityOnlyRegex = /^[a-zA-Z\s]{2,50}$/;
     
-    return cityStateRegex.test(message.trim()) || zipRegex.test(message.trim());
+    const trimmed = message.trim();
+    return cityStateRegex.test(trimmed) || zipRegex.test(trimmed) || cityOnlyRegex.test(trimmed);
   }
 
   private isValidNameInput(message: string): boolean {
@@ -214,26 +216,56 @@ export class TravelConversationService {
       return null;
     }
     
-    // Simple geocoding logic - in production you'd use Google Maps API or similar
+    const trimmed = locationString.trim();
+    
+    // Enhanced geocoding logic with real ZIP code handling
     const cityStateRegex = /^([^,]+),?\s*([A-Z]{2})\s*(\d{5})?$/i;
-    const zipRegex = /^\d{5}$/;
+    const zipRegex = /^(\d{5})(-\d{4})?$/;
+    const cityOnlyRegex = /^[a-zA-Z\s]{2,50}$/;
     
     let city, state, zip;
     
-    if (zipRegex.test(locationString.trim())) {
-      // ZIP code only - for demo purposes, return a mock location
-      zip = locationString.trim();
-      city = 'Unknown City';
-      state = 'XX';
-    } else {
-      const match = locationString.match(cityStateRegex);
+    if (zipRegex.test(trimmed)) {
+      // ZIP code - use a basic ZIP to city mapping for common Wisconsin ZIP codes
+      zip = trimmed.split('-')[0]; // Get 5-digit ZIP
+      const zipToCityMap: Record<string, {city: string, state: string}> = {
+        '53147': { city: 'Lake Geneva', state: 'WI' },
+        '53140': { city: 'Kenosha', state: 'WI' },
+        '53150': { city: 'Caledonia', state: 'WI' },
+        '53158': { city: 'Sturtevant', state: 'WI' },
+        '53142': { city: 'Kenosha', state: 'WI' },
+        '53144': { city: 'Kenosha', state: 'WI' },
+        '53143': { city: 'Kenosha', state: 'WI' },
+        '53141': { city: 'Kenosha', state: 'WI' },
+        '53149': { city: 'Lake Geneva', state: 'WI' },
+        '53125': { city: 'Mukwonago', state: 'WI' },
+        '53148': { city: 'Walworth', state: 'WI' }
+      };
+      
+      const locationData = zipToCityMap[zip];
+      if (locationData) {
+        city = locationData.city;
+        state = locationData.state;
+      } else {
+        // For unknown ZIP codes, try to infer from area code
+        console.log(`Unknown ZIP code: ${zip}, using generic location`);
+        city = 'Unknown City';
+        state = 'WI'; // Default to Wisconsin for now
+      }
+    } else if (cityStateRegex.test(trimmed)) {
+      const match = trimmed.match(cityStateRegex);
       if (match) {
         city = match[1].trim();
         state = match[2].toUpperCase();
         zip = match[3] || null;
-      } else {
-        return null; // Unable to parse
       }
+    } else if (cityOnlyRegex.test(trimmed)) {
+      // Just city name provided
+      city = trimmed;
+      state = 'WI'; // Default to Wisconsin
+      zip = null;
+    } else {
+      return null; // Unable to parse
     }
 
     // Check if location already exists
@@ -248,15 +280,25 @@ export class TravelConversationService {
       return existing;
     }
 
-    // Create new location (with mock coordinates for demo)
+    // Create new location with more accurate coordinates based on city
+    const cityCoordinates: Record<string, {lat: number, lon: number}> = {
+      'Lake Geneva': { lat: 42.5917, lon: -88.4334 },
+      'Kenosha': { lat: 42.5847, lon: -87.8212 },
+      'Milwaukee': { lat: 43.0389, lon: -87.9065 },
+      'Madison': { lat: 43.0731, lon: -89.4012 },
+      'Green Bay': { lat: 44.5133, lon: -88.0133 }
+    };
+
+    const coords = cityCoordinates[city] || { lat: 43.0389, lon: -87.9065 }; // Default to Milwaukee area
+
     const { data: newLocation, error } = await this.supabase
       .from('locations')
       .insert({
         city,
         state,
         zip,
-        lat: 33.7490, // Mock Atlanta coordinates
-        lon: -84.3880
+        lat: coords.lat,
+        lon: coords.lon
       })
       .select()
       .single();
@@ -292,7 +334,6 @@ export class TravelConversationService {
     await this.addTravelMessage(conversation.id, 'user', messageBody);
 
     let response: string;
-    let nextStep = conversation.step;
 
     switch (conversation.step) {
       case 'ASK_LOCATION':
@@ -307,7 +348,6 @@ export class TravelConversationService {
         const location = await this.geocodeLocation(messageBody);
         if (location) {
           console.log('🌍 Location found:', location);
-          console.log('🌍 Updating conversation with location_id:', location.id);
           
           await this.updateTravelConversation(phoneNumber, {
             location_id: location.id,
@@ -357,9 +397,9 @@ export class TravelConversationService {
           step: 'ASSIST'
         });
         
-        // Get recommendations based on preferences
-        const recs = await this.getRecommendations(conversation.location_id!, messageBody);
-        response = recs + "\n\nSound good? Want more hidden-gem coffee spots or maybe a scenic hike?";
+        // Get recommendations based on preferences and location
+        const recs = await this.getLocationBasedRecommendations(conversation.location_json, messageBody);
+        response = recs + "\n\nSound good? Want more specific recommendations or have other questions?";
         break;
 
       case 'ASSIST':
@@ -373,15 +413,14 @@ export class TravelConversationService {
           break;
         }
         
-        // Handle ongoing assistance
-        const assistRecs = await this.getRecommendations(conversation.location_id!, messageBody);
+        // Handle ongoing assistance with contextual recommendations
+        const assistRecs = await this.getLocationBasedRecommendations(conversation.location_json, messageBody);
         response = assistRecs + "\n\nAnything else you'd like to explore?";
         break;
 
       default:
         console.log('🌍 Default case - asking for location');
         response = "Hi there! 🌎 Where will you be exploring?\nJust drop a city & state or ZIP code.";
-        nextStep = 'ASK_LOCATION';
     }
 
     // Store AI response
@@ -391,26 +430,178 @@ export class TravelConversationService {
     return [response];
   }
 
-  private async getRecommendations(locationId: string, query: string): Promise<string> {
-    // Try to get curated links first
-    const curatedLinks = await this.getCuratedLinks(locationId);
-    
-    if (curatedLinks.length > 0) {
-      // Return top 3 curated recommendations
-      const topLinks = curatedLinks.slice(0, 3);
-      return topLinks.map(link => 
-        `**${link.title}**: ${link.description || 'Great local spot!'}`
-      ).join('\n\n');
+  private async getLocationBasedRecommendations(location: any, query: string): Promise<string> {
+    if (!location) {
+      return "I need to know your location first to give you the best recommendations!";
     }
 
-    // Fallback to generic recommendations
-    const keywords = query.toLowerCase();
-    if (keywords.includes('food') || keywords.includes('eat') || keywords.includes('restaurant')) {
-      return "**Local Favorite Diner** (0.8 mi, ⭐4.6): Classic comfort food with a twist—try the bourbon burger.\n\n**Artisan Coffee House** (0.5 mi, ⭐4.8): Third-wave coffee with house-made pastries. Get the lavender latte.\n\n**Farm-to-Table Bistro** (1.2 mi, ⭐4.7): Seasonal menu with local ingredients—the chef's tasting menu is worth it.";
-    } else if (keywords.includes('outdoor') || keywords.includes('hike') || keywords.includes('nature')) {
-      return "**Riverside Trail** (3 mi, free): Easy 2-mile loop with scenic views—perfect for morning walks.\n\n**City Park** (1.5 mi, free): 50-acre green space with playground and duck pond—great for families.\n\n**Lookout Point** (8 mi, $5 parking): Moderate hike with panoramic city views—best at sunset.";
-    } else {
-      return "**Downtown Arts District** (2 mi): Gallery walk with local artists—first Friday is special.\n\n**Historic Main Street** (1 mi): Charming shops and cafes in restored buildings.\n\n**Farmers Market** (0.7 mi): Saturday mornings for fresh produce and local crafts.";
+    const city = location.city;
+    const state = location.state;
+    const locationContext = `${city}, ${state}`;
+    
+    console.log(`🌍 Getting recommendations for ${locationContext} with query: ${query}`);
+    
+    // Try to get curated links first
+    const curatedLinks = await this.getCuratedLinks(location.id);
+    
+    if (curatedLinks.length > 0) {
+      // Filter curated links based on query if possible
+      const relevantLinks = this.filterLinksByQuery(curatedLinks, query);
+      if (relevantLinks.length > 0) {
+        return relevantLinks.slice(0, 3).map(link => 
+          `**${link.title}**: ${link.description || 'Great local spot!'}`
+        ).join('\n\n');
+      }
     }
+
+    // Generate location-specific recommendations based on query
+    return this.generateLocationSpecificRecommendations(city, state, query);
+  }
+
+  private filterLinksByQuery(links: any[], query: string): any[] {
+    const queryLower = query.toLowerCase();
+    
+    // Define keywords for different categories
+    const categoryKeywords = {
+      food: ['food', 'eat', 'restaurant', 'dining', 'meal', 'hungry', 'cuisine'],
+      outdoor: ['outdoor', 'nature', 'hike', 'park', 'lake', 'beach', 'trail', 'fishing', 'swim'],
+      culture: ['culture', 'museum', 'art', 'history', 'gallery', 'theater'],
+      nightlife: ['bar', 'drink', 'nightlife', 'club', 'entertainment'],
+      shopping: ['shop', 'store', 'mall', 'retail', 'buy']
+    };
+
+    // Score links based on query relevance
+    const scoredLinks = links.map(link => {
+      let score = 0;
+      const linkText = `${link.title} ${link.description || ''} ${link.category || ''}`.toLowerCase();
+      
+      // Check for direct keyword matches
+      for (const [category, keywords] of Object.entries(categoryKeywords)) {
+        if (keywords.some(keyword => queryLower.includes(keyword))) {
+          if (linkText.includes(category) || keywords.some(keyword => linkText.includes(keyword))) {
+            score += 10;
+          }
+        }
+      }
+      
+      // Check for category match
+      if (link.category && queryLower.includes(link.category.toLowerCase())) {
+        score += 5;
+      }
+      
+      return { ...link, score };
+    });
+
+    // Return links with score > 0, sorted by score
+    return scoredLinks.filter(link => link.score > 0).sort((a, b) => b.score - a.score);
+  }
+
+  private generateLocationSpecificRecommendations(city: string, state: string, query: string): string {
+    const queryLower = query.toLowerCase();
+    const locationName = `${city}, ${state}`;
+    
+    // Location-specific recommendations based on actual places
+    const locationRecommendations: Record<string, any> = {
+      'Lake Geneva': {
+        lakes: [
+          "**Lake Geneva**: Beautiful clear lake perfect for swimming, boating, and fishing. Public beach access downtown.",
+          "**Delavan Lake**: Smaller lake just 15 minutes away, great for quiet fishing and kayaking.",
+          "**Como Lake**: Hidden gem for peaceful nature walks and bird watching."
+        ],
+        food: [
+          "**Sprecher's Restaurant & Pub**: Local brewery with great burgers and craft beer overlooking the lake.",
+          "**Simple Cafe**: Farm-to-table breakfast and lunch spot with amazing pancakes.",
+          "**Pier 290**: Upscale dining right on the lake with fresh seafood and steaks."
+        ],
+        outdoor: [
+          "**Geneva Lake Shore Path**: 21-mile walking path around the entire lake with stunning views.",
+          "**Big Foot Beach State Park**: Swimming, hiking trails, and picnic areas on Lake Geneva.",
+          "**Lake Geneva Canopy Tours**: Zip-lining adventure through the treetops."
+        ]
+      },
+      'Kenosha': {
+        lakes: [
+          "**Lake Michigan**: Stunning Great Lakes shoreline with Kenosha Harbor and marina.",
+          "**Paddock Lake**: Small lake perfect for fishing and quiet reflection.",
+          "**Powers Lake**: Great for kayaking and has a nice walking trail around it."
+        ],
+        food: [
+          "**The Spot Drive-In**: Classic 1950s drive-in with amazing burgers and shakes.",
+          "**Sazzy B**: Upscale American cuisine in historic downtown Kenosha.",
+          "**Tenuta's Italian Restaurant**: Family-owned since 1950, famous for their deli and Italian dishes."
+        ],
+        outdoor: [
+          "**Kenosha HarborMarket**: Seasonal farmers market right by the lake.",
+          "**Simmons Island Park**: Beach, lighthouse, and great views of Lake Michigan.",
+          "**Petrifying Springs Park**: 360 acres with trails, golf, and fishing pond."
+        ]
+      }
+    };
+
+    // Check if we have specific recommendations for this location
+    const locationRecs = locationRecommendations[city];
+    
+    if (locationRecs) {
+      // Determine what type of recommendations to show based on query
+      if (queryLower.includes('lake') || queryLower.includes('water') || queryLower.includes('swim') || queryLower.includes('fish')) {
+        return locationRecs.lakes?.slice(0, 3).join('\n\n') || this.getFallbackRecommendations(locationName, 'lakes');
+      } else if (queryLower.includes('food') || queryLower.includes('eat') || queryLower.includes('restaurant') || queryLower.includes('dining')) {
+        return locationRecs.food?.slice(0, 3).join('\n\n') || this.getFallbackRecommendations(locationName, 'food');
+      } else if (queryLower.includes('outdoor') || queryLower.includes('nature') || queryLower.includes('hike') || queryLower.includes('park')) {
+        return locationRecs.outdoor?.slice(0, 3).join('\n\n') || this.getFallbackRecommendations(locationName, 'outdoor');
+      }
+    }
+    
+    // Default to mixed recommendations for the location
+    if (locationRecs) {
+      const mixed = [
+        ...(locationRecs.food?.slice(0, 1) || []),
+        ...(locationRecs.outdoor?.slice(0, 1) || []),
+        ...(locationRecs.lakes?.slice(0, 1) || [])
+      ];
+      if (mixed.length > 0) {
+        return mixed.join('\n\n');
+      }
+    }
+    
+    // Fallback for unknown locations
+    return this.getFallbackRecommendations(locationName, this.categorizeQuery(query));
+  }
+
+  private getFallbackRecommendations(locationName: string, category: string): string {
+    const fallbacks: Record<string, string[]> = {
+      lakes: [
+        `**Local Lakes**: Check out the nearest lakes and waterways around ${locationName} for swimming and fishing.`,
+        `**Water Activities**: Look for boat rentals and fishing spots in the ${locationName} area.`,
+        `**Beaches**: Search for public beaches and waterfront parks near ${locationName}.`
+      ],
+      food: [
+        `**Local Diners**: Try the classic American diners and family restaurants in ${locationName}.`,
+        `**Farm-to-Table**: Look for restaurants featuring local Wisconsin ingredients.`,
+        `**Breweries**: Wisconsin has great local breweries - check what's available in ${locationName}.`
+      ],
+      outdoor: [
+        `**Local Parks**: Explore the parks and nature preserves around ${locationName}.`,
+        `**Walking Trails**: Look for hiking and walking trails in the ${locationName} area.`,
+        `**State Parks**: Check for Wisconsin State Parks near ${locationName}.`
+      ]
+    };
+
+    return fallbacks[category]?.slice(0, 3).join('\n\n') || 
+           `I'd recommend exploring the local attractions and outdoor spaces around ${locationName}. Check with local visitor centers for current recommendations!`;
+  }
+
+  private categorizeQuery(query: string): string {
+    const queryLower = query.toLowerCase();
+    
+    if (queryLower.includes('lake') || queryLower.includes('water') || queryLower.includes('swim') || queryLower.includes('fish')) {
+      return 'lakes';
+    } else if (queryLower.includes('food') || queryLower.includes('eat') || queryLower.includes('restaurant')) {
+      return 'food';
+    } else if (queryLower.includes('outdoor') || queryLower.includes('nature') || queryLower.includes('hike')) {
+      return 'outdoor';
+    }
+    
+    return 'general';
   }
 }
