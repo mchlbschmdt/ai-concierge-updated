@@ -49,7 +49,6 @@ export class ResetHandler {
         conversation_state: 'awaiting_property_id',
         property_id: null,
         property_confirmed: false,
-        guest_name: null,
         conversation_context: {
           recommendation_history: {},
           recent_intents: ['conversation_reset'],
@@ -59,7 +58,8 @@ export class ResetHandler {
           last_response_type: 'reset_response',
           global_recommendation_blacklist: globalBlacklist,
           reset_count: (context?.reset_count || 0) + 1,
-          pending_property: null
+          pending_property: null,
+          guest_name: null
         },
         last_recommendations: null,
         last_message_type: null
@@ -74,7 +74,6 @@ export class ResetHandler {
         conversation_state: 'awaiting_property_id',
         property_id: null,
         property_confirmed: false,
-        guest_name: null,
         conversation_context: {
           recommendation_history: {},
           recent_intents: ['conversation_reset'],
@@ -84,7 +83,8 @@ export class ResetHandler {
           last_response_type: 'reset_response',
           global_recommendation_blacklist: [],
           reset_count: 1,
-          pending_property: null
+          pending_property: null,
+          guest_name: null
         },
         last_recommendations: null,
         last_message_type: null
