@@ -38,12 +38,10 @@ export class TravelConversationService {
   }
 
   private isValidLocationInput(message: string): boolean {
-    // Don't process travel keywords as location data
     if (this.isTravelKeyword(message)) {
       return false;
     }
     
-    // Enhanced validation for city, state format or ZIP code
     const cityStateRegex = /^[a-zA-Z\s]+,\s*[A-Z]{2}$/i;
     const zipRegex = /^\d{5}(-\d{4})?$/;
     const cityOnlyRegex = /^[a-zA-Z\s]{2,50}$/;
@@ -53,12 +51,10 @@ export class TravelConversationService {
   }
 
   private isValidNameInput(message: string): boolean {
-    // Don't process travel keywords as name data
     if (this.isTravelKeyword(message)) {
       return false;
     }
     
-    // Basic validation for name (should be reasonable length and contain letters)
     const trimmed = message.trim();
     return trimmed.length >= 2 && trimmed.length <= 50 && /[a-zA-Z]/.test(trimmed);
   }
@@ -84,7 +80,6 @@ export class TravelConversationService {
     console.log('🧹 Clearing corrupted travel data for:', phoneNumber);
     
     try {
-      // Delete the corrupted conversation entirely
       const { error } = await this.supabase
         .from('travel_conversations')
         .delete()
@@ -105,7 +100,6 @@ export class TravelConversationService {
     
     const existing = await this.getExistingTravelConversation(phoneNumber);
     
-    // Check if existing conversation has corrupted data (travel keywords stored as actual data)
     if (existing && !forceReset) {
       const hasCorruptedData = (
         this.isTravelKeyword(existing.name || '') ||
@@ -116,14 +110,12 @@ export class TravelConversationService {
       if (hasCorruptedData) {
         console.log('🚨 Detected corrupted travel data, clearing and resetting...');
         await this.clearCorruptedTravelData(phoneNumber);
-        // Continue to create fresh conversation below
       } else {
         console.log('Found existing clean travel conversation:', existing);
         return existing;
       }
     }
 
-    // If forceReset is true, corrupted data detected, or no existing conversation, create/reset to initial state
     console.log('Creating/resetting travel conversation to initial state');
     
     const { data: conversationId, error: rpcError } = await this.supabase.rpc('rpc_upsert_travel_conversation', {
@@ -210,7 +202,6 @@ export class TravelConversationService {
   async geocodeLocation(locationString: string): Promise<any> {
     console.log('Geocoding location:', locationString);
     
-    // Validate input before processing
     if (!this.isValidLocationInput(locationString)) {
       console.log('Invalid location input, rejecting:', locationString);
       return null;
@@ -218,7 +209,6 @@ export class TravelConversationService {
     
     const trimmed = locationString.trim();
     
-    // Enhanced geocoding logic with real ZIP code handling
     const cityStateRegex = /^([^,]+),?\s*([A-Z]{2})\s*(\d{5})?$/i;
     const zipRegex = /^(\d{5})(-\d{4})?$/;
     const cityOnlyRegex = /^[a-zA-Z\s]{2,50}$/;
@@ -226,8 +216,7 @@ export class TravelConversationService {
     let city, state, zip;
     
     if (zipRegex.test(trimmed)) {
-      // ZIP code - use a basic ZIP to city mapping for common Wisconsin ZIP codes
-      zip = trimmed.split('-')[0]; // Get 5-digit ZIP
+      zip = trimmed.split('-')[0];
       const zipToCityMap: Record<string, {city: string, state: string}> = {
         '53147': { city: 'Lake Geneva', state: 'WI' },
         '53140': { city: 'Kenosha', state: 'WI' },
@@ -247,10 +236,9 @@ export class TravelConversationService {
         city = locationData.city;
         state = locationData.state;
       } else {
-        // For unknown ZIP codes, try to infer from area code
         console.log(`Unknown ZIP code: ${zip}, using generic location`);
         city = 'Unknown City';
-        state = 'WI'; // Default to Wisconsin for now
+        state = 'WI';
       }
     } else if (cityStateRegex.test(trimmed)) {
       const match = trimmed.match(cityStateRegex);
@@ -260,12 +248,11 @@ export class TravelConversationService {
         zip = match[3] || null;
       }
     } else if (cityOnlyRegex.test(trimmed)) {
-      // Just city name provided
       city = trimmed;
-      state = 'WI'; // Default to Wisconsin
+      state = 'WI';
       zip = null;
     } else {
-      return null; // Unable to parse
+      return null;
     }
 
     // Check if location already exists
@@ -280,7 +267,7 @@ export class TravelConversationService {
       return existing;
     }
 
-    // Create new location with more accurate coordinates based on city
+    // Create new location with coordinates
     const cityCoordinates: Record<string, {lat: number, lon: number}> = {
       'Lake Geneva': { lat: 42.5917, lon: -88.4334 },
       'Kenosha': { lat: 42.5847, lon: -87.8212 },
@@ -289,7 +276,7 @@ export class TravelConversationService {
       'Green Bay': { lat: 44.5133, lon: -88.0133 }
     };
 
-    const coords = cityCoordinates[city] || { lat: 43.0389, lon: -87.9065 }; // Default to Milwaukee area
+    const coords = cityCoordinates[city] || { lat: 43.0389, lon: -87.9065 };
 
     const { data: newLocation, error } = await this.supabase
       .from('locations')
@@ -325,12 +312,104 @@ export class TravelConversationService {
     return data || [];
   }
 
+  async getOpenAIRecommendations(location: any, query: string, userName?: string): Promise<string> {
+    console.log('🤖 Getting OpenAI recommendations for location:', location?.city, 'query:', query);
+    
+    try {
+      const locationContext = location ? `${location.city}, ${location.state}` : 'the area';
+      const namePrefix = userName ? `${userName}, ` : '';
+      
+      // Build enhanced prompt for OpenAI
+      const prompt = `You are Locale, a knowledgeable local travel guide. A traveler named ${userName || 'someone'} is visiting ${locationContext} and asking about: ${query}
+
+Please provide 3 specific, actionable recommendations with:
+- Names and brief descriptions (1-2 sentences each)
+- Why each recommendation is special or worth visiting
+- Approximate distance/travel time from ${locationContext} if relevant
+
+Keep the response conversational and under 160 characters per recommendation. End with a helpful follow-up question to narrow down their interests further.
+
+Focus on authentic local experiences, not tourist traps. Be warm and personal as if you're a local friend giving advice.`;
+
+      console.log('🤖 Calling OpenAI recommendations function');
+      const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+        },
+        body: JSON.stringify({ prompt })
+      });
+
+      console.log('🤖 OpenAI response status:', response.status);
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ OpenAI recommendations received successfully');
+        
+        // Store successful recommendations for future use
+        if (location?.id) {
+          this.storeRecommendationForFuture(location.id, query, data.recommendation);
+        }
+        
+        return data.recommendation;
+      } else {
+        const errorText = await response.text();
+        console.error('❌ OpenAI API call failed:', response.status, errorText);
+        throw new Error(`OpenAI API call failed: ${response.status}`);
+      }
+    } catch (error) {
+      console.error('❌ Error getting OpenAI recommendations:', error);
+      return "I'm having trouble getting recommendations right now. Please try again in a moment or ask me about something else!";
+    }
+  }
+
+  private async storeRecommendationForFuture(locationId: string, query: string, recommendation: string): Promise<void> {
+    try {
+      // Extract potential places from the recommendation to store as curated links
+      // This is a simple implementation - could be enhanced with better parsing
+      const lines = recommendation.split('\n').filter(line => line.includes('**'));
+      
+      for (const line of lines) {
+        const titleMatch = line.match(/\*\*([^*]+)\*\*/);
+        if (titleMatch) {
+          const title = titleMatch[1];
+          const description = line.replace(/\*\*[^*]+\*\*:?\s*/, '').trim();
+          
+          // Determine category based on query
+          let category = 'general';
+          if (query.toLowerCase().includes('food') || query.toLowerCase().includes('restaurant')) {
+            category = 'food';
+          } else if (query.toLowerCase().includes('lake') || query.toLowerCase().includes('outdoor')) {
+            category = 'outdoor';
+          } else if (query.toLowerCase().includes('entertainment') || query.toLowerCase().includes('activity')) {
+            category = 'entertainment';
+          }
+          
+          // Store as curated link for future use
+          await this.supabase
+            .from('curated_links')
+            .insert({
+              location_id: locationId,
+              category,
+              title,
+              description,
+              weight: 5 // Lower weight for AI-generated content
+            })
+            .select()
+            .maybeSingle();
+        }
+      }
+    } catch (error) {
+      console.error('Error storing recommendation for future:', error);
+    }
+  }
+
   async processMessage(phoneNumber: string, messageBody: string): Promise<string[]> {
     console.log('🌍 Travel service processing message for:', phoneNumber, 'message:', messageBody);
     
     const conversation = await this.getOrCreateTravelConversation(phoneNumber);
     
-    // Store user message
     await this.addTravelMessage(conversation.id, 'user', messageBody);
 
     let response: string;
@@ -339,7 +418,6 @@ export class TravelConversationService {
       case 'ASK_LOCATION':
         console.log('🌍 Processing location step');
         
-        // Validate that this isn't a travel keyword being processed as location
         if (this.isTravelKeyword(messageBody)) {
           response = "Hi there! 🌎 Where will you be exploring?\nJust drop a city & state or ZIP code.";
           break;
@@ -363,7 +441,6 @@ export class TravelConversationService {
       case 'ASK_NAME':
         console.log('🌍 Processing name step');
         
-        // Validate that this isn't a travel keyword being processed as name
         if (this.isTravelKeyword(messageBody)) {
           response = "What's your name so I can personalize your recommendations?";
           break;
@@ -385,7 +462,6 @@ export class TravelConversationService {
       case 'ASK_PREFS':
         console.log('🌍 Processing preferences step');
         
-        // Validate that this isn't a travel keyword being processed as preferences
         if (this.isTravelKeyword(messageBody)) {
           response = "What kind of experience are you looking for today?";
           break;
@@ -397,25 +473,23 @@ export class TravelConversationService {
           step: 'ASSIST'
         });
         
-        // Get recommendations based on preferences and location
-        const recs = await this.getLocationBasedRecommendations(conversation.location_json, messageBody);
+        // Get recommendations - try curated first, then OpenAI
+        const recs = await this.getLocationBasedRecommendations(conversation.location_json, messageBody, conversation.name);
         response = recs + "\n\nSound good? Want more specific recommendations or have other questions?";
         break;
 
       case 'ASSIST':
         console.log('🌍 Processing assistance step');
         
-        // Check if user wants to restart with travel keyword
         if (this.isTravelKeyword(messageBody)) {
-          // Reset to initial state
           await this.getOrCreateTravelConversation(phoneNumber, true);
           response = "Hi there! 🌎 Where will you be exploring?\nJust drop a city & state or ZIP code.";
           break;
         }
         
-        // Handle ongoing assistance with contextual recommendations
-        const assistRecs = await this.getLocationBasedRecommendations(conversation.location_json, messageBody);
-        response = assistRecs + "\n\nAnything else you'd like to explore?";
+        // Handle ongoing assistance with smart follow-up questions
+        const assistRecs = await this.getLocationBasedRecommendations(conversation.location_json, messageBody, conversation.name);
+        response = assistRecs + "\n\n" + this.generateFollowUpQuestion(messageBody);
         break;
 
       default:
@@ -423,59 +497,53 @@ export class TravelConversationService {
         response = "Hi there! 🌎 Where will you be exploring?\nJust drop a city & state or ZIP code.";
     }
 
-    // Store AI response
     await this.addTravelMessage(conversation.id, 'ai', response);
 
     console.log('🌍 Travel service response:', response);
     return [response];
   }
 
-  private async getLocationBasedRecommendations(location: any, query: string): Promise<string> {
+  private async getLocationBasedRecommendations(location: any, query: string, userName?: string): Promise<string> {
     if (!location) {
       return "I need to know your location first to give you the best recommendations!";
     }
 
-    const city = location.city;
-    const state = location.state;
-    const locationContext = `${city}, ${state}`;
+    console.log(`🌍 Getting recommendations for ${location.city}, ${location.state} with query: ${query}`);
     
-    console.log(`🌍 Getting recommendations for ${locationContext} with query: ${query}`);
-    
-    // Try to get curated links first
+    // First try to get curated links from database
     const curatedLinks = await this.getCuratedLinks(location.id);
     
     if (curatedLinks.length > 0) {
-      // Filter curated links based on query if possible
       const relevantLinks = this.filterLinksByQuery(curatedLinks, query);
       if (relevantLinks.length > 0) {
-        return relevantLinks.slice(0, 3).map(link => 
+        console.log('📚 Using curated database recommendations');
+        const namePrefix = userName ? `${userName}, ` : '';
+        return namePrefix + relevantLinks.slice(0, 3).map(link => 
           `**${link.title}**: ${link.description || 'Great local spot!'}`
         ).join('\n\n');
       }
     }
 
-    // Generate location-specific recommendations based on query
-    return this.generateLocationSpecificRecommendations(city, state, query);
+    // If no relevant curated content, use OpenAI
+    console.log('🤖 No relevant curated content found, using OpenAI');
+    return await this.getOpenAIRecommendations(location, query, userName);
   }
 
   private filterLinksByQuery(links: any[], query: string): any[] {
     const queryLower = query.toLowerCase();
     
-    // Define keywords for different categories
     const categoryKeywords = {
-      food: ['food', 'eat', 'restaurant', 'dining', 'meal', 'hungry', 'cuisine'],
+      food: ['food', 'eat', 'restaurant', 'dining', 'meal', 'hungry', 'cuisine', 'drink', 'bar'],
       outdoor: ['outdoor', 'nature', 'hike', 'park', 'lake', 'beach', 'trail', 'fishing', 'swim'],
-      culture: ['culture', 'museum', 'art', 'history', 'gallery', 'theater'],
+      entertainment: ['culture', 'museum', 'art', 'history', 'gallery', 'theater', 'entertainment', 'activity'],
       nightlife: ['bar', 'drink', 'nightlife', 'club', 'entertainment'],
       shopping: ['shop', 'store', 'mall', 'retail', 'buy']
     };
 
-    // Score links based on query relevance
     const scoredLinks = links.map(link => {
       let score = 0;
       const linkText = `${link.title} ${link.description || ''} ${link.category || ''}`.toLowerCase();
       
-      // Check for direct keyword matches
       for (const [category, keywords] of Object.entries(categoryKeywords)) {
         if (keywords.some(keyword => queryLower.includes(keyword))) {
           if (linkText.includes(category) || keywords.some(keyword => linkText.includes(keyword))) {
@@ -484,7 +552,6 @@ export class TravelConversationService {
         }
       }
       
-      // Check for category match
       if (link.category && queryLower.includes(link.category.toLowerCase())) {
         score += 5;
       }
@@ -492,116 +559,24 @@ export class TravelConversationService {
       return { ...link, score };
     });
 
-    // Return links with score > 0, sorted by score
     return scoredLinks.filter(link => link.score > 0).sort((a, b) => b.score - a.score);
   }
 
-  private generateLocationSpecificRecommendations(city: string, state: string, query: string): string {
-    const queryLower = query.toLowerCase();
-    const locationName = `${city}, ${state}`;
-    
-    // Location-specific recommendations based on actual places
-    const locationRecommendations: Record<string, any> = {
-      'Lake Geneva': {
-        lakes: [
-          "**Lake Geneva**: Beautiful clear lake perfect for swimming, boating, and fishing. Public beach access downtown.",
-          "**Delavan Lake**: Smaller lake just 15 minutes away, great for quiet fishing and kayaking.",
-          "**Como Lake**: Hidden gem for peaceful nature walks and bird watching."
-        ],
-        food: [
-          "**Sprecher's Restaurant & Pub**: Local brewery with great burgers and craft beer overlooking the lake.",
-          "**Simple Cafe**: Farm-to-table breakfast and lunch spot with amazing pancakes.",
-          "**Pier 290**: Upscale dining right on the lake with fresh seafood and steaks."
-        ],
-        outdoor: [
-          "**Geneva Lake Shore Path**: 21-mile walking path around the entire lake with stunning views.",
-          "**Big Foot Beach State Park**: Swimming, hiking trails, and picnic areas on Lake Geneva.",
-          "**Lake Geneva Canopy Tours**: Zip-lining adventure through the treetops."
-        ]
-      },
-      'Kenosha': {
-        lakes: [
-          "**Lake Michigan**: Stunning Great Lakes shoreline with Kenosha Harbor and marina.",
-          "**Paddock Lake**: Small lake perfect for fishing and quiet reflection.",
-          "**Powers Lake**: Great for kayaking and has a nice walking trail around it."
-        ],
-        food: [
-          "**The Spot Drive-In**: Classic 1950s drive-in with amazing burgers and shakes.",
-          "**Sazzy B**: Upscale American cuisine in historic downtown Kenosha.",
-          "**Tenuta's Italian Restaurant**: Family-owned since 1950, famous for their deli and Italian dishes."
-        ],
-        outdoor: [
-          "**Kenosha HarborMarket**: Seasonal farmers market right by the lake.",
-          "**Simmons Island Park**: Beach, lighthouse, and great views of Lake Michigan.",
-          "**Petrifying Springs Park**: 360 acres with trails, golf, and fishing pond."
-        ]
-      }
-    };
-
-    // Check if we have specific recommendations for this location
-    const locationRecs = locationRecommendations[city];
-    
-    if (locationRecs) {
-      // Determine what type of recommendations to show based on query
-      if (queryLower.includes('lake') || queryLower.includes('water') || queryLower.includes('swim') || queryLower.includes('fish')) {
-        return locationRecs.lakes?.slice(0, 3).join('\n\n') || this.getFallbackRecommendations(locationName, 'lakes');
-      } else if (queryLower.includes('food') || queryLower.includes('eat') || queryLower.includes('restaurant') || queryLower.includes('dining')) {
-        return locationRecs.food?.slice(0, 3).join('\n\n') || this.getFallbackRecommendations(locationName, 'food');
-      } else if (queryLower.includes('outdoor') || queryLower.includes('nature') || queryLower.includes('hike') || queryLower.includes('park')) {
-        return locationRecs.outdoor?.slice(0, 3).join('\n\n') || this.getFallbackRecommendations(locationName, 'outdoor');
-      }
-    }
-    
-    // Default to mixed recommendations for the location
-    if (locationRecs) {
-      const mixed = [
-        ...(locationRecs.food?.slice(0, 1) || []),
-        ...(locationRecs.outdoor?.slice(0, 1) || []),
-        ...(locationRecs.lakes?.slice(0, 1) || [])
-      ];
-      if (mixed.length > 0) {
-        return mixed.join('\n\n');
-      }
-    }
-    
-    // Fallback for unknown locations
-    return this.getFallbackRecommendations(locationName, this.categorizeQuery(query));
-  }
-
-  private getFallbackRecommendations(locationName: string, category: string): string {
-    const fallbacks: Record<string, string[]> = {
-      lakes: [
-        `**Local Lakes**: Check out the nearest lakes and waterways around ${locationName} for swimming and fishing.`,
-        `**Water Activities**: Look for boat rentals and fishing spots in the ${locationName} area.`,
-        `**Beaches**: Search for public beaches and waterfront parks near ${locationName}.`
-      ],
-      food: [
-        `**Local Diners**: Try the classic American diners and family restaurants in ${locationName}.`,
-        `**Farm-to-Table**: Look for restaurants featuring local Wisconsin ingredients.`,
-        `**Breweries**: Wisconsin has great local breweries - check what's available in ${locationName}.`
-      ],
-      outdoor: [
-        `**Local Parks**: Explore the parks and nature preserves around ${locationName}.`,
-        `**Walking Trails**: Look for hiking and walking trails in the ${locationName} area.`,
-        `**State Parks**: Check for Wisconsin State Parks near ${locationName}.`
-      ]
-    };
-
-    return fallbacks[category]?.slice(0, 3).join('\n\n') || 
-           `I'd recommend exploring the local attractions and outdoor spaces around ${locationName}. Check with local visitor centers for current recommendations!`;
-  }
-
-  private categorizeQuery(query: string): string {
+  private generateFollowUpQuestion(query: string): string {
     const queryLower = query.toLowerCase();
     
-    if (queryLower.includes('lake') || queryLower.includes('water') || queryLower.includes('swim') || queryLower.includes('fish')) {
-      return 'lakes';
-    } else if (queryLower.includes('food') || queryLower.includes('eat') || queryLower.includes('restaurant')) {
-      return 'food';
-    } else if (queryLower.includes('outdoor') || queryLower.includes('nature') || queryLower.includes('hike')) {
-      return 'outdoor';
+    if (queryLower.includes('food') || queryLower.includes('restaurant') || queryLower.includes('eat')) {
+      return "What type of cuisine interests you most? Or are you looking for casual vs. fine dining?";
+    } else if (queryLower.includes('lake') || queryLower.includes('water')) {
+      return "Are you interested in swimming, fishing, boating, or just scenic lake views?";
+    } else if (queryLower.includes('outdoor') || queryLower.includes('activity')) {
+      return "Do you prefer active adventures or more relaxing outdoor experiences?";
+    } else if (queryLower.includes('shopping') || queryLower.includes('store')) {
+      return "Are you looking for unique local shops, outlet malls, or specific types of stores?";
+    } else if (queryLower.includes('family') || queryLower.includes('kid')) {
+      return "What ages are the kids? That helps me suggest the perfect family activities!";
     }
     
-    return 'general';
+    return "Want to narrow it down? I can suggest specific types of places or activities that match your interests!";
   }
 }

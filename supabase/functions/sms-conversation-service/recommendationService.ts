@@ -25,7 +25,6 @@ export class RecommendationService {
       const requestType = this.categorizeRequest(originalMessage);
       const previousRecommendations = conversation?.last_recommendations || null;
       
-      // Get recommendation context from memory manager to avoid repetition
       const memoryContext = this.getRecommendationMemoryContext(context);
       
       console.log('📍 Guest context extracted:', guestContext);
@@ -33,22 +32,26 @@ export class RecommendationService {
       console.log('📝 Previous recommendations:', previousRecommendations);
       console.log('🧠 Memory context:', memoryContext);
 
+      // Enhanced payload for proximity-based recommendations
       const enhancedPayload = {
         prompt: `${originalMessage}
 
-ENHANCED RESPONSE FORMAT REQUIRED:
+ENHANCED LOCATION-AWARE RESPONSE FORMAT:
 1. Start with: "${personalizedGreeting}"
-2. Provide 2-3 recommendations with format: "Name (distance, rating★): Brief description—${ResponseGenerator.getDistanceFraming('0.3')}"
+2. Provide 3 recommendations within 5 miles of ${propertyAddress} with format: "Name (distance, rating★): Brief description—${ResponseGenerator.getDistanceFraming('0.3')}"
 3. Ask: "${clarifyingQuestion}"
 4. End with: "${helpfulOffer}"
 
-CRITICAL REQUIREMENTS:
+CRITICAL PROXIMITY REQUIREMENTS:
+- Focus on places within 5 miles of ${propertyAddress}
 - Only show places with 4.0+ ratings
-- Include exact distance (e.g., "0.2 mi")
-- Use distance framing: ≤0.5mi="just a quick walk", 0.5-1.5mi="short Uber/bike ride", >1.5mi="quick drive"
+- Include exact distance (e.g., "0.2 mi", "3.5 mi")
+- Use distance framing: ≤0.5mi="walking distance", 0.5-1.5mi="short ride", 1.5-5mi="quick drive"
+- Prioritize closest options when multiple good choices exist
 - Keep total response under 160 characters
-- Be conversational and helpful
-- ${memoryContext ? `AVOID REPEATING: ${memoryContext}` : ''}`,
+- ${memoryContext ? `AVOID REPEATING: ${memoryContext}` : ''}
+
+LOCATION CONTEXT: ${propertyAddress}`,
         propertyAddress: `${propertyName}, ${propertyAddress}`,
         guestContext: guestContext,
         requestType: requestType,
@@ -68,6 +71,9 @@ CRITICAL REQUIREMENTS:
       if (response.ok) {
         const data = await response.json();
         console.log('✅ Enhanced recommendations received');
+        
+        // Store recommendations in travel database for future use
+        await this.storeTravelRecommendation(propertyAddress, requestType, data.recommendation);
         
         await this.conversationManager.updateConversationState(conversation.phone_number, {
           last_recommendations: data.recommendation,
@@ -95,6 +101,65 @@ CRITICAL REQUIREMENTS:
     }
   }
 
+  private async storeTravelRecommendation(location: string, requestType: string, recommendation: string): Promise<void> {
+    try {
+      // Parse location to get city/state for travel database
+      const locationParts = location.split(',');
+      if (locationParts.length >= 2) {
+        const city = locationParts[0].trim();
+        const stateMatch = locationParts[1].match(/[A-Z]{2}/);
+        
+        if (stateMatch) {
+          const state = stateMatch[0];
+          
+          // Check if location exists in travel database
+          const { data: existingLocation } = await this.supabase
+            .from('locations')
+            .select('*')
+            .ilike('city', `%${city}%`)
+            .eq('state', state)
+            .maybeSingle();
+          
+          if (existingLocation) {
+            // Extract places from recommendation and store as curated links
+            const lines = recommendation.split('\n').filter(line => line.includes('**'));
+            
+            for (const line of lines) {
+              const titleMatch = line.match(/\*\*([^*]+)\*\*/);
+              if (titleMatch) {
+                const title = titleMatch[1];
+                const description = line.replace(/\*\*[^*]+\*\*:?\s*/, '').trim();
+                
+                let category = 'general';
+                if (requestType.includes('food') || requestType.includes('restaurant')) {
+                  category = 'food';
+                } else if (requestType.includes('outdoor') || requestType.includes('activity')) {
+                  category = 'outdoor';
+                } else if (requestType.includes('entertainment')) {
+                  category = 'entertainment';
+                }
+                
+                await this.supabase
+                  .from('curated_links')
+                  .insert({
+                    location_id: existingLocation.id,
+                    category,
+                    title,
+                    description,
+                    weight: 3 // Lower weight for property-sourced recommendations
+                  })
+                  .select()
+                  .maybeSingle();
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error storing travel recommendation:', error);
+    }
+  }
+
   async getContextualRecommendations(property: Property, type: string, conversation: Conversation) {
     try {
       const propertyName = property?.property_name || 'your accommodation';
@@ -114,7 +179,9 @@ CRITICAL REQUIREMENTS:
 
       const prompt = `You are a local concierge. Guest at ${propertyName}, ${propertyAddress}. ${guestNameNote}${contextNote}${avoidRepetition}Request: ${type}
 
-CRITICAL: Response must be under 160 characters for SMS. Be warm and conversational. Give 2-3 fresh recommendations that haven't been mentioned before.
+CRITICAL PROXIMITY FOCUS: Only recommend places within 5 miles of ${propertyAddress}. Prioritize closest options.
+
+Response must be under 160 characters for SMS. Be warm and conversational. Give 3 fresh recommendations with distances.
 
 ${contextNote ? 'Reference previous interests naturally if relevant.' : ''}
 ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}`;
@@ -130,6 +197,9 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
 
       if (response.ok) {
         const data = await response.json();
+        
+        // Store in travel database
+        await this.storeTravelRecommendation(propertyAddress, type, data.recommendation);
         
         await this.conversationManager.updateConversationState(conversation.phone_number, {
           last_recommendations: data.recommendation
@@ -154,10 +224,9 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
   private getRecommendationMemoryContext(context: any): string {
     if (!context) return '';
     
-    // Get global blacklist from memory manager
     const globalBlacklist = context.global_recommendation_blacklist || [];
     if (globalBlacklist.length > 0) {
-      const recentBlacklist = globalBlacklist.slice(-8); // Last 8 places to avoid
+      const recentBlacklist = globalBlacklist.slice(-8);
       return recentBlacklist.join(', ');
     }
     
