@@ -30,6 +30,12 @@ TONE: Warm, helpful, and focused on clarifying previous recommendations only.`;
 
   return `You are an expert local concierge with deep knowledge of high-quality establishments. Your mission is to provide hyper-relevant, location-based recommendations that guests will love.
 
+ANTI-REPETITION RULES (CRITICAL):
+- If provided with a blacklist of places/restaurants to avoid, you MUST NOT mention ANY of them
+- Never repeat any establishment mentioned in previous conversations
+- Focus on providing completely fresh, new options
+- If a place has been blacklisted, find different establishments in the same area or suggest alternatives
+
 QUALITY STANDARDS (CRITICAL):
 - ONLY recommend places with 4.0+ star ratings from Google, Yelp, or TripAdvisor
 - Avoid places with less than 10 reviews total
@@ -53,7 +59,12 @@ CONTEXTUAL AWARENESS:
 - If guest mentioned a specific location, use that as reference point
 - Consider time of day (breakfast vs dinner suggestions)
 - Reference previous conversation topics naturally
-- Use phrases like "Since you mentioned..." or "If you're still near..."`;
+- Use phrases like "Since you mentioned..." or "If you're still near..."
+
+VARIETY ENFORCEMENT:
+- Always suggest places that are geographically diverse when possible
+- Vary cuisine types and establishment styles
+- If running out of options in immediate area, suggest slightly farther but worthwhile destinations`;
 }
 
 export function buildEnhancedPrompt(
@@ -99,7 +110,7 @@ export function buildEnhancedPrompt(
   if (isFollowUpQuestion) {
     enhancedPrompt += `\nIMPORTANT: This is a follow-up question. Reference only the previously recommended places. Include distance and walkability for each. Use format: "Yes! [Place] is [walkability] ([distance])". Keep under 160 characters. Be conversational.`;
   } else {
-    enhancedPrompt += `\nIMPORTANT: Provide 1-2 HIGH-QUALITY suggestions only. Include distance and star rating. Keep under 160 characters. Be conversational and reference their context.`;
+    enhancedPrompt += `\nIMPORTANT: Provide 1-2 HIGH-QUALITY suggestions only. Include distance and star rating. Keep under 160 characters. Be conversational and reference their context. If any places are marked to avoid, find completely different alternatives.`;
   }
   
   return enhancedPrompt;

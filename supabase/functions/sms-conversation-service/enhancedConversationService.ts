@@ -34,8 +34,10 @@ export class EnhancedConversationService {
         guestName
       );
       
+      // CRITICAL: Clear last_recommendations field in database too
       await conversationManager.updateConversationState(conversation.phone_number, {
-        conversation_context: resetResult.context
+        conversation_context: resetResult.context,
+        last_recommendations: null // Clear previous recommendations completely
       });
 
       return {
@@ -185,7 +187,7 @@ export class EnhancedConversationService {
       if (['ask_food_recommendations', 'ask_activities', 'ask_grocery_stores'].includes(intent)) {
         recommendationData = {
           type: intent,
-          content: openAIResponse.substring(0, 100) // Store more content for better tracking
+          content: openAIResponse.substring(0, 200) // Store more content for better tracking
         };
       }
       
@@ -197,8 +199,10 @@ export class EnhancedConversationService {
         recommendationData
       );
 
+      // Update both context and last_recommendations
       await conversationManager.updateConversationState(conversation.phone_number, {
-        conversation_context: updatedContext
+        conversation_context: updatedContext,
+        last_recommendations: openAIResponse // Store the full response
       });
 
       return {
@@ -255,32 +259,32 @@ export class EnhancedConversationService {
   private buildIntentSpecificPrompt(intent: string, message: string, propertyContext: string, guestName?: string, conversationContext?: string): string {
     const nameContext = guestName ? `The guest's name is ${guestName}.` : '';
     
-    // Build strong anti-repetition context
+    // Build enhanced anti-repetition context
     let antiRepetitionContext = '';
     if (conversationContext) {
-      antiRepetitionContext = `\n\nIMPORTANT CONTEXT: ${conversationContext} 
+      antiRepetitionContext = `\n\nCRITICAL ANTI-REPETITION CONTEXT: ${conversationContext}
 
-CRITICAL: You must provide COMPLETELY DIFFERENT recommendations from what was mentioned before. Do NOT repeat any previously mentioned places, restaurants, or activities. Focus on NEW and DIFFERENT options that haven't been suggested yet.`;
+MANDATORY: You MUST provide completely different recommendations from anything mentioned before. Do NOT repeat any places, restaurants, or activities from the blacklist above. Focus on NEW and DIFFERENT options that have NEVER been suggested to this guest.`;
     }
     
     const intentPrompts: Record<string, string> = {
       'ask_food_recommendations': `You are a local expert providing restaurant recommendations. ${nameContext} ${propertyContext}${antiRepetitionContext}
 
-Provide 2-3 COMPLETELY NEW restaurant recommendations with specific names, brief descriptions, and why locals love them. Make sure these are DIFFERENT from any previously mentioned places. Keep it under 160 words for SMS. Guest asked: ${message}`,
+Provide 2-3 COMPLETELY NEW restaurant recommendations with specific names, brief descriptions, and why locals love them. These must be ENTIRELY DIFFERENT from any previously mentioned places. Keep it under 160 words for SMS. Guest asked: ${message}`,
       
       'ask_grocery_stores': `You are a local expert providing grocery store recommendations. ${nameContext} ${propertyContext}${antiRepetitionContext}
 
-Provide 2-3 nearby grocery store options with names and brief descriptions. Ensure these are DIFFERENT from any previously mentioned stores. Keep it under 160 words for SMS. Guest asked: ${message}`,
+Provide 2-3 nearby grocery store options with names and brief descriptions. Ensure these are COMPLETELY DIFFERENT from any previously mentioned stores. Keep it under 160 words for SMS. Guest asked: ${message}`,
       
       'ask_activities': `You are a local expert providing activity and attraction recommendations. ${nameContext} ${propertyContext}${antiRepetitionContext}
 
-Provide 2-3 COMPLETELY NEW activities or attractions with specific names and brief descriptions. Make sure these are DIFFERENT from any previously suggested activities. Keep it under 160 words for SMS. Guest asked: ${message}`,
+Provide 2-3 COMPLETELY NEW activities or attractions with specific names and brief descriptions. These must be ENTIRELY DIFFERENT from any previously suggested activities. Keep it under 160 words for SMS. Guest asked: ${message}`,
       
       'greeting': `You are a friendly concierge assistant. ${nameContext} Respond warmly and offer to help with their stay. Keep it brief and welcoming. Guest said: ${message}`,
       
       'general_inquiry': `You are a helpful concierge assistant. ${nameContext} ${propertyContext}${antiRepetitionContext}
 
-Provide a helpful response to their question. If this is a request for recommendations, make sure to provide NEW and DIFFERENT suggestions from anything mentioned before. Keep it concise for SMS (under 160 words). Guest asked: ${message}`
+Provide a helpful response to their question. If this is a request for recommendations, make sure to provide ENTIRELY NEW and DIFFERENT suggestions from anything mentioned before. Keep it concise for SMS (under 160 words). Guest asked: ${message}`
     };
 
     return intentPrompts[intent] || intentPrompts['general_inquiry'];
