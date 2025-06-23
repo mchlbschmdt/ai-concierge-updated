@@ -1,9 +1,12 @@
+
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "./integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
 import GoogleOAuthButton from "./components/GoogleOAuthButton";
 import CustomPasswordReset from "./components/CustomPasswordReset";
+import SecurityQuestionsReset from "./components/SecurityQuestionsReset";
+import DirectPasswordReset from "./components/DirectPasswordReset";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -13,6 +16,10 @@ export default function Login() {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [resetEmailSent, setResetEmailSent] = useState(false);
+  const [resetMethod, setResetMethod] = useState(null); // 'email' or 'security'
+  const [showSecurityQuestions, setShowSecurityQuestions] = useState(false);
+  const [showDirectPasswordReset, setShowDirectPasswordReset] = useState(false);
+  const [verifiedUserId, setVerifiedUserId] = useState(null);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -47,59 +54,159 @@ export default function Login() {
     }
   };
 
+  const handleSecurityQuestionsSuccess = (userId) => {
+    setVerifiedUserId(userId);
+    setShowSecurityQuestions(false);
+    setShowDirectPasswordReset(true);
+  };
+
+  const handlePasswordResetComplete = () => {
+    setShowDirectPasswordReset(false);
+    setShowForgotPassword(false);
+    setResetMethod(null);
+    setVerifiedUserId(null);
+    toast({
+      title: "Password reset complete",
+      description: "You can now sign in with your new password."
+    });
+  };
+
+  const resetPasswordFlow = () => {
+    setShowForgotPassword(false);
+    setShowSecurityQuestions(false);
+    setShowDirectPasswordReset(false);
+    setResetEmailSent(false);
+    setResetEmail("");
+    setResetMethod(null);
+    setVerifiedUserId(null);
+  };
+
+  // Direct password reset flow
+  if (showDirectPasswordReset) {
+    return (
+      <div className="flex justify-center items-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+        <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
+          <DirectPasswordReset 
+            userId={verifiedUserId}
+            onComplete={handlePasswordResetComplete}
+            onBack={() => setShowDirectPasswordReset(false)}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Security questions verification
+  if (showSecurityQuestions) {
+    return (
+      <div className="flex justify-center items-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+        <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
+          <SecurityQuestionsReset 
+            email={resetEmail}
+            onSuccess={handleSecurityQuestionsSuccess}
+            onBack={() => {
+              setShowSecurityQuestions(false);
+              setResetMethod(null);
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Email reset confirmation
+  if (showForgotPassword && resetEmailSent) {
+    return (
+      <div className="flex justify-center items-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+        <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md text-center">
+          <div className="mb-6">
+            <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-4">
+              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Check Your Email</h2>
+            <p className="text-gray-600 mb-6">
+              We've sent a password reset link to <strong>{resetEmail}</strong>. 
+              Check your email and click the link to reset your password.
+            </p>
+            <p className="text-sm text-gray-500 mb-6">
+              Didn't receive the email? Check your spam folder or try again.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            <button 
+              onClick={() => {
+                setResetEmailSent(false);
+                setResetEmail("");
+              }}
+              className="w-full text-blue-600 hover:text-blue-700 py-2 border border-blue-600 rounded-md hover:bg-blue-50 transition-colors"
+            >
+              Try Different Email
+            </button>
+            <button 
+              onClick={resetPasswordFlow}
+              className="w-full text-gray-600 hover:text-gray-700 py-2"
+            >
+              Back to Login
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Password reset method selection or email reset
   if (showForgotPassword) {
-    if (resetEmailSent) {
+    if (resetMethod === 'email') {
       return (
         <div className="flex justify-center items-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-          <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md text-center">
-            <div className="mb-6">
-              <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-4">
-                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Check Your Email</h2>
-              <p className="text-gray-600 mb-6">
-                We've sent a password reset link to <strong>{resetEmail}</strong>. 
-                Check your email and click the link to reset your password.
-              </p>
-              <p className="text-sm text-gray-500 mb-6">
-                Didn't receive the email? Check your spam folder or try again.
-              </p>
+          <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
+            <div className="text-center mb-6">
+              <h2 className="text-3xl font-bold text-gray-900">Reset via Email</h2>
+              <p className="text-gray-600 mt-2">Enter your email to receive a reset link</p>
             </div>
 
-            <div className="space-y-3">
-              <button 
-                onClick={() => {
-                  setResetEmailSent(false);
-                  setResetEmail("");
-                }}
-                className="w-full text-blue-600 hover:text-blue-700 py-2 border border-blue-600 rounded-md hover:bg-blue-50 transition-colors"
-              >
-                Try Different Email
-              </button>
-              <button 
-                onClick={() => {
-                  setShowForgotPassword(false);
-                  setResetEmailSent(false);
-                  setResetEmail("");
-                }}
-                className="w-full text-gray-600 hover:text-gray-700 py-2"
-              >
-                Back to Login
-              </button>
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="resetEmail" className="block text-sm font-medium text-gray-700 mb-1">
+                  Email Address
+                </label>
+                <input
+                  id="resetEmail"
+                  type="email"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter your email"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  required
+                />
+              </div>
+
+              <CustomPasswordReset 
+                resetEmail={resetEmail}
+                onEmailSent={() => setResetEmailSent(true)}
+                onBack={() => setResetMethod(null)}
+              />
             </div>
           </div>
         </div>
       );
     }
 
+    if (resetMethod === 'security') {
+      setShowSecurityQuestions(true);
+      return null;
+    }
+
+    // Method selection
     return (
       <div className="flex justify-center items-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
         <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
           <div className="text-center mb-6">
             <h2 className="text-3xl font-bold text-gray-900">Reset Password</h2>
-            <p className="text-gray-600 mt-2">Enter your email to receive a reset link</p>
+            <p className="text-gray-600 mt-2">Choose how you'd like to reset your password</p>
           </div>
 
           <div className="space-y-4">
@@ -118,11 +225,50 @@ export default function Login() {
               />
             </div>
 
-            <CustomPasswordReset 
-              resetEmail={resetEmail}
-              onEmailSent={() => setResetEmailSent(true)}
-              onBack={() => setShowForgotPassword(false)}
-            />
+            <div className="space-y-3">
+              <button
+                onClick={() => {
+                  if (!resetEmail) {
+                    toast({
+                      variant: "destructive",
+                      title: "Email required",
+                      description: "Please enter your email address first."
+                    });
+                    return;
+                  }
+                  setResetMethod('security');
+                }}
+                className="w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors font-medium"
+              >
+                Reset with Security Questions
+                <p className="text-xs text-blue-100 mt-1">Instant reset - no email required</p>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (!resetEmail) {
+                    toast({
+                      variant: "destructive",
+                      title: "Email required",
+                      description: "Please enter your email address first."
+                    });
+                    return;
+                  }
+                  setResetMethod('email');
+                }}
+                className="w-full bg-gray-100 text-gray-700 py-3 px-4 rounded-md hover:bg-gray-200 transition-colors font-medium"
+              >
+                Reset via Email
+                <p className="text-xs text-gray-500 mt-1">Traditional email reset link</p>
+              </button>
+            </div>
+
+            <button 
+              onClick={resetPasswordFlow}
+              className="w-full text-gray-600 hover:text-gray-700 py-2"
+            >
+              Back to Login
+            </button>
           </div>
         </div>
       </div>

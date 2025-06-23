@@ -129,6 +129,12 @@ export type Database = {
           email: string
           full_name: string | null
           id: string
+          security_answer_1: string | null
+          security_answer_2: string | null
+          security_answer_3: string | null
+          security_question_1: string | null
+          security_question_2: string | null
+          security_question_3: string | null
           updated_at: string
         }
         Insert: {
@@ -137,6 +143,12 @@ export type Database = {
           email: string
           full_name?: string | null
           id: string
+          security_answer_1?: string | null
+          security_answer_2?: string | null
+          security_answer_3?: string | null
+          security_question_1?: string | null
+          security_question_2?: string | null
+          security_question_3?: string | null
           updated_at?: string
         }
         Update: {
@@ -145,6 +157,12 @@ export type Database = {
           email?: string
           full_name?: string | null
           id?: string
+          security_answer_1?: string | null
+          security_answer_2?: string | null
+          security_answer_3?: string | null
+          security_question_1?: string | null
+          security_question_2?: string | null
+          security_question_3?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -396,7 +414,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      hash_security_answer: {
+        Args: { answer: string }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never
