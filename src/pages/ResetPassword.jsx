@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { supabase } from "../integrations/supabase/client";
 import { useToast } from "../components/ui/use-toast";
 
@@ -10,53 +10,113 @@ export default function ResetPassword() {
   const [validToken, setValidToken] = useState(false);
   const [checkingToken, setCheckingToken] = useState(true);
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
     const checkTokenValidity = async () => {
-      const accessToken = searchParams.get('access_token');
-      const refreshToken = searchParams.get('refresh_token');
-      const type = searchParams.get('type');
+      console.log("Full URL:", window.location.href);
+      console.log("Search params:", searchParams.toString());
+      console.log("Hash:", window.location.hash);
       
-      console.log("Reset password tokens:", { accessToken: !!accessToken, refreshToken: !!refreshToken, type });
+      // Parse tokens from both query params and hash fragments
+      let accessToken = searchParams.get('access_token');
+      let refreshToken = searchParams.get('refresh_token');
+      let tokenHash = searchParams.get('token_hash');
+      let type = searchParams.get('type');
       
-      if (!accessToken || !refreshToken || type !== 'recovery') {
-        console.log("Missing or invalid tokens for password reset");
-        setCheckingToken(false);
-        setValidToken(false);
-        return;
-      }
-
-      try {
-        // Set the session with the recovery tokens
-        const { data, error } = await supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken
+      // Check hash fragments if query params are empty
+      if (!accessToken && !tokenHash && window.location.hash) {
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        accessToken = hashParams.get('access_token');
+        refreshToken = hashParams.get('refresh_token');
+        tokenHash = hashParams.get('token_hash');
+        type = hashParams.get('type');
+        
+        console.log("Hash params:", {
+          accessToken: !!accessToken,
+          refreshToken: !!refreshToken,
+          tokenHash: !!tokenHash,
+          type
         });
-
-        if (error) {
-          console.error("Error setting recovery session:", error);
-          toast({
-            variant: "destructive",
-            title: "Invalid reset link",
-            description: "This password reset link is invalid or has expired. Please request a new one."
-          });
-          setValidToken(false);
-        } else {
-          console.log("Recovery session set successfully");
-          setValidToken(true);
-        }
-      } catch (err) {
-        console.error("Token validation error:", err);
-        setValidToken(false);
-      } finally {
-        setCheckingToken(false);
       }
+      
+      console.log("Parsed tokens:", { 
+        accessToken: !!accessToken, 
+        refreshToken: !!refreshToken, 
+        tokenHash: !!tokenHash, 
+        type 
+      });
+      
+      // Handle different token formats
+      if (tokenHash && type === 'recovery') {
+        try {
+          // For token_hash format, we need to verify the session differently
+          console.log("Using token_hash verification");
+          
+          const { data, error } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: 'recovery'
+          });
+
+          if (error) {
+            console.error("Token hash verification error:", error);
+            toast({
+              variant: "destructive",
+              title: "Invalid reset link",
+              description: "This password reset link is invalid or has expired. Please request a new one."
+            });
+            setValidToken(false);
+          } else {
+            console.log("Token hash verification successful");
+            setValidToken(true);
+          }
+        } catch (err) {
+          console.error("Token hash validation error:", err);
+          setValidToken(false);
+        }
+      } else if (accessToken && refreshToken && type === 'recovery') {
+        try {
+          // For access/refresh token format
+          console.log("Using access/refresh token verification");
+          
+          const { data, error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken
+          });
+
+          if (error) {
+            console.error("Session verification error:", error);
+            toast({
+              variant: "destructive",
+              title: "Invalid reset link",
+              description: "This password reset link is invalid or has expired. Please request a new one."
+            });
+            setValidToken(false);
+          } else {
+            console.log("Session verification successful");
+            setValidToken(true);
+          }
+        } catch (err) {
+          console.error("Session validation error:", err);
+          setValidToken(false);
+        }
+      } else {
+        console.log("Missing or invalid tokens for password reset");
+        toast({
+          variant: "destructive",
+          title: "Invalid reset link",
+          description: "This password reset link is missing required parameters. Please request a new one."
+        });
+        setValidToken(false);
+      }
+      
+      setCheckingToken(false);
     };
 
     checkTokenValidity();
-  }, [searchParams, toast]);
+  }, [searchParams, location, toast]);
 
   const handleResetPassword = async (e) => {
     e.preventDefault();
