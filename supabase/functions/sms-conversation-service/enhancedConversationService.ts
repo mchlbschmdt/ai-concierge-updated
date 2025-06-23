@@ -112,18 +112,10 @@ export class EnhancedConversationService {
       const possiblePropertyCode = cleanMessage.match(/\d+/)?.[0];
       console.log("🔍 Possible property code detected:", possiblePropertyCode);
 
-      // ENHANCED PROPERTY CODE HANDLING
-      if (conversation.conversation_state === 'awaiting_property_id' || 
-          (possiblePropertyCode && !conversation.property_confirmed)) {
-        console.log("🏠 Processing property ID input...");
+      // FIXED PROPERTY CODE HANDLING - Must be awaiting_property_id to process property codes
+      if (conversation.conversation_state === 'awaiting_property_id' && possiblePropertyCode) {
+        console.log("🏠 Processing property ID input in correct state...");
         
-        if (!possiblePropertyCode) {
-          console.log("❌ No property code found in message");
-          const errorResponse = "Hi! I'm your Hostly AI Concierge. To get started, please send me your property code (the numbers from your booking confirmation).";
-          const messages = MultiPartResponseFormatter.formatResponse(errorResponse);
-          return { messages, propertyCodeMissing: true };
-        }
-
         try {
           console.log("🔍 Looking up property with code:", possiblePropertyCode);
           const propertyResult = await this.propertyService.findPropertyByCode(possiblePropertyCode);
@@ -132,10 +124,10 @@ export class EnhancedConversationService {
           if (propertyResult) {
             console.log("✅ Property found:", propertyResult.property_name);
             
-            // Update conversation state to awaiting_confirmation
+            // CRITICAL FIX: Update conversation state to awaiting_confirmation (NOT confirmed)
             await this.conversationManager.updateConversationState(phoneNumber, {
               property_id: propertyResult.property_id,
-              conversation_state: 'awaiting_confirmation',
+              conversation_state: 'awaiting_confirmation', // THIS IS THE KEY FIX
               conversation_context: {
                 ...conversation.conversation_context,
                 pending_property: propertyResult
@@ -159,6 +151,14 @@ export class EnhancedConversationService {
         }
       }
 
+      // Handle if property code sent but not in correct state
+      if (possiblePropertyCode && conversation.conversation_state !== 'awaiting_property_id') {
+        console.log("⚠️ Property code sent but conversation not in awaiting_property_id state");
+        const contextualResponse = this.generateContextualResponse(conversation, cleanMessage);
+        const messages = MultiPartResponseFormatter.formatResponse(contextualResponse);
+        return { messages, contextualResponse: true };
+      }
+
       // HANDLE CONFIRMATION RESPONSES
       if (conversation.conversation_state === 'awaiting_confirmation') {
         console.log("🎯 Processing confirmation response");
@@ -179,7 +179,7 @@ export class EnhancedConversationService {
             }
           });
           
-          const welcomeResponse = "I'm your Hostly AI Concierge! I can help with property info, local tips, and more! What's your name so I can personalize our conversation?";
+          const welcomeResponse = "Perfect! I'm your Hostly AI Concierge. I can help with property info, local recommendations, and more! What's your name so I can personalize our conversation?";
           console.log("📝 Generated welcome response:", welcomeResponse);
           const messages = MultiPartResponseFormatter.formatResponse(welcomeResponse);
           return { messages, propertyConfirmed: true, askingForName: true };
@@ -272,149 +272,10 @@ export class EnhancedConversationService {
             return { messages, nameDetected: true };
           }
           
-          // Recognize intent with enhanced logging
-          console.log("🎯 Recognizing intent for message:", cleanMessage);
-          const intentResult = IntentRecognitionService.recognizeIntent(cleanMessage);
-          console.log("🎯 Intent recognition result:", intentResult);
-          
-          let context = conversation.conversation_context || {};
-          
-          // Update context using ConversationMemoryManager static methods
-          context = ConversationMemoryManager.updateMemory(
-            context, 
-            intentResult.intent, 
-            'general_response'
-          );
-          
-          // ENHANCED PROPERTY-SPECIFIC QUESTION HANDLING
-          if (intentResult.intent.includes('ask_') || intentResult.intent === 'general_inquiry') {
-            console.log("🔍 Processing specific property question with intent:", intentResult.intent);
-            
-            // Handle property-specific questions with detailed responses
-            if (intentResult.intent.includes('checkin') || intentResult.intent.includes('checkout')) {
-              console.log("🏠 Processing check-in/check-out question");
-              
-              const checkInTime = property.check_in_time || '4:00 PM';
-              const checkOutTime = property.check_out_time || '11:00 AM';
-              
-              let response;
-              if (intentResult.intent.includes('checkin')) {
-                response = conversation.guest_name 
-                  ? `${conversation.guest_name}, check-in is at ${checkInTime}. Let me know if you need early check-in!`
-                  : `Check-in is at ${checkInTime}. Let me know if you need early check-in!`;
-              } else {
-                response = conversation.guest_name 
-                  ? `${conversation.guest_name}, check-out is at ${checkOutTime}. Need help with late checkout?`
-                  : `Check-out is at ${checkOutTime}. Need help with late checkout?`;
-              }
-              
-              await this.conversationManager.updateConversationContext(conversation, intentResult.intent);
-              const messages = MultiPartResponseFormatter.formatResponse(response);
-              return { messages, propertyInfoProvided: true };
-            }
-            
-            if (intentResult.intent.includes('wifi')) {
-              console.log("🏠 Processing WiFi question");
-              
-              if (property.wifi_name && property.wifi_password) {
-                const response = conversation.guest_name 
-                  ? `${conversation.guest_name}, here are your WiFi details:\n\nNetwork: ${property.wifi_name}\nPassword: ${property.wifi_password}\n\nLet me know if you need help connecting!`
-                  : `Here are your WiFi details:\n\nNetwork: ${property.wifi_name}\nPassword: ${property.wifi_password}\n\nLet me know if you need help connecting!`;
-                
-                await this.conversationManager.updateConversationContext(conversation, intentResult.intent);
-                const messages = MultiPartResponseFormatter.formatResponse(response);
-                return { messages, propertyInfoProvided: true };
-              } else {
-                const response = "WiFi details should be in your check-in instructions. Contact the property if you need assistance.";
-                const messages = MultiPartResponseFormatter.formatResponse(response);
-                return { messages, propertyInfoProvided: true };
-              }
-            }
-            
-            if (intentResult.intent.includes('parking')) {
-              console.log("🏠 Processing parking question");
-              
-              if (property.parking_instructions) {
-                const response = conversation.guest_name 
-                  ? `${conversation.guest_name}, here are the parking details:\n\n${property.parking_instructions}\n\nAny other questions?`
-                  : `Here are the parking details:\n\n${property.parking_instructions}\n\nAny other questions?`;
-                
-                await this.conversationManager.updateConversationContext(conversation, intentResult.intent);
-                const messages = MultiPartResponseFormatter.formatResponse(response);
-                return { messages, propertyInfoProvided: true };
-              } else {
-                const response = "Check your booking confirmation for parking information or contact the property directly.";
-                const messages = MultiPartResponseFormatter.formatResponse(response);
-                return { messages, propertyInfoProvided: true };
-              }
-            }
-            
-            if (intentResult.intent.includes('access')) {
-              console.log("🏠 Processing access question");
-              
-              if (property.access_instructions) {
-                const response = conversation.guest_name 
-                  ? `${conversation.guest_name}, here are the access details:\n\n${property.access_instructions}\n\nIf you have trouble, contact our emergency line!`
-                  : `Here are the access details:\n\n${property.access_instructions}\n\nIf you have trouble, contact our emergency line!`;
-                
-                await this.conversationManager.updateConversationContext(conversation, intentResult.intent);
-                const messages = MultiPartResponseFormatter.formatResponse(response);
-                return { messages, propertyInfoProvided: true };
-              } else {
-                const response = "Access details should be in your check-in instructions. Contact the property if you need assistance.";
-                const messages = MultiPartResponseFormatter.formatResponse(response);
-                return { messages, propertyInfoProvided: true };
-              }
-            }
-            
-            // Handle recommendation requests
-            if (intentResult.intent.includes('food') || intentResult.intent.includes('grocery') || 
-                intentResult.intent.includes('activities') || intentResult.intent === 'general_inquiry') {
-              console.log("🔍 Processing recommendation request");
-              
-              const blacklist = ConversationMemoryManager.getRecommendationContext(context);
-              console.log("🚫 Current blacklist context:", blacklist);
-              
-              const recommendations = await this.recommendationService.getRecommendations({
-                query: cleanMessage,
-                propertyAddress: property.address,
-                messageType: intentResult.intent,
-                guestContext: {
-                  currentLocation: property.address,
-                  previousAskedAbout: context.askedAbout || [],
-                  guestName: conversation.guest_name
-                },
-                blacklistedPlaces: blacklist ? [blacklist] : []
-              });
-              
-              if (recommendations.response) {
-                // Update context with recommendation tracking
-                context = ConversationMemoryManager.updateMemory(
-                  context, 
-                  intentResult.intent, 
-                  'recommendation_response',
-                  { type: intentResult.intent, content: recommendations.response }
-                );
-                
-                await this.conversationManager.updateConversationState(phoneNumber, {
-                  conversation_context: context,
-                  last_message_type: intentResult.intent,
-                  last_recommendations: recommendations.response
-                });
-                
-                const messages = MultiPartResponseFormatter.formatResponse(recommendations.response);
-                return { messages, recommendationsProvided: true };
-              }
-            }
-          }
-          
-          console.log("🎯 Generating general response for unmatched intent");
-          const generalResponse = this.responseGenerator.generateGeneralResponse(
-            cleanMessage, 
-            conversation.guest_name
-          );
-          const messages = MultiPartResponseFormatter.formatResponse(generalResponse);
-          return { messages, generalResponse: true };
+          // Generate contextual response based on conversation history and current message
+          const contextualResponse = this.generateContextualResponse(conversation, cleanMessage, property);
+          const messages = MultiPartResponseFormatter.formatResponse(contextualResponse);
+          return { messages, contextualResponse: true };
           
         } catch (confirmedError) {
           console.error("❌ Error processing confirmed guest message:", confirmedError);
@@ -426,7 +287,7 @@ export class EnhancedConversationService {
       }
 
       console.log("❓ Unhandled conversation state:", conversation.conversation_state);
-      const defaultResponse = "I'm not sure how to help with that. Could you try sending your property code?";
+      const defaultResponse = "Hi! I'm your Hostly AI Concierge. To get started, please send me your property code (the numbers from your booking confirmation).";
       const messages = MultiPartResponseFormatter.formatResponse(defaultResponse);
       return { messages, unhandled: true };
 
@@ -448,5 +309,82 @@ export class EnhancedConversationService {
       console.log("🚨 Using enhanced error fallback response:", errorMessage);
       return { messages: [errorMessage], error: 'service_error', details: error.message };
     }
+  }
+
+  private generateContextualResponse(conversation: any, message: string, property?: any): string {
+    const guestName = conversation.guest_name;
+    const namePrefix = guestName ? `${guestName}, ` : '';
+    const context = conversation.conversation_context || {};
+    const lastIntent = context.last_intent;
+    
+    // Recognize current intent
+    const intentResult = IntentRecognitionService.recognizeIntent(message);
+    console.log("🎯 Intent recognition result:", intentResult);
+    
+    // Handle specific property questions with detailed responses
+    if (intentResult.intent.includes('checkin') && property) {
+      const checkInTime = property.check_in_time || '4:00 PM';
+      
+      // Check if this is about early check-in
+      if (message.toLowerCase().includes('early')) {
+        return `${namePrefix}standard check-in is at ${checkInTime}. For early check-in, I'd recommend contacting the property directly. They may be able to accommodate depending on availability. Would you like me to help with anything else for your stay?`;
+      } else {
+        return `${namePrefix}check-in is at ${checkInTime}. Let me know if you need early check-in or have other questions about your arrival!`;
+      }
+    }
+    
+    if (intentResult.intent.includes('checkout') && property) {
+      const checkOutTime = property.check_out_time || '11:00 AM';
+      return `${namePrefix}check-out is at ${checkOutTime}. Need help with late checkout or anything else for your departure?`;
+    }
+    
+    if (intentResult.intent.includes('wifi') && property) {
+      if (property.wifi_name && property.wifi_password) {
+        return `${namePrefix}here are your WiFi details:\n\nNetwork: ${property.wifi_name}\nPassword: ${property.wifi_password}\n\nLet me know if you need help connecting!`;
+      } else {
+        return `${namePrefix}WiFi details should be in your check-in instructions. Contact the property if you need assistance.`;
+      }
+    }
+    
+    if (intentResult.intent.includes('parking') && property) {
+      if (property.parking_instructions) {
+        return `${namePrefix}here are the parking details:\n\n${property.parking_instructions}\n\nAny other questions?`;
+      } else {
+        return `${namePrefix}check your booking confirmation for parking information or contact the property directly.`;
+      }
+    }
+    
+    if (intentResult.intent.includes('access') && property) {
+      if (property.access_instructions) {
+        return `${namePrefix}here are the access details:\n\n${property.access_instructions}\n\nIf you have trouble, contact our emergency line!`;
+      } else {
+        return `${namePrefix}access details should be in your check-in instructions. Contact the property if you need assistance.`;
+      }
+    }
+    
+    // Handle greetings more conversationally
+    if (intentResult.intent === 'greeting') {
+      if (lastIntent) {
+        return `${namePrefix}hello! How can I help you today? I can assist with property questions, local recommendations, or anything else about your stay.`;
+      } else {
+        return `${namePrefix}hi there! What can I help you with today?`;
+      }
+    }
+    
+    // Handle follow-up questions more naturally
+    if (lastIntent === 'ask_checkin_time' && (message.toLowerCase().includes('early') || message.toLowerCase().includes('before'))) {
+      return `${namePrefix}for early check-in requests, I'd recommend contacting the property directly. They'll let you know if they can accommodate based on availability. Is there anything else I can help you with?`;
+    }
+    
+    // Default contextual response
+    const helpfulResponses = [
+      `${namePrefix}I'm here to help! I can assist with property information, local recommendations, check-in details, or any other questions about your stay. What would you like to know?`,
+      `${namePrefix}happy to help! What can I assist you with? I can provide property details, local dining suggestions, directions, or answer other questions about your stay.`,
+      `${namePrefix}I'd love to help! Are you looking for property information, local recommendations, or do you have other questions about your stay?`
+    ];
+    
+    // Rotate responses to avoid repetition
+    const responseIndex = (context.conversation_depth || 0) % helpfulResponses.length;
+    return helpfulResponses[responseIndex];
   }
 }
