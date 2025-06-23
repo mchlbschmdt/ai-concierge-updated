@@ -18,7 +18,6 @@ export class EnhancedConversationService {
   private fuzzyMatchingService: FuzzyMatchingService;
   private recommendationService: RecommendationService;
   private responseGenerator: ResponseGenerator;
-  private memoryManager: ConversationMemoryManager;
   private travelService: TravelConversationService;
 
   constructor(private supabase: SupabaseClient) {
@@ -27,7 +26,6 @@ export class EnhancedConversationService {
     this.fuzzyMatchingService = new FuzzyMatchingService();
     this.recommendationService = new RecommendationService(supabase);
     this.responseGenerator = new ResponseGenerator();
-    this.memoryManager = new ConversationMemoryManager();
     this.travelService = new TravelConversationService(supabase);
   }
 
@@ -280,7 +278,13 @@ export class EnhancedConversationService {
           console.log("🎯 Intent recognition result:", intentResult);
           
           let context = conversation.conversation_context || {};
-          context = this.memoryManager.updateContext(context, { type: 'general', category: intentResult.intent }, cleanMessage);
+          
+          // Update context using ConversationMemoryManager static methods
+          context = ConversationMemoryManager.updateMemory(
+            context, 
+            intentResult.intent, 
+            'general_response'
+          );
           
           // ENHANCED PROPERTY-SPECIFIC QUESTION HANDLING
           if (intentResult.intent.includes('ask_') || intentResult.intent === 'general_inquiry') {
@@ -368,8 +372,8 @@ export class EnhancedConversationService {
                 intentResult.intent.includes('activities') || intentResult.intent === 'general_inquiry') {
               console.log("🔍 Processing recommendation request");
               
-              const blacklist = this.memoryManager.getRecommendationBlacklist(context);
-              console.log("🚫 Current blacklist:", blacklist);
+              const blacklist = ConversationMemoryManager.getRecommendationContext(context);
+              console.log("🚫 Current blacklist context:", blacklist);
               
               const recommendations = await this.recommendationService.getRecommendations({
                 query: cleanMessage,
@@ -380,14 +384,16 @@ export class EnhancedConversationService {
                   previousAskedAbout: context.askedAbout || [],
                   guestName: conversation.guest_name
                 },
-                blacklistedPlaces: blacklist
+                blacklistedPlaces: blacklist ? [blacklist] : []
               });
               
               if (recommendations.response) {
-                context = this.memoryManager.addRecommendationsToContext(
+                // Update context with recommendation tracking
+                context = ConversationMemoryManager.updateMemory(
                   context, 
-                  recommendations.response,
-                  intentResult.intent
+                  intentResult.intent, 
+                  'recommendation_response',
+                  { type: intentResult.intent, content: recommendations.response }
                 );
                 
                 await this.conversationManager.updateConversationState(phoneNumber, {
