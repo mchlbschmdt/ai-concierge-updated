@@ -7,22 +7,30 @@ import { ConversationalResponseGenerator } from './conversationalResponseGenerat
 import { RecommendationService } from './recommendationService.ts';
 import { ResponseGenerator } from './responseGenerator.ts';
 import { MessageUtils } from './messageUtils.ts';
+import { ConversationManager } from './conversationManager.ts';
+import { PropertyService } from './propertyService.ts';
 import { Property } from './types.ts';
 
 export class EnhancedConversationService {
-  constructor(
-    private supabase: SupabaseClient,
-    private conversationManager: any,
-    private recommendationService: RecommendationService
-  ) {}
+  private conversationManager: ConversationManager;
+  private propertyService: PropertyService;
+  private recommendationService: RecommendationService;
+
+  constructor(private supabase: SupabaseClient) {
+    this.conversationManager = new ConversationManager(supabase);
+    this.propertyService = new PropertyService(supabase);
+    this.recommendationService = new RecommendationService(supabase, this.conversationManager);
+  }
 
   async processMessage(
-    message: string,
     phoneNumber: string,
-    conversation: any,
-    property: Property | null
+    message: string
   ): Promise<{ messages: string[]; conversationalResponse: boolean; intent: string }> {
-    console.log('🎯 Enhanced Conversation Service V2.0 - Processing message:', message);
+    console.log('🎯 Enhanced Conversation Service V2.1 - Processing message:', message);
+
+    // Get conversation and property
+    const conversation = await this.conversationManager.getOrCreateConversation(phoneNumber);
+    const property = conversation.property_id ? await this.propertyService.getPropertyById(conversation.property_id) : null;
 
     if (!property) {
       console.log('❌ No property found for conversation');

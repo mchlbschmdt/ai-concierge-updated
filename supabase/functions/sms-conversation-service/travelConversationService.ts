@@ -1,4 +1,3 @@
-
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 export interface TravelConversation {
@@ -25,8 +24,8 @@ export interface TravelMessage {
 export class TravelConversationService {
   constructor(private supabase: SupabaseClient) {}
 
-  async getOrCreateTravelConversation(phoneNumber: string): Promise<TravelConversation> {
-    console.log('Getting or creating travel conversation for:', phoneNumber);
+  async getExistingTravelConversation(phoneNumber: string): Promise<TravelConversation | null> {
+    console.log('Checking for existing travel conversation for:', phoneNumber);
     
     const { data: existing, error } = await this.supabase
       .from('travel_conversations')
@@ -36,9 +35,16 @@ export class TravelConversationService {
 
     if (error) {
       console.error('Error fetching travel conversation:', error);
-      throw error;
+      return null;
     }
 
+    return existing;
+  }
+
+  async getOrCreateTravelConversation(phoneNumber: string): Promise<TravelConversation> {
+    console.log('Getting or creating travel conversation for:', phoneNumber);
+    
+    const existing = await this.getExistingTravelConversation(phoneNumber);
     if (existing) {
       console.log('Found existing travel conversation:', existing);
       return existing;
