@@ -18,7 +18,6 @@ export class EnhancedConversationService {
   private fuzzyMatchingService: FuzzyMatchingService;
   private recommendationService: RecommendationService;
   private responseGenerator: ResponseGenerator;
-  private intentService: IntentRecognitionService;
   private memoryManager: ConversationMemoryManager;
   private travelService: TravelConversationService;
 
@@ -28,7 +27,6 @@ export class EnhancedConversationService {
     this.fuzzyMatchingService = new FuzzyMatchingService();
     this.recommendationService = new RecommendationService(supabase);
     this.responseGenerator = new ResponseGenerator();
-    this.intentService = new IntentRecognitionService();
     this.memoryManager = new ConversationMemoryManager();
     this.travelService = new TravelConversationService(supabase);
   }
@@ -159,14 +157,16 @@ export class EnhancedConversationService {
             return { messages, nameDetected: true };
           }
           
-          const intent = this.intentService.detectIntent(cleanMessage);
-          console.log("🎯 Detected intent:", intent);
+          // Use the static method correctly
+          const intentResult = IntentRecognitionService.recognizeIntent(cleanMessage);
+          console.log("🎯 Detected intent result:", intentResult);
           
           let context = conversation.conversation_context || {};
-          context = this.memoryManager.updateContext(context, intent, cleanMessage);
+          context = this.memoryManager.updateContext(context, { type: 'general', category: intentResult.intent }, cleanMessage);
           
-          if (intent.type === 'recommendation_request') {
-            console.log("🔍 Processing recommendation request");
+          // Handle different intent types based on the IntentResult structure
+          if (intentResult.intent.includes('ask_') || intentResult.intent === 'general_inquiry') {
+            console.log("🔍 Processing recommendation/property request");
             
             const property = await this.propertyService.getPropertyById(conversation.property_id);
             if (!property) {
@@ -176,62 +176,63 @@ export class EnhancedConversationService {
               return { messages, error: 'property_not_found' };
             }
             
-            const blacklist = this.memoryManager.getRecommendationBlacklist(context);
-            console.log("🚫 Current blacklist:", blacklist);
-            
-            const recommendations = await this.recommendationService.getRecommendations({
-              query: cleanMessage,
-              propertyAddress: property.address,
-              messageType: intent.category,
-              guestContext: {
-                currentLocation: property.address,
-                previousAskedAbout: context.askedAbout || [],
-                guestName: conversation.guest_name
-              },
-              blacklistedPlaces: blacklist
-            });
-            
-            if (recommendations.response) {
-              context = this.memoryManager.addRecommendationsToContext(
-                context, 
-                recommendations.response,
-                intent.category
+            // Handle property-specific questions
+            if (intentResult.intent.includes('checkin') || intentResult.intent.includes('checkout') || 
+                intentResult.intent.includes('wifi') || intentResult.intent.includes('parking') || 
+                intentResult.intent.includes('access')) {
+              console.log("🏠 Processing property-specific question");
+              
+              const propertyResponse = this.responseGenerator.generatePropertyResponse(
+                cleanMessage, 
+                property, 
+                conversation.guest_name
               );
               
-              await this.conversationManager.updateConversationState(phoneNumber, {
-                conversation_context: context,
-                last_message_type: intent.category,
-                last_recommendations: recommendations.response
+              await this.conversationManager.updateConversationContext(conversation, intentResult.intent);
+              
+              console.log("📝 Formatting property info response");
+              const messages = MultiPartResponseFormatter.formatResponse(propertyResponse);
+              return { messages, propertyInfoProvided: true };
+            }
+            
+            // Handle recommendation requests
+            if (intentResult.intent.includes('food') || intentResult.intent.includes('grocery') || 
+                intentResult.intent.includes('activities') || intentResult.intent === 'general_inquiry') {
+              console.log("🔍 Processing recommendation request");
+              
+              const blacklist = this.memoryManager.getRecommendationBlacklist(context);
+              console.log("🚫 Current blacklist:", blacklist);
+              
+              const recommendations = await this.recommendationService.getRecommendations({
+                query: cleanMessage,
+                propertyAddress: property.address,
+                messageType: intentResult.intent,
+                guestContext: {
+                  currentLocation: property.address,
+                  previousAskedAbout: context.askedAbout || [],
+                  guestName: conversation.guest_name
+                },
+                blacklistedPlaces: blacklist
               });
               
-              console.log("📝 Formatting recommendation response");
-              const messages = MultiPartResponseFormatter.formatResponse(recommendations.response);
-              return { messages, recommendationsProvided: true };
+              if (recommendations.response) {
+                context = this.memoryManager.addRecommendationsToContext(
+                  context, 
+                  recommendations.response,
+                  intentResult.intent
+                );
+                
+                await this.conversationManager.updateConversationState(phoneNumber, {
+                  conversation_context: context,
+                  last_message_type: intentResult.intent,
+                  last_recommendations: recommendations.response
+                });
+                
+                console.log("📝 Formatting recommendation response");
+                const messages = MultiPartResponseFormatter.formatResponse(recommendations.response);
+                return { messages, recommendationsProvided: true };
+              }
             }
-          }
-          
-          if (intent.type === 'property_question') {
-            console.log("🏠 Processing property question");
-            
-            const property = await this.propertyService.getPropertyById(conversation.property_id);
-            if (!property) {
-              const errorResponse = "I'm sorry, I couldn't find your property information.";
-              console.log("📝 Formatting property info error response");
-              const messages = MultiPartResponseFormatter.formatResponse(errorResponse);
-              return { messages, error: 'property_not_found' };
-            }
-            
-            const propertyResponse = this.responseGenerator.generatePropertyResponse(
-              cleanMessage, 
-              property, 
-              conversation.guest_name
-            );
-            
-            await this.conversationManager.updateConversationContext(conversation, intent.category);
-            
-            console.log("📝 Formatting property info response");
-            const messages = MultiPartResponseFormatter.formatResponse(propertyResponse);
-            return { messages, propertyInfoProvided: true };
           }
           
           console.log("🎯 Generating general response");
