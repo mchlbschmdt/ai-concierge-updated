@@ -68,8 +68,8 @@ serve(async (req) => {
         });
       }
 
-      // Check if we have an existing travel conversation
-      const existingTravelConversation = await travelService.getOrCreateTravelConversation(phoneNumber);
+      // Check if we have an existing travel conversation that's NOT in the initial state
+      const existingTravelConversation = await travelService.getExistingTravelConversation(phoneNumber);
       if (existingTravelConversation && existingTravelConversation.step !== 'ASK_LOCATION') {
         console.log("🌍 Continuing existing travel conversation");
         
