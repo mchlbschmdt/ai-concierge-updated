@@ -10,12 +10,9 @@ export class IntentRecognitionService {
   static recognizeIntent(message: string): IntentResult {
     const lowerMessage = message.toLowerCase().trim();
     
-    // Reset/restart commands - HIGH PRIORITY
-    if (this.matchesKeywords(lowerMessage, [
-      'reset', 'restart', 'start over', 'something else', 'different options',
-      'what else', 'other recommendations', 'try again', 'nevermind',
-      'change topic', 'something different', 'new suggestions'
-    ])) {
+    // Reset/restart commands - HIGH PRIORITY - check first!
+    if (this.isResetCommand(lowerMessage)) {
+      console.log('🔄 Reset command detected:', message);
       return { intent: 'conversation_reset', confidence: 0.95, isMultiPart: false };
     }
     
@@ -39,6 +36,31 @@ export class IntentRecognitionService {
       confidence: singleIntent.confidence,
       isMultiPart: false
     };
+  }
+
+  private static isResetCommand(message: string): boolean {
+    const resetKeywords = [
+      'reset', 'restart', 'start over', 'something else', 'different options',
+      'what else', 'other recommendations', 'try again', 'nevermind',
+      'change topic', 'something different', 'new suggestions', 'new recommendation',
+      'different recommendation', 'other options', 'start fresh', 'clear'
+    ];
+    
+    // Check for exact word matches (not partial)
+    const words = message.split(/\s+/).map(word => word.replace(/[^\w]/g, ''));
+    
+    return resetKeywords.some(keyword => {
+      const keywordWords = keyword.split(/\s+/);
+      
+      // For single word keywords, check exact match
+      if (keywordWords.length === 1) {
+        return words.includes(keywordWords[0]);
+      }
+      
+      // For multi-word keywords, check if all words appear in sequence
+      const keywordText = keywordWords.join(' ');
+      return message.includes(keywordText);
+    });
   }
 
   private static detectMultipleRequests(message: string): boolean {
@@ -134,6 +156,15 @@ export class IntentRecognitionService {
   }
 
   private static matchesKeywords(message: string, keywords: string[]): boolean {
-    return keywords.some(keyword => message.includes(keyword));
+    return keywords.some(keyword => {
+      // Handle multi-word keywords
+      if (keyword.includes(' ')) {
+        return message.includes(keyword);
+      }
+      
+      // For single words, check for word boundaries to avoid partial matches
+      const wordRegex = new RegExp(`\\b${keyword}\\b`, 'i');
+      return wordRegex.test(message);
+    });
   }
 }
