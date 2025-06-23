@@ -89,8 +89,9 @@ export default function EmailDeliveryStatus({ email, onResend }) {
           <p>💡 <strong>Tips for faster delivery:</strong></p>
           <ul className="list-disc list-inside mt-1 space-y-1">
             <li>Check your spam/junk folder</li>
-            <li>Add noreply@hostlyai.com to your contacts</li>
+            <li>Add noreply@resend.dev to your contacts</li>
             <li>Email delivery can take 1-15 minutes</li>
+            <li>Make sure you're using the correct redirect URL</li>
           </ul>
         </div>
       </div>

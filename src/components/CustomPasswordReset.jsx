@@ -26,9 +26,13 @@ export default function CustomPasswordReset({ resetEmail, onEmailSent, onBack })
       console.log("Sending custom password reset email to:", resetEmail);
       console.log("Password reset initiated at:", new Date().toISOString());
       
+      // Use the current origin for the redirect URL to ensure it matches Supabase settings
+      const redirectTo = `${window.location.origin}/reset-password`;
+      console.log("Using redirect URL:", redirectTo);
+      
       // First, initiate the password reset with Supabase
       const { data, error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-        redirectTo: `${window.location.origin}/reset-password`
+        redirectTo: redirectTo
       });
       
       if (error) {
@@ -37,8 +41,6 @@ export default function CustomPasswordReset({ resetEmail, onEmailSent, onBack })
       }
 
       // Then send our custom email via the edge function
-      const resetUrl = `${window.location.origin}/reset-password`;
-      
       console.log("Calling custom email function at:", new Date().toISOString());
       
       const { data: emailData, error: emailError } = await supabase.functions.invoke('send-auth-email', {
@@ -46,7 +48,7 @@ export default function CustomPasswordReset({ resetEmail, onEmailSent, onBack })
           to: resetEmail,
           subject: "Reset Your Password - Hostly AI Concierge",
           type: 'reset_password',
-          resetUrl: resetUrl
+          resetUrl: redirectTo
         }
       });
 
