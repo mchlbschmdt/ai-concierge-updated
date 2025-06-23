@@ -54,13 +54,25 @@ serve(async (req) => {
 
       // Check if this is a travel keyword to switch to travel mode
       if (isTravelKeyword(messageBody)) {
-        console.log("🌍 Travel keyword detected - switching to travel guide mode");
+        console.log("🌍 Travel keyword detected - initializing travel guide mode");
         
-        const travelMessages = await travelService.processMessage(phoneNumber, messageBody);
-        console.log("✅ Travel guide processing result:", travelMessages);
+        // Create/reset travel conversation to initial state
+        const conversation = await travelService.getOrCreateTravelConversation(phoneNumber);
+        console.log("🌍 Travel conversation created/found:", conversation.id);
+        
+        // Store the keyword message
+        await travelService.addTravelMessage(conversation.id, 'user', messageBody);
+        
+        // Return initial greeting asking for location
+        const initialGreeting = "Hi there! 🌎 Where will you be exploring?\nJust drop a city & state or ZIP code.";
+        
+        // Store AI response
+        await travelService.addTravelMessage(conversation.id, 'ai', initialGreeting);
+        
+        console.log("✅ Travel guide initialized with greeting");
         
         return new Response(JSON.stringify({
-          messages: travelMessages,
+          messages: [initialGreeting],
           conversationalResponse: true,
           intent: 'travel_guide_start'
         }), {
