@@ -1,6 +1,8 @@
 
 export class ResetHandler {
   static isResetCommand(message: string): boolean {
+    console.log('🔍 ResetHandler.isResetCommand called with:', message);
+    
     const lowerMessage = message.toLowerCase().trim();
     const resetKeywords = [
       'reset', 'restart', 'start over', 'something else', 'different options',
@@ -11,7 +13,7 @@ export class ResetHandler {
     ];
     
     // Check for exact word matches using word boundaries
-    return resetKeywords.some(keyword => {
+    const isReset = resetKeywords.some(keyword => {
       if (keyword.includes(' ')) {
         // Multi-word phrases - check if the entire phrase exists
         return lowerMessage.includes(keyword);
@@ -21,9 +23,18 @@ export class ResetHandler {
         return wordRegex.test(lowerMessage);
       }
     });
+    
+    console.log('🔍 Reset command detected:', isReset);
+    return isReset;
   }
 
   static generateResetResponse(guestName?: string, resetCount?: number, hasHistory?: boolean): string {
+    console.log('🔄 ResetHandler.generateResetResponse called with:', {
+      guestName,
+      resetCount,
+      hasHistory
+    });
+    
     const namePrefix = guestName ? `${guestName}, ` : '';
     
     let responses = [];
@@ -51,14 +62,19 @@ export class ResetHandler {
 
     // Use reset count to ensure variety
     const responseIndex = (resetCount || 0) % responses.length;
-    return responses[responseIndex];
+    const selectedResponse = responses[responseIndex];
+    
+    console.log('✅ Generated reset response:', selectedResponse);
+    return selectedResponse;
   }
 
   static clearRecommendationHistory(context: any): any {
+    console.log('🧹 ResetHandler.clearRecommendationHistory called');
+    
     // Preserve global blacklist but clear session data
     const globalBlacklist = context?.global_recommendation_blacklist || [];
     
-    return {
+    const clearedContext = {
       ...context,
       recommendation_history: {}, // Clear session recommendations
       recent_intents: ['conversation_reset'],
@@ -68,5 +84,8 @@ export class ResetHandler {
       last_response_type: 'reset_response',
       global_recommendation_blacklist: globalBlacklist // Preserve cross-session blacklist
     };
+    
+    console.log('✅ Cleared context:', clearedContext);
+    return clearedContext;
   }
 }
