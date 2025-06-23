@@ -3,8 +3,10 @@ import React from "react";
 import Layout from "../components/Layout";
 import SmsIntegration from "../components/SmsIntegration";
 import TestSmsIntegration from "../components/TestSmsIntegration";
+import HostAiChat from "../components/HostAiChat";
+import CommonQuestionsAnalytics from "../components/CommonQuestionsAnalytics";
 import { Link } from "react-router-dom";
-import { Building, Users, MessageSquare, Mail, Phone, Plus, BarChart3 } from "lucide-react";
+import { Building, Users, MessageSquare, Mail, Phone, Plus, BarChart3, Bot, TrendingUp } from "lucide-react";
 
 export default function Dashboard() {
   const quickActions = [
@@ -115,6 +117,24 @@ export default function Dashboard() {
               );
             })}
           </div>
+        </div>
+
+        {/* Personal AI Host Support */}
+        <div>
+          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+            <Bot className="h-6 w-6" />
+            Personal AI Host Support
+          </h2>
+          <HostAiChat />
+        </div>
+
+        {/* Common Questions & Recommendations Analytics */}
+        <div>
+          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+            <TrendingUp className="h-6 w-6" />
+            Guest Insights & Analytics
+          </h2>
+          <CommonQuestionsAnalytics />
         </div>
 
         {/* SMS Integration Section */}

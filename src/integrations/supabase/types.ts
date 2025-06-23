@@ -122,6 +122,33 @@ export type Database = {
         }
         Relationships: []
       }
+      host_ai_conversations: {
+        Row: {
+          conversation_context: Json | null
+          created_at: string
+          id: string
+          message: string
+          response: string
+          user_id: string
+        }
+        Insert: {
+          conversation_context?: Json | null
+          created_at?: string
+          id?: string
+          message: string
+          response: string
+          user_id: string
+        }
+        Update: {
+          conversation_context?: Json | null
+          created_at?: string
+          id?: string
+          message?: string
+          response?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           created_at: string
@@ -444,7 +471,24 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      common_questions_analytics: {
+        Row: {
+          frequency: number | null
+          last_asked: string | null
+          properties_asked: string[] | null
+          question_category: string | null
+        }
+        Relationships: []
+      }
+      common_recommendations_analytics: {
+        Row: {
+          frequency: number | null
+          last_mentioned: string | null
+          properties_mentioned: string[] | null
+          recommendation_name: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       hash_security_answer: {
