@@ -1,301 +1,243 @@
+
 import { ConversationManager } from './conversationManager.ts';
 import { PropertyService } from './propertyService.ts';
-import { FuzzyMatchingService } from './fuzzyMatchingService.ts';
+import { IntentRecognitionService } from './intentRecognitionService.ts';
+import { EnhancedPropertyDataChecker } from './enhancedPropertyDataChecker.ts';
+import { MultiPartResponseFormatter } from './multiPartResponseFormatter.ts';
+import { ConversationMemoryManager } from './conversationMemoryManager.ts';
 import { NameHandler } from './nameHandler.ts';
 
 export class EnhancedConversationService {
-  private conversationManager: ConversationManager;
-  private propertyService: PropertyService;
+  constructor(private supabase: any) {}
 
-  constructor(supabase: any) {
-    this.conversationManager = new ConversationManager(supabase);
-    this.propertyService = new PropertyService(supabase);
-  }
-
-  async processMessage(phoneNumber: string, messageBody: string) {
-    console.log('=== PROCESSING ENHANCED MESSAGE ===');
-    console.log('Phone:', phoneNumber);
-    console.log('Message:', messageBody);
+  async processMessage(phoneNumber: string, messageBody: string): Promise<any> {
+    console.log('🚀 Enhanced conversation service processing:', messageBody);
     
-    try {
-      const conversation = await this.conversationManager.getOrCreateConversation(phoneNumber);
-      const cleanMessage = messageBody.trim().toLowerCase();
-      
-      console.log('Current conversation state:', conversation.conversation_state);
-
-      // Handle reset commands first
-      if (cleanMessage === 'reset' || cleanMessage === 'restart' || cleanMessage === 'start over') {
-        await this.conversationManager.resetConversation(phoneNumber);
-        return {
-          messages: ["I've reset our conversation. Please text your property ID to get started."],
-          shouldUpdateState: true
-        };
-      }
-
-      switch (conversation.conversation_state) {
-        case 'awaiting_property_id':
-          return await this.handlePropertyIdInput(conversation, cleanMessage);
-        
-        case 'awaiting_confirmation':
-          return await this.handleConfirmation(conversation, cleanMessage);
-        
-        case 'confirmed':
-          return await this.handleConfirmedGuestInquiry(conversation, messageBody);
-        
-        default:
-          await this.conversationManager.resetConversation(phoneNumber);
-          return this.getWelcomeMessage();
-      }
-    } catch (error) {
-      console.error('Error processing enhanced message:', error);
-      return {
-        messages: ["Sorry, I encountered an error. Please try again or text 'reset'."],
-        shouldUpdateState: false
-      };
-    }
-  }
-
-  async handleConfirmedGuestInquiry(conversation: any, messageBody: string) {
-    const property = await this.propertyService.getPropertyInfo(conversation.property_id);
-    const message = messageBody.trim().toLowerCase();
+    const conversationManager = new ConversationManager(this.supabase);
+    const propertyService = new PropertyService(this.supabase);
+    
+    const conversation = await conversationManager.getOrCreateConversation(phoneNumber);
+    const property = await propertyService.getPropertyInfo(conversation.property_id);
+    
+    // Get guest name from context
     const guestName = conversation.conversation_context?.guest_name;
     
-    // Handle greeting messages
-    const isGreeting = this.matchesAnyKeywords(message, [
-      'hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening'
-    ]);
-
-    if (isGreeting) {
-      let response = guestName ? `Hello${guestName ? `, ${guestName}` : ''}!` : 'Hello!';
-      response += ' How can I help with your stay?';
+    // Recognize intent(s)
+    const intentResult = IntentRecognitionService.recognizeIntent(messageBody);
+    console.log('🎯 Intent recognized:', intentResult);
+    
+    // Check for repetition prevention
+    if (ConversationMemoryManager.shouldPreventRepetition(conversation.conversation_context, intentResult.intent)) {
+      console.log('🔄 Preventing repetition for intent:', intentResult.intent);
+      const repetitionResponse = ConversationMemoryManager.generateRepetitionResponse(intentResult.intent, guestName);
+      
       return {
-        messages: [response],
+        messages: [repetitionResponse],
         shouldUpdateState: false
       };
     }
 
-    // Check if we have a pending request (after name capture)
-    if (conversation.conversation_context?.pending_request && !conversation.conversation_context?.name_request_processed) {
-      console.log("🔄 Processing pending request after name capture");
-      
-      // Mark pending request as processed
-      await this.conversationManager.updateConversationState(conversation.phone_number, {
-        conversation_context: {
-          ...conversation.conversation_context,
-          name_request_processed: true
-        }
-      });
-      
-      // Process the original pending request
-      return await this.handleSpecificInquiry(conversation, property, conversation.conversation_context.pending_request, conversation.conversation_context.pending_request);
+    // Handle multi-part messages
+    if (intentResult.isMultiPart && intentResult.subIntents) {
+      console.log('📝 Processing multi-part message with intents:', intentResult.subIntents);
+      return await this.handleMultiPartMessage(
+        intentResult.subIntents, 
+        property, 
+        messageBody, 
+        guestName,
+        conversation,
+        conversationManager
+      );
     }
 
-    // Handle the current inquiry
-    return await this.handleSpecificInquiry(conversation, property, message, messageBody);
+    // Handle single intent
+    return await this.handleSingleIntent(
+      intentResult.intent,
+      property,
+      messageBody,
+      guestName,
+      conversation,
+      conversationManager
+    );
   }
 
-  async handleSpecificInquiry(conversation: any, property: any, message: string, originalMessage: string) {
-    const guestName = conversation.conversation_context?.guest_name;
+  private async handleMultiPartMessage(
+    intents: string[],
+    property: any,
+    originalMessage: string,
+    guestName: string | undefined,
+    conversation: any,
+    conversationManager: ConversationManager
+  ): Promise<any> {
+    const propertyResponses = new Map<string, string>();
+    const openAIResponses = new Map<string, string>();
 
-    // First check property data for direct answers
-    const propertyResponse = this.propertyService.checkPropertyDataForQuery(property, originalMessage);
-    
-    if (propertyResponse) {
-      console.log("✅ Found answer in property data");
-      
-      let response = propertyResponse;
-      if (guestName && !propertyResponse.toLowerCase().includes(guestName.toLowerCase())) {
-        response = `Here you go, ${guestName}!\n\n${propertyResponse}\n\nAnything else?`;
-      }
+    // Process each intent
+    for (const intent of intents) {
+      const propertyResponse = EnhancedPropertyDataChecker.checkPropertyDataForIntent(
+        property, 
+        intent, 
+        originalMessage, 
+        guestName
+      );
 
-      return {
-        messages: [response],
-        shouldUpdateState: false
-      };
-    }
-
-    // If no property data found, use OpenAI with enhanced context
-    return await this.getEnhancedRecommendations(conversation, property, originalMessage);
-  }
-
-  async getEnhancedRecommendations(conversation: any, property: any, originalMessage: string) {
-    console.log(`🎯 Getting enhanced recommendations for: ${originalMessage}`);
-    
-    try {
-      const propertyAddress = property?.address || 'the property';
-      const propertyName = property?.property_name || 'your accommodation';
-      const guestName = conversation?.conversation_context?.guest_name;
-      
-      // Build enhanced context including property data
-      const enhancedContext = {
-        guestName: guestName,
-        propertyInfo: {
-          name: propertyName,
-          address: propertyAddress,
-          localRecommendations: property?.local_recommendations,
-          specialNotes: property?.special_notes,
-          amenities: property?.amenities
-        },
-        timeOfDay: this.getTimeContext(),
-        dayOfWeek: new Date().toLocaleDateString('en-US', { weekday: 'long' })
-      };
-
-      const enhancedPayload = {
-        prompt: `You are a knowledgeable local concierge assistant with access to premium local guides, food blogs, and insider recommendations. A guest${guestName ? `, ${guestName}` : ''} is staying at ${propertyName} located at ${propertyAddress}. 
-
-Their request: "${originalMessage}"
-
-IMPORTANT GUIDELINES:
-- Source recommendations from TOP LOCAL FOOD BLOGS, hospitality guides, and trusted local websites
-- Avoid generic chain restaurants unless they're truly exceptional
-- Include hidden gems and local favorites that locals actually recommend
-- Mention specific dishes or specialties when relevant
-- Provide practical details: distance, price range, and why it's special
-- Keep response under 160 characters for SMS
-- Be warm and personalized${guestName ? ` using ${guestName}'s name` : ''}
-
-Focus on quality over quantity - 1-2 outstanding recommendations are better than many generic ones.`,
-        propertyAddress: `${propertyName}, ${propertyAddress}`,
-        guestContext: enhancedContext,
-        requestType: 'enhanced_local_recommendations',
-        previousRecommendations: conversation?.last_recommendations || null
-      };
-
-      const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dHd5eWVwYWhiYnZyY2JzYmtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0MDg3MDMsImV4cCI6MjA2MDk4NDcwM30.kUje38W2D2vXjYos6laaZ_rOzADLGiftoHAztFqSP9g`
-        },
-        body: JSON.stringify(enhancedPayload)
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log('✅ Enhanced recommendations received');
-        
-        // Store recommendations for future context
-        await this.conversationManager.updateConversationState(conversation.phone_number, {
-          last_recommendations: data.recommendation,
-          conversation_context: {
-            ...conversation.conversation_context,
-            lastRecommendationType: 'enhanced_local'
-          }
-        });
-        
-        return {
-          messages: [this.ensureSmsLimit(data.recommendation)],
-          shouldUpdateState: false
-        };
+      if (propertyResponse.hasAnswer) {
+        propertyResponses.set(intent, propertyResponse.response);
       } else {
-        throw new Error(`Enhanced recommendations API failed: ${response.status}`);
+        // Use OpenAI for this part
+        try {
+          const openAIResponse = await this.getOpenAIResponse(property, intent, originalMessage, guestName);
+          openAIResponses.set(intent, openAIResponse);
+        } catch (error) {
+          console.error('OpenAI error for intent:', intent, error);
+        }
       }
-    } catch (error) {
-      console.error('❌ Error getting enhanced recommendations:', error);
-      
-      return {
-        messages: ["Having trouble with recommendations right now. Try again soon or ask about WiFi, parking, or check-in details."],
-        shouldUpdateState: false
-      };
-    }
-  }
-
-  getTimeContext() {
-    const hour = new Date().getHours();
-    if (hour >= 5 && hour < 12) return 'morning';
-    if (hour >= 12 && hour < 17) return 'afternoon';
-    if (hour >= 17 && hour < 22) return 'evening';
-    return 'night';
-  }
-
-  ensureSmsLimit(response: string) {
-    const SMS_CHAR_LIMIT = 160;
-    if (response.length <= SMS_CHAR_LIMIT) {
-      return response;
-    }
-    return response.substring(0, SMS_CHAR_LIMIT - 3) + '...';
-  }
-
-  matchesAnyKeywords(message: string, keywords: string[]) {
-    const lowerMessage = message.toLowerCase();
-    return keywords.some(keyword => lowerMessage.includes(keyword.toLowerCase()));
-  }
-
-  async handlePropertyIdInput(conversation: any, input: string) {
-    const propertyCode = input.match(/\d+/)?.[0];
-    
-    if (!propertyCode) {
-      return {
-        messages: ["Hi! Please text your property ID from your booking confirmation. Text 'reset' if needed."],
-        shouldUpdateState: false
-      };
     }
 
-    try {
-      const property = await this.propertyService.findPropertyByCode(propertyCode);
-      
-      if (!property) {
-        return {
-          messages: [`Property ID ${propertyCode} not found. Check your booking or text 'reset'.`],
-          shouldUpdateState: false
-        };
-      }
+    // Format multi-part response
+    const multiPartResponse = MultiPartResponseFormatter.formatMultiPartResponse(
+      intents,
+      propertyResponses,
+      openAIResponses,
+      guestName
+    );
 
-      await this.conversationManager.updateConversationState(conversation.phone_number, {
-        property_id: property.property_id || property.id,
-        conversation_state: 'awaiting_confirmation'
-      });
+    const finalResponse = MultiPartResponseFormatter.combineResponses(multiPartResponse, guestName);
 
-      const response = `Great! You're staying at ${property.property_name}. Correct? Reply Y or N.`;
-      return {
-        messages: [this.ensureSmsLimit(response)],
-        shouldUpdateState: true
-      };
-    } catch (error) {
-      return {
-        messages: ["Trouble looking up that property ID. Try again or text 'reset'."],
-        shouldUpdateState: false
-      };
-    }
-  }
+    // Update conversation memory
+    const updatedContext = ConversationMemoryManager.updateMemory(
+      conversation.conversation_context,
+      'ask_multiple_requests',
+      'multi_part_response'
+    );
 
-  async handleConfirmation(conversation: any, input: string) {
-    const normalizedInput = input.toLowerCase().trim();
-    const isYes = ['y', 'yes', 'yeah', 'yep', 'correct', 'right', 'ok', 'okay'].includes(normalizedInput);
-    const isNo = ['n', 'no', 'nope', 'wrong', 'incorrect'].includes(normalizedInput);
+    await conversationManager.updateConversationState(conversation.phone_number, {
+      conversation_context: updatedContext
+    });
 
-    if (isYes) {
-      await this.conversationManager.updateConversationState(conversation.phone_number, {
-        property_confirmed: true,
-        conversation_state: 'confirmed'
-      });
-
-      return {
-        messages: ["Perfect! I'm your AI concierge. I can help with WiFi, parking, directions, and local recommendations. What do you need?"],
-        shouldUpdateState: true
-      };
-    } else if (isNo) {
-      await this.conversationManager.updateConversationState(conversation.phone_number, {
-        property_id: null,
-        conversation_state: 'awaiting_property_id'
-      });
-
-      return {
-        messages: ["No problem! Please provide your correct property ID from booking confirmation."],
-        shouldUpdateState: true
-      };
-    } else {
-      return {
-        messages: ["Please reply Y for Yes or N for No to confirm. Text 'reset' to start over."],
-        shouldUpdateState: false
-      };
-    }
-  }
-
-  getWelcomeMessage() {
     return {
-      messages: ["Welcome! Text your property ID to get started. Text 'reset' anytime to restart."],
-      shouldUpdateState: false
+      messages: [finalResponse],
+      shouldUpdateState: true
     };
+  }
+
+  private async handleSingleIntent(
+    intent: string,
+    property: any,
+    message: string,
+    guestName: string | undefined,
+    conversation: any,
+    conversationManager: ConversationManager
+  ): Promise<any> {
+    // Check property data first
+    const propertyResponse = EnhancedPropertyDataChecker.checkPropertyDataForIntent(
+      property,
+      intent,
+      message,
+      guestName
+    );
+
+    if (propertyResponse.hasAnswer) {
+      console.log('✅ Using property data response for intent:', intent);
+      
+      // Update conversation memory
+      const updatedContext = ConversationMemoryManager.updateMemory(
+        conversation.conversation_context,
+        intent,
+        'property_data'
+      );
+
+      await conversationManager.updateConversationState(conversation.phone_number, {
+        conversation_context: updatedContext
+      });
+
+      return {
+        messages: [propertyResponse.response],
+        shouldUpdateState: true
+      };
+    }
+
+    // Fall back to OpenAI for complex queries
+    console.log('🤖 Using OpenAI for intent:', intent);
+    try {
+      const openAIResponse = await this.getOpenAIResponse(property, intent, message, guestName);
+      
+      // Update conversation memory
+      const updatedContext = ConversationMemoryManager.updateMemory(
+        conversation.conversation_context,
+        intent,
+        'openai_response'
+      );
+
+      await conversationManager.updateConversationState(conversation.phone_number, {
+        conversation_context: updatedContext
+      });
+
+      return {
+        messages: [openAIResponse],
+        shouldUpdateState: true
+      };
+    } catch (error) {
+      console.error('OpenAI error:', error);
+      
+      const fallbackResponse = guestName 
+        ? `${guestName}, I'm having trouble with that request right now. Can you try again or ask about something else?`
+        : "I'm having trouble with that request right now. Can you try again or ask about something else?";
+
+      return {
+        messages: [fallbackResponse],
+        shouldUpdateState: false
+      };
+    }
+  }
+
+  private async getOpenAIResponse(property: any, intent: string, message: string, guestName?: string): Promise<string> {
+    const propertyContext = this.buildPropertyContext(property);
+    const prompt = this.buildIntentSpecificPrompt(intent, message, propertyContext, guestName);
+
+    const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dHd5eWVwYWhiYnZyY2JzYmtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0MDg3MDMsImV4cCI6MjA2MDk4NDcwM30.kUje38W2D2vXjYos6laaZ_rOzADLGiftoHAztFqSP9g`
+      },
+      body: JSON.stringify({ prompt })
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI API call failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.recommendation;
+  }
+
+  private buildPropertyContext(property: any): string {
+    if (!property) return '';
+
+    const context = [];
+    if (property.property_name) context.push(`Property: ${property.property_name}`);
+    if (property.address) context.push(`Address: ${property.address}`);
+    if (property.local_recommendations) context.push(`Local info: ${property.local_recommendations}`);
+    
+    return context.join('\n');
+  }
+
+  private buildIntentSpecificPrompt(intent: string, message: string, propertyContext: string, guestName?: string): string {
+    const nameContext = guestName ? `The guest's name is ${guestName}.` : '';
+    
+    const intentPrompts: Record<string, string> = {
+      'ask_food_recommendations': `You are a local expert providing restaurant recommendations. ${nameContext} ${propertyContext}\n\nProvide 2-3 specific restaurant recommendations with names, brief descriptions, and why locals love them. Keep it under 160 words for SMS. Guest asked: ${message}`,
+      
+      'ask_grocery_stores': `You are a local expert providing grocery store recommendations. ${nameContext} ${propertyContext}\n\nProvide 2-3 nearby grocery store options with names and brief descriptions. Keep it under 160 words for SMS. Guest asked: ${message}`,
+      
+      'ask_activities': `You are a local expert providing activity and attraction recommendations. ${nameContext} ${propertyContext}\n\nProvide 2-3 specific activities or attractions with names and brief descriptions. Keep it under 160 words for SMS. Guest asked: ${message}`,
+      
+      'greeting': `You are a friendly concierge assistant. ${nameContext} Respond warmly and offer to help with their stay. Keep it brief and welcoming. Guest said: ${message}`,
+      
+      'general_inquiry': `You are a helpful concierge assistant. ${nameContext} ${propertyContext}\n\nProvide a helpful response to their question. Keep it concise for SMS (under 160 words). Guest asked: ${message}`
+    };
+
+    return intentPrompts[intent] || intentPrompts['general_inquiry'];
   }
 }

@@ -1,4 +1,3 @@
-
 import { Property } from './types.ts';
 
 export class PropertyService {
@@ -50,14 +49,41 @@ export class PropertyService {
         .eq('id', propertyId)
         .maybeSingle();
 
-      return error ? null : property;
+      if (error) {
+        console.error('Error getting property info:', error);
+        return null;
+      }
+
+      // Return complete property data
+      return property ? {
+        property_id: property.id,
+        property_name: property.property_name,
+        address: property.address,
+        check_in_time: property.check_in_time,
+        check_out_time: property.check_out_time,
+        wifi_name: property.wifi_name,
+        wifi_password: property.wifi_password,
+        access_instructions: property.access_instructions,
+        directions_to_property: property.directions_to_property,
+        parking_instructions: property.parking_instructions,
+        emergency_contact: property.emergency_contact,
+        house_rules: property.house_rules,
+        amenities: property.amenities,
+        local_recommendations: property.local_recommendations,
+        cleaning_instructions: property.cleaning_instructions,
+        special_notes: property.special_notes,
+        knowledge_base: property.knowledge_base
+      } : null;
     } catch (error) {
       console.error('Error getting property info:', error);
       return null;
     }
   }
 
+  // Deprecated - use EnhancedPropertyDataChecker instead
   checkPropertyDataForQuery(property: any, query: string): string | null {
+    console.log('⚠️ Using deprecated checkPropertyDataForQuery - consider upgrading to EnhancedPropertyDataChecker');
+    
     if (!property) return null;
 
     const lowerQuery = query.toLowerCase();

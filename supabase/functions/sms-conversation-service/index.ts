@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { corsHeaders } from './corsHeaders.ts';
@@ -37,90 +36,17 @@ serve(async (req) => {
 
       const conversation = await conversationManager.getOrCreateConversation(phoneNumber);
       console.log("Current state:", conversation.conversation_state);
-      console.log("Is paused:", conversation.conversation_context?.is_paused || false);
-      console.log("Guest name:", conversation.conversation_context?.guest_name);
-      console.log("Name request made:", conversation.conversation_context?.name_request_made);
 
-      // Always use enhanced service for confirmed guests
+      // For confirmed guests, always use enhanced service
       if (conversation.conversation_state === 'confirmed') {
-        console.log("🔍 Processing confirmed guest inquiry:");
-        console.log("- Guest name:", conversation.conversation_context?.guest_name);
-        console.log("- Message:", messageBody.toLowerCase());
-        console.log("- Name request made:", conversation.conversation_context?.name_request_made);
-
-        // Check if we have a name, if not, try to get one
-        const nameCheckResult = NameHandler.checkIfNameProvided(messageBody, conversation.conversation_context?.guest_name);
-        console.log("🏷️ Name check result:", nameCheckResult);
-
-        const nameRefusal = NameHandler.detectNameRefusal(messageBody);
-        console.log("🚫 Name refusal detected:", nameRefusal);
-        console.log("🚫 Name refusal:", nameRefusal);
-
-        // If we have a name or user refuses to give name, process the request
-        if (nameCheckResult.hasName || nameRefusal || conversation.conversation_context?.name_request_made) {
-          // First, try to get answer from property data
-          const property = await propertyService.getPropertyInfo(conversation.property_id);
-          const propertyResponse = propertyService.checkPropertyDataForQuery(property, messageBody);
-          
-          if (propertyResponse) {
-            console.log("✅ Found answer in property data");
-            
-            // Add personalized greeting if we have a name
-            const guestName = nameCheckResult.extractedName || conversation.conversation_context?.guest_name;
-            let response = propertyResponse;
-            
-            if (guestName && !propertyResponse.toLowerCase().includes(guestName.toLowerCase())) {
-              response = `Here you go, ${guestName}!\n\n${propertyResponse}\n\nAnything else?`;
-            }
-
-            // Update conversation context if new name was extracted
-            if (nameCheckResult.extractedName && !conversation.conversation_context?.guest_name) {
-              await conversationManager.updateConversationState(phoneNumber, {
-                conversation_context: {
-                  ...conversation.conversation_context,
-                  guest_name: nameCheckResult.extractedName,
-                  name_request_made: true
-                }
-              });
-            }
-
-            return new Response(JSON.stringify({
-              messages: [response],
-              shouldUpdateState: false
-            }), {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-            });
-          }
-
-          // If no property data answer found, use enhanced service for OpenAI
-          const result = await enhancedService.processMessage(phoneNumber, messageBody);
-          console.log("✅ Enhanced processing result:", result);
-          
-          return new Response(JSON.stringify(result), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-          });
-        }
-
-        // If no name and no refusal, ask for name but remember the original request
-        if (!nameCheckResult.hasName && !nameRefusal && !conversation.conversation_context?.name_request_made) {
-          console.log("🏷️ Requesting name and storing original request");
-          
-          await conversationManager.updateConversationState(phoneNumber, {
-            conversation_context: {
-              ...conversation.conversation_context,
-              name_request_made: true,
-              pending_request: messageBody, // Store the original request
-              conversation_depth: (conversation.conversation_context?.conversation_depth || 0) + 1
-            }
-          });
-
-          return new Response(JSON.stringify({
-            messages: ["Hi! I'm happy to help 🙂 Before we dive in, what's your name so I can assist you more personally?"],
-            shouldUpdateState: true
-          }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-          });
-        }
+        console.log("🔍 Processing confirmed guest with enhanced service");
+        
+        const result = await enhancedService.processMessage(phoneNumber, messageBody);
+        console.log("✅ Enhanced processing result:", result);
+        
+        return new Response(JSON.stringify(result), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
       }
 
       // For non-confirmed states, use basic processing
@@ -155,4 +81,4 @@ serve(async (req) => {
   }
 });
 
-console.log("Enhanced SMS Conversation Service is ready with improved name capture, better recommendations from local sources, and fixed typo correction");
+console.log("Enhanced SMS Conversation Service is ready with intent recognition, multi-part handling, and property data prioritization");
