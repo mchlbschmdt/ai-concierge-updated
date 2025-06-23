@@ -8,7 +8,7 @@ const corsHeaders = {
 
 console.log("Enhanced SMS Conversation Service starting up...")
 
-// Enhanced SMS Conversation Service with continuity, personalization, and time-awareness
+// Enhanced SMS Conversation Service with friendly, time-aware recommendations
 class EnhancedSmsConversationService {
   constructor(supabase) {
     this.supabase = supabase;
@@ -101,6 +101,82 @@ class EnhancedSmsConversationService {
       console.error('Error getting time-aware greeting:', error);
       return 'Hello';
     }
+  }
+
+  getPersonalizedFoodGreeting(message, greeting) {
+    const lowerMessage = message.toLowerCase();
+    
+    if (this.matchesAnyKeywords(lowerMessage, ['food now', 'hungry', 'eat now', 'dinner now', 'lunch now'])) {
+      const urgentPhrases = [
+        `${greeting}! Hungry now? I've got you covered 🙂`,
+        `${greeting}! Ready for a bite? Happy to help 🙂`,
+        `${greeting}! Looks like you're ready for a bite—happy to help 🙂`
+      ];
+      return urgentPhrases[Math.floor(Math.random() * urgentPhrases.length)];
+    }
+    
+    if (this.matchesAnyKeywords(lowerMessage, ['restaurant', 'food', 'eat', 'dining'])) {
+      return `${greeting}! Looking for somewhere great to eat? I've got some perfect spots for you 🙂`;
+    }
+    
+    if (this.matchesAnyKeywords(lowerMessage, ['drink', 'bar', 'cocktail', 'beer'])) {
+      return `${greeting}! Ready for drinks? I know some fantastic spots 🙂`;
+    }
+    
+    if (this.matchesAnyKeywords(lowerMessage, ['coffee', 'cafe'])) {
+      return `${greeting}! Need your coffee fix? I've got great recommendations 🙂`;
+    }
+    
+    return `${greeting}! I'd love to help with recommendations 🙂`;
+  }
+
+  getClarifyingQuestion(message) {
+    const lowerMessage = message.toLowerCase();
+    
+    if (this.matchesAnyKeywords(lowerMessage, ['food', 'restaurant', 'eat', 'dining', 'hungry'])) {
+      const questions = [
+        "Are you in the mood for something quick and casual, or more of a sit-down vibe?",
+        "Any cravings—pizza, seafood, tacos?",
+        "Feeling like something quick or a nice sit-down meal?"
+      ];
+      return questions[Math.floor(Math.random() * questions.length)];
+    }
+    
+    if (this.matchesAnyKeywords(lowerMessage, ['drink', 'bar', 'cocktail'])) {
+      return "Looking for craft cocktails, casual drinks, or maybe rooftop vibes?";
+    }
+    
+    if (this.matchesAnyKeywords(lowerMessage, ['things to do', 'activities'])) {
+      return "Interested in outdoor activities, cultural spots, or nightlife?";
+    }
+    
+    return "What kind of vibe are you going for?";
+  }
+
+  getDistanceFraming(distance) {
+    const distanceNum = parseFloat(distance);
+    
+    if (distanceNum <= 0.5) {
+      return "just a quick walk from where you are";
+    } else if (distanceNum <= 1.5) {
+      return "best reached with a short Uber or bike ride";
+    } else {
+      return "a great spot if you're up for a quick drive";
+    }
+  }
+
+  getHelpfulOffer(requestType) {
+    const offers = [
+      "Would you like directions?",
+      "Want more options like these?",
+      "Need help with anything else—activities, parking, WiFi?"
+    ];
+    
+    if (requestType === 'dining') {
+      return "Would you like directions or more dining options?";
+    }
+    
+    return offers[Math.floor(Math.random() * offers.length)];
   }
 
   ensureSmsLimit(response) {
@@ -244,7 +320,7 @@ class EnhancedSmsConversationService {
       };
     }
 
-    // Location/recommendation requests
+    // Location/recommendation requests - NEW ENHANCED FORMAT
     if (this.matchesLocationKeywords(message)) {
       await this.updateConversationContext(conversation, 'recommendations');
       return await this.getEnhancedRecommendations(property, originalMessage, conversation);
@@ -261,6 +337,13 @@ class EnhancedSmsConversationService {
       const propertyAddress = property?.address || 'the property';
       const propertyName = property?.property_name || 'your accommodation';
       const context = conversation?.conversation_context || {};
+      const timezone = conversation?.timezone || 'UTC';
+      
+      // Get time-aware greeting and personalized opener
+      const greeting = this.getTimeAwareGreeting(timezone);
+      const personalizedGreeting = this.getPersonalizedFoodGreeting(originalMessage, greeting);
+      const clarifyingQuestion = this.getClarifyingQuestion(originalMessage);
+      const helpfulOffer = this.getHelpfulOffer(this.categorizeRequest(originalMessage));
       
       // Extract guest context for better recommendations
       const guestContext = this.extractGuestContext(originalMessage, context, conversation);
@@ -274,7 +357,20 @@ class EnhancedSmsConversationService {
       console.log('📝 Previous recommendations:', previousRecommendations);
 
       const enhancedPayload = {
-        prompt: originalMessage,
+        prompt: `${originalMessage}
+
+ENHANCED RESPONSE FORMAT REQUIRED:
+1. Start with: "${personalizedGreeting}"
+2. Provide 1-2 recommendations with format: "Name (distance, rating★): Brief description—${this.getDistanceFraming('0.3')}"
+3. Ask: "${clarifyingQuestion}"
+4. End with: "${helpfulOffer}"
+
+CRITICAL REQUIREMENTS:
+- Only show places with 4.0+ ratings
+- Include exact distance (e.g., "0.2 mi")
+- Use distance framing: ≤0.5mi="just a quick walk", 0.5-1.5mi="short Uber/bike ride", >1.5mi="quick drive"
+- Keep total response under 160 characters
+- Be conversational and helpful`,
         propertyAddress: `${propertyName}, ${propertyAddress}`,
         guestContext: guestContext,
         requestType: requestType,
@@ -612,7 +708,7 @@ serve(async (req) => {
       JSON.stringify({ 
         status: 'healthy', 
         service: 'enhanced-sms-conversation-service',
-        features: ['continuity', 'personalization', 'time-awareness', 'sms-limits'],
+        features: ['continuity', 'personalization', 'time-awareness', 'friendly-format'],
         timestamp: new Date().toISOString()
       }),
       {
@@ -691,4 +787,4 @@ serve(async (req) => {
   )
 })
 
-console.log("Enhanced SMS Conversation Service is ready with continuity, personalization, and time-awareness features")
+console.log("Enhanced SMS Conversation Service is ready with friendly, time-aware recommendation format")
