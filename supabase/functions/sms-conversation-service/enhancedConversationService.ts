@@ -32,12 +32,13 @@ export class EnhancedConversationService {
   }
 
   async processMessage(phoneNumber: string, messageBody: string): Promise<any> {
-    console.log("=== ENHANCED CONVERSATION SERVICE ===");
+    console.log("=== ENHANCED CONVERSATION SERVICE DEBUGGING ===");
     console.log("Phone:", phoneNumber);
     console.log("Message:", messageBody);
 
     try {
       const cleanMessage = messageBody.trim();
+      console.log("📝 Clean message:", cleanMessage);
       
       // Check if this is a travel trigger
       const travelCode = Deno.env.get('DEFAULT_TRAVEL_CODE') || 'TRAVEL';
@@ -61,13 +62,28 @@ export class EnhancedConversationService {
           return { messages, mode: 'travel' };
         }
       } catch (error) {
-        console.log("No existing travel conversation, proceeding with property mode");
+        console.log("ℹ️ No existing travel conversation, proceeding with property mode");
       }
 
-      // Continue with existing property-based conversation logic
-      const conversation = await this.conversationManager.getOrCreateConversation(phoneNumber);
-      console.log("🔍 Current conversation state:", conversation.conversation_state);
-      
+      // Get or create conversation with enhanced error handling
+      console.log("🔍 Getting or creating conversation...");
+      let conversation;
+      try {
+        conversation = await this.conversationManager.getOrCreateConversation(phoneNumber);
+        console.log("✅ Conversation retrieved:", {
+          id: conversation.id,
+          state: conversation.conversation_state,
+          property_id: conversation.property_id,
+          property_confirmed: conversation.property_confirmed,
+          guest_name: conversation.guest_name
+        });
+      } catch (convError) {
+        console.error("❌ CRITICAL: Failed to get conversation:", convError);
+        const fallbackResponse = "I'm having trouble accessing your conversation. Please try again or text 'reset' to start over.";
+        return { messages: [fallbackResponse], error: 'conversation_access_error' };
+      }
+
+      // Handle reset commands first
       if (ResetHandler.isResetCommand(cleanMessage)) {
         console.log("🔄 Reset command detected - performing complete conversation reset");
         
@@ -75,69 +91,119 @@ export class EnhancedConversationService {
           const context = conversation.conversation_context || {};
           console.log("📋 Current context before reset:", context);
           
-          // Get complete reset updates including conversation state changes
           const resetUpdates = ResetHandler.getCompleteResetUpdates(context);
           console.log("🔄 Applying complete reset updates:", resetUpdates);
           
-          // Apply the complete reset to the conversation
           await this.conversationManager.updateConversationState(phoneNumber, resetUpdates);
           console.log("✅ Conversation completely reset to awaiting_property_id state");
           
-          // Generate consistent reset response asking for property code
           const resetResponse = ResetHandler.generateResetResponse();
           console.log("🔄 Generated reset response:", resetResponse);
           
-          console.log("📝 Formatting reset response with MultiPartResponseFormatter");
           const messages = MultiPartResponseFormatter.formatResponse(resetResponse);
           console.log("✅ Reset response formatted successfully:", messages);
           return { messages, resetDetected: true, conversationReset: true };
         } catch (resetError) {
           console.error("❌ Error processing complete reset command:", resetError);
-          // Provide a safe fallback for reset commands
           const fallbackResponse = "No problem! I've reset our conversation. Please send me your property code to get started.";
-          const messages = [fallbackResponse];
-          return { messages, resetDetected: true, error: 'reset_fallback' };
+          return { messages: [fallbackResponse], resetDetected: true, error: 'reset_fallback' };
         }
       }
 
-      if (conversation.conversation_state === 'awaiting_property_id') {
-        console.log("🏠 Looking for property match");
+      // Check if message looks like a property code (numbers)
+      const possiblePropertyCode = cleanMessage.match(/\d+/)?.[0];
+      console.log("🔍 Possible property code detected:", possiblePropertyCode);
+
+      // ENHANCED PROPERTY CODE HANDLING
+      if (conversation.conversation_state === 'awaiting_property_id' || 
+          (possiblePropertyCode && !conversation.property_confirmed)) {
+        console.log("🏠 Processing property ID input...");
         
+        if (!possiblePropertyCode) {
+          console.log("❌ No property code found in message");
+          const errorResponse = "Hi! Please send me your property code (the numbers from your booking confirmation).";
+          const messages = MultiPartResponseFormatter.formatResponse(errorResponse);
+          return { messages, propertyCodeMissing: true };
+        }
+
         try {
-          const propertyMatch = await this.propertyService.findPropertyByCode(cleanMessage);
+          console.log("🔍 Looking up property with code:", possiblePropertyCode);
+          const propertyResult = await this.propertyService.findPropertyByCode(possiblePropertyCode);
+          console.log("🏠 Property lookup result:", propertyResult);
           
-          if (propertyMatch.found && propertyMatch.property) {
-            console.log("✅ Property found:", propertyMatch.property.property_name);
+          if (propertyResult) {
+            console.log("✅ Property found:", propertyResult.property_name);
             
+            // Update conversation state to confirmed
             await this.conversationManager.updateConversationState(phoneNumber, {
-              property_id: propertyMatch.property.id,
+              property_id: propertyResult.property_id,
               property_confirmed: true,
               conversation_state: 'confirmed'
             });
             
-            const welcomeResponse = this.responseGenerator.generateWelcomeMessage(propertyMatch.property);
-            console.log("📝 Formatting welcome response");
+            const welcomeResponse = this.responseGenerator.generateWelcomeMessage(propertyResult);
+            console.log("📝 Generated welcome response:", welcomeResponse);
             const messages = MultiPartResponseFormatter.formatResponse(welcomeResponse);
             return { messages, propertyConfirmed: true };
           } else {
-            console.log("❌ Property not found");
-            const errorResponse = this.responseGenerator.generatePropertyNotFoundMessage();
-            console.log("📝 Formatting error response");
+            console.log("❌ Property not found for code:", possiblePropertyCode);
+            const errorResponse = `I couldn't find property code ${possiblePropertyCode}. Please check your booking confirmation and try again.`;
             const messages = MultiPartResponseFormatter.formatResponse(errorResponse);
             return { messages, propertyNotFound: true };
           }
         } catch (propertyError) {
-          console.error("❌ Error in property matching:", propertyError);
+          console.error("❌ Error in property lookup:", propertyError);
           const fallbackResponse = "I'm having trouble finding that property code. Could you try again?";
-          const messages = [fallbackResponse];
-          return { messages, error: 'property_lookup_error' };
+          return { messages: [fallbackResponse], error: 'property_lookup_error' };
         }
       }
 
+      // ENHANCED CONFIRMED GUEST PROCESSING
       if (conversation.conversation_state === 'confirmed') {
         console.log("🎯 Processing confirmed guest message");
         
+        // Validate we have property information
+        if (!conversation.property_id) {
+          console.error("❌ CRITICAL: Confirmed conversation missing property_id");
+          const errorResponse = "I'm sorry, I seem to have lost your property information. Please send me your property code again.";
+          
+          // Reset conversation state
+          await this.conversationManager.updateConversationState(phoneNumber, {
+            conversation_state: 'awaiting_property_id',
+            property_confirmed: false
+          });
+          
+          return { messages: [errorResponse], error: 'missing_property_id' };
+        }
+
+        // Get property information for processing
+        let property;
         try {
+          console.log("🏠 Fetching property information for ID:", conversation.property_id);
+          property = await this.propertyService.getPropertyById(conversation.property_id);
+          console.log("✅ Property retrieved:", property ? property.property_name : 'null');
+        } catch (propertyError) {
+          console.error("❌ Error fetching property:", propertyError);
+          const errorResponse = "I'm having trouble accessing your property information. Please try again.";
+          return { messages: [errorResponse], error: 'property_fetch_error' };
+        }
+
+        if (!property) {
+          console.error("❌ CRITICAL: Property not found in database for ID:", conversation.property_id);
+          const errorResponse = "I'm sorry, I couldn't find your property information. Please send me your property code again.";
+          
+          // Reset conversation state
+          await this.conversationManager.updateConversationState(phoneNumber, {
+            conversation_state: 'awaiting_property_id',
+            property_confirmed: false,
+            property_id: null
+          });
+          
+          return { messages: [errorResponse], error: 'property_not_found_in_db' };
+        }
+
+        try {
+          // Handle name detection
           const nameDetection = NameHandler.detectAndExtractName(cleanMessage);
           if (nameDetection.nameDetected && nameDetection.extractedName) {
             console.log("👋 Name detected:", nameDetection.extractedName);
@@ -152,47 +218,97 @@ export class EnhancedConversationService {
             });
             
             const nameResponse = NameHandler.generateNameResponse(nameDetection.extractedName);
-            console.log("📝 Formatting name response");
             const messages = MultiPartResponseFormatter.formatResponse(nameResponse);
             return { messages, nameDetected: true };
           }
           
-          // Use the static method correctly
+          // Recognize intent with enhanced logging
+          console.log("🎯 Recognizing intent for message:", cleanMessage);
           const intentResult = IntentRecognitionService.recognizeIntent(cleanMessage);
-          console.log("🎯 Detected intent result:", intentResult);
+          console.log("🎯 Intent recognition result:", intentResult);
           
           let context = conversation.conversation_context || {};
           context = this.memoryManager.updateContext(context, { type: 'general', category: intentResult.intent }, cleanMessage);
           
-          // Handle different intent types based on the IntentResult structure
+          // ENHANCED PROPERTY-SPECIFIC QUESTION HANDLING
           if (intentResult.intent.includes('ask_') || intentResult.intent === 'general_inquiry') {
-            console.log("🔍 Processing recommendation/property request");
+            console.log("🔍 Processing specific property question with intent:", intentResult.intent);
             
-            const property = await this.propertyService.getPropertyById(conversation.property_id);
-            if (!property) {
-              const errorResponse = "I'm sorry, I couldn't find your property information.";
-              console.log("📝 Formatting property error response");
-              const messages = MultiPartResponseFormatter.formatResponse(errorResponse);
-              return { messages, error: 'property_not_found' };
-            }
-            
-            // Handle property-specific questions
-            if (intentResult.intent.includes('checkin') || intentResult.intent.includes('checkout') || 
-                intentResult.intent.includes('wifi') || intentResult.intent.includes('parking') || 
-                intentResult.intent.includes('access')) {
-              console.log("🏠 Processing property-specific question");
+            // Handle property-specific questions with detailed responses
+            if (intentResult.intent.includes('checkin') || intentResult.intent.includes('checkout')) {
+              console.log("🏠 Processing check-in/check-out question");
               
-              const propertyResponse = this.responseGenerator.generatePropertyResponse(
-                cleanMessage, 
-                property, 
-                conversation.guest_name
-              );
+              const checkInTime = property.check_in_time || '4:00 PM';
+              const checkOutTime = property.check_out_time || '11:00 AM';
+              
+              let response;
+              if (intentResult.intent.includes('checkin')) {
+                response = conversation.guest_name 
+                  ? `${conversation.guest_name}, check-in is at ${checkInTime}. Let me know if you need early check-in!`
+                  : `Check-in is at ${checkInTime}. Let me know if you need early check-in!`;
+              } else {
+                response = conversation.guest_name 
+                  ? `${conversation.guest_name}, check-out is at ${checkOutTime}. Need help with late checkout?`
+                  : `Check-out is at ${checkOutTime}. Need help with late checkout?`;
+              }
               
               await this.conversationManager.updateConversationContext(conversation, intentResult.intent);
-              
-              console.log("📝 Formatting property info response");
-              const messages = MultiPartResponseFormatter.formatResponse(propertyResponse);
+              const messages = MultiPartResponseFormatter.formatResponse(response);
               return { messages, propertyInfoProvided: true };
+            }
+            
+            if (intentResult.intent.includes('wifi')) {
+              console.log("🏠 Processing WiFi question");
+              
+              if (property.wifi_name && property.wifi_password) {
+                const response = conversation.guest_name 
+                  ? `${conversation.guest_name}, here are your WiFi details:\n\nNetwork: ${property.wifi_name}\nPassword: ${property.wifi_password}\n\nLet me know if you need help connecting!`
+                  : `Here are your WiFi details:\n\nNetwork: ${property.wifi_name}\nPassword: ${property.wifi_password}\n\nLet me know if you need help connecting!`;
+                
+                await this.conversationManager.updateConversationContext(conversation, intentResult.intent);
+                const messages = MultiPartResponseFormatter.formatResponse(response);
+                return { messages, propertyInfoProvided: true };
+              } else {
+                const response = "WiFi details should be in your check-in instructions. Contact the property if you need assistance.";
+                const messages = MultiPartResponseFormatter.formatResponse(response);
+                return { messages, propertyInfoProvided: true };
+              }
+            }
+            
+            if (intentResult.intent.includes('parking')) {
+              console.log("🏠 Processing parking question");
+              
+              if (property.parking_instructions) {
+                const response = conversation.guest_name 
+                  ? `${conversation.guest_name}, here are the parking details:\n\n${property.parking_instructions}\n\nAny other questions?`
+                  : `Here are the parking details:\n\n${property.parking_instructions}\n\nAny other questions?`;
+                
+                await this.conversationManager.updateConversationContext(conversation, intentResult.intent);
+                const messages = MultiPartResponseFormatter.formatResponse(response);
+                return { messages, propertyInfoProvided: true };
+              } else {
+                const response = "Check your booking confirmation for parking information or contact the property directly.";
+                const messages = MultiPartResponseFormatter.formatResponse(response);
+                return { messages, propertyInfoProvided: true };
+              }
+            }
+            
+            if (intentResult.intent.includes('access')) {
+              console.log("🏠 Processing access question");
+              
+              if (property.access_instructions) {
+                const response = conversation.guest_name 
+                  ? `${conversation.guest_name}, here are the access details:\n\n${property.access_instructions}\n\nIf you have trouble, contact our emergency line!`
+                  : `Here are the access details:\n\n${property.access_instructions}\n\nIf you have trouble, contact our emergency line!`;
+                
+                await this.conversationManager.updateConversationContext(conversation, intentResult.intent);
+                const messages = MultiPartResponseFormatter.formatResponse(response);
+                return { messages, propertyInfoProvided: true };
+              } else {
+                const response = "Access details should be in your check-in instructions. Contact the property if you need assistance.";
+                const messages = MultiPartResponseFormatter.formatResponse(response);
+                return { messages, propertyInfoProvided: true };
+              }
             }
             
             // Handle recommendation requests
@@ -228,41 +344,39 @@ export class EnhancedConversationService {
                   last_recommendations: recommendations.response
                 });
                 
-                console.log("📝 Formatting recommendation response");
                 const messages = MultiPartResponseFormatter.formatResponse(recommendations.response);
                 return { messages, recommendationsProvided: true };
               }
             }
           }
           
-          console.log("🎯 Generating general response");
+          console.log("🎯 Generating general response for unmatched intent");
           const generalResponse = this.responseGenerator.generateGeneralResponse(
             cleanMessage, 
             conversation.guest_name
           );
-          console.log("📝 Formatting general response");
           const messages = MultiPartResponseFormatter.formatResponse(generalResponse);
           return { messages, generalResponse: true };
+          
         } catch (confirmedError) {
           console.error("❌ Error processing confirmed guest message:", confirmedError);
           const fallbackResponse = conversation.guest_name 
             ? `${conversation.guest_name}, I'm here to help! What can I assist you with?`
             : "I'm here to help! What can I assist you with?";
-          const messages = [fallbackResponse];
-          return { messages, error: 'confirmed_processing_error' };
+          return { messages: [fallbackResponse], error: 'confirmed_processing_error' };
         }
       }
 
       console.log("❓ Unhandled conversation state:", conversation.conversation_state);
       const defaultResponse = "I'm not sure how to help with that. Could you try sending your property code?";
-      console.log("📝 Formatting default response");
       const messages = MultiPartResponseFormatter.formatResponse(defaultResponse);
       return { messages, unhandled: true };
 
     } catch (error) {
-      console.error("❌ Critical error in EnhancedConversationService:", error);
+      console.error("❌ CRITICAL ERROR in EnhancedConversationService:", error);
+      console.error("❌ Error stack:", error.stack);
       
-      // More specific fallback based on the type of error
+      // Enhanced fallback based on the type of error
       let errorMessage = "I'm here to help! ";
       
       if (error.message?.includes('property')) {
@@ -274,8 +388,7 @@ export class EnhancedConversationService {
       }
       
       console.log("🚨 Using enhanced error fallback response:", errorMessage);
-      const messages = [errorMessage];
-      return { messages, error: 'service_error', details: error.message };
+      return { messages: [errorMessage], error: 'service_error', details: error.message };
     }
   }
 }
