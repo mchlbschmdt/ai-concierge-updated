@@ -54,7 +54,7 @@ export default function WebhookTester() {
     }
   };
 
-  const testWebhookMessage = async () => {
+  const testValidPhoneNumber = async () => {
     setTesting(true);
     setResult(null);
 
@@ -63,12 +63,12 @@ export default function WebhookTester() {
         type: 'message.received',
         data: {
           object: {
-            id: 'test-' + Date.now(),
-            conversationId: 'conv-test-' + Date.now(),
+            id: 'test-valid-' + Date.now(),
+            conversationId: 'conv-test-valid-' + Date.now(),
             direction: 'incoming',
             from: '+1234567890',
-            to: '+1987654321',
-            body: '1001',
+            to: '+18333301032', // Valid business number
+            body: 'Test valid number',
             createdAt: new Date().toISOString()
           }
         }
@@ -86,27 +86,27 @@ export default function WebhookTester() {
       );
 
       const data = await response.json();
-      console.log('Message test response:', data);
+      console.log('Valid number test response:', data);
 
       if (response.ok) {
         setResult({
           success: true,
-          message: 'Test message processed successfully!',
+          message: `Valid number test: ${data.processed ? 'PROCESSED' : 'REJECTED'}`,
           data: data
         });
       } else {
         setResult({
           success: false,
-          message: `Message test failed: ${response.status}`,
+          message: `Valid number test failed: ${response.status}`,
           data: data
         });
       }
 
     } catch (error) {
-      console.error('Message test failed:', error);
+      console.error('Valid number test failed:', error);
       setResult({
         success: false,
-        message: 'Failed to send test message',
+        message: 'Failed to test valid number',
         data: { error: error.message }
       });
     } finally {
@@ -114,14 +114,71 @@ export default function WebhookTester() {
     }
   };
 
-  const enableBypassMode = async () => {
-    alert('To enable bypass mode, add BYPASS_SIGNATURE_VERIFICATION=true to your Supabase secrets in the Edge Functions settings.');
+  const testInvalidPhoneNumber = async () => {
+    setTesting(true);
+    setResult(null);
+
+    try {
+      const testPayload = {
+        type: 'message.received',
+        data: {
+          object: {
+            id: 'test-invalid-' + Date.now(),
+            conversationId: 'conv-test-invalid-' + Date.now(),
+            direction: 'incoming',
+            from: '+1234567890',
+            to: '+13213406333', // Invalid number that should be rejected
+            body: 'Test invalid number',
+            createdAt: new Date().toISOString()
+          }
+        }
+      };
+
+      const response = await fetch(
+        'https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openphone-webhook',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(testPayload)
+        }
+      );
+
+      const data = await response.json();
+      console.log('Invalid number test response:', data);
+
+      if (response.ok) {
+        const wasRejected = data.processed === false && data.reason === 'MESSAGE_REJECTED_INVALID_DESTINATION';
+        setResult({
+          success: wasRejected,
+          message: `Invalid number test: ${wasRejected ? 'CORRECTLY REJECTED' : 'INCORRECTLY PROCESSED'}`,
+          data: data
+        });
+      } else {
+        setResult({
+          success: false,
+          message: `Invalid number test failed: ${response.status}`,
+          data: data
+        });
+      }
+
+    } catch (error) {
+      console.error('Invalid number test failed:', error);
+      setResult({
+        success: false,
+        message: 'Failed to test invalid number',
+        data: { error: error.message }
+      });
+    } finally {
+      setTesting(false);
+    }
   };
 
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-lg shadow-sm p-4">
-        <h3 className="text-lg font-semibold mb-4">Webhook Testing</h3>
+        <h3 className="text-lg font-semibold mb-4">Enhanced Webhook Testing</h3>
         
         <div className="space-y-3 mb-4">
           <Button 
@@ -137,16 +194,16 @@ export default function WebhookTester() {
             ) : (
               <>
                 <RefreshCw className="mr-2 h-4 w-4" />
-                Test Webhook Health
+                Test Webhook Health & Version
               </>
             )}
           </Button>
 
           <Button 
-            onClick={testWebhookMessage}
+            onClick={testValidPhoneNumber}
             disabled={testing}
             variant="outline"
-            className="w-full"
+            className="w-full bg-green-50 hover:bg-green-100"
           >
             {testing ? (
               <>
@@ -154,16 +211,24 @@ export default function WebhookTester() {
                 Testing...
               </>
             ) : (
-              "Test Message Processing (Bypass Mode)"
+              "Test Valid Number (+18333301032)"
             )}
           </Button>
 
           <Button 
-            onClick={enableBypassMode}
-            variant="secondary"
-            className="w-full"
+            onClick={testInvalidPhoneNumber}
+            disabled={testing}
+            variant="outline"
+            className="w-full bg-red-50 hover:bg-red-100"
           >
-            Enable Bypass Mode Instructions
+            {testing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Testing...
+              </>
+            ) : (
+              "Test Invalid Number (+13213406333)"
+            )}
           </Button>
         </div>
 
@@ -193,6 +258,9 @@ export default function WebhookTester() {
           <code className="text-xs break-all">
             https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openphone-webhook
           </code>
+          <p className="text-xs text-gray-600 mt-2">
+            Use the buttons above to test phone number validation. The invalid number test should show "CORRECTLY REJECTED" for proper validation.
+          </p>
         </div>
       </div>
 

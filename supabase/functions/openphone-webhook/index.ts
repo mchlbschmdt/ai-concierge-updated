@@ -12,6 +12,12 @@ console.log("OpenPhone webhook function starting up...")
 // Designated business phone number - all traffic should go through this number
 const BUSINESS_PHONE_NUMBER = '+18333301032';
 
+// Deployment version for tracking
+const DEPLOYMENT_VERSION = 'v2.1-' + new Date().toISOString().slice(0, 16);
+
+console.log(`🚀 DEPLOYMENT VERSION: ${DEPLOYMENT_VERSION}`);
+console.log(`📱 BUSINESS PHONE NUMBER: ${BUSINESS_PHONE_NUMBER}`);
+
 // Enhanced webhook signature verification with comprehensive approaches
 async function verifyWebhookSignature(body: string, signature: string, secret: string, req: Request): Promise<boolean> {
   try {
@@ -243,17 +249,25 @@ async function sendSmsResponse(apiKey: string, toNumber: string, fromNumber: str
 }
 
 function validateIncomingPhoneNumber(toNumber: string): boolean {
+  console.log(`🔍 VALIDATING INCOMING PHONE NUMBER: ${toNumber}`);
+  console.log(`🎯 BUSINESS NUMBER: ${BUSINESS_PHONE_NUMBER}`);
+  console.log(`🔍 DEPLOYMENT VERSION: ${DEPLOYMENT_VERSION}`);
+  
   if (toNumber === BUSINESS_PHONE_NUMBER) {
-    console.log(`✅ Message sent to correct business number: ${toNumber}`);
+    console.log(`✅ ✅ MESSAGE ACCEPTED: Sent to correct business number: ${toNumber} ✅ ✅`);
     return true;
   } else {
-    console.log(`❌ Message sent to invalid number: ${toNumber} (should be ${BUSINESS_PHONE_NUMBER})`);
+    console.log(`❌ ❌ MESSAGE REJECTED: Invalid destination number: ${toNumber} ❌ ❌`);
+    console.log(`❌ Expected: ${BUSINESS_PHONE_NUMBER}`);
+    console.log(`❌ Got: ${toNumber}`);
+    console.log(`❌ DEPLOYMENT VERSION: ${DEPLOYMENT_VERSION}`);
     return false;
   }
 }
 
 serve(async (req) => {
   console.log(`=== OpenPhone Webhook Request ===`);
+  console.log(`🚀 DEPLOYMENT VERSION: ${DEPLOYMENT_VERSION}`);
   console.log(`Method: ${req.method}`);
   console.log(`URL: ${req.url}`);
   console.log(`Headers:`, Object.fromEntries(req.headers.entries()));
@@ -273,6 +287,7 @@ serve(async (req) => {
         service: 'openphone-webhook',
         message: 'OpenPhone webhook is running',
         businessPhoneNumber: BUSINESS_PHONE_NUMBER,
+        deploymentVersion: DEPLOYMENT_VERSION,
         timestamp: new Date().toISOString()
       }),
       {
@@ -286,6 +301,7 @@ serve(async (req) => {
   if (req.method === 'POST') {
     try {
       console.log('Processing webhook POST request');
+      console.log(`🚀 PROCESSING WITH DEPLOYMENT VERSION: ${DEPLOYMENT_VERSION}`);
       
       const supabase = createClient(
         Deno.env.get('SUPABASE_URL') ?? '',
@@ -295,8 +311,8 @@ serve(async (req) => {
       const body = await req.text()
       console.log('Received webhook body length:', body.length);
 
-      // Skip signature verification for now to focus on SMS sending issue
-      console.log('⚠️ Skipping signature verification to debug SMS sending');
+      // Skip signature verification for now to focus on phone number validation
+      console.log('⚠️ Skipping signature verification to debug phone number validation');
       
       let payload;
       try {
@@ -319,19 +335,25 @@ serve(async (req) => {
         const message = payload.data.object
         console.log('Processing incoming message from:', message.from);
         console.log('Message sent to:', message.to);
+        console.log(`🚀 PROCESSING MESSAGE WITH VERSION: ${DEPLOYMENT_VERSION}`);
         
         // VALIDATE INCOMING PHONE NUMBER - CRITICAL SECURITY CHECK
         if (!validateIncomingPhoneNumber(message.to)) {
+          console.log(`🚫 🚫 MESSAGE REJECTED BY ${DEPLOYMENT_VERSION} 🚫 🚫`);
           console.log(`🚫 REJECTING MESSAGE: Not sent to business number ${BUSINESS_PHONE_NUMBER}`);
           console.log(`🚫 Rejected message from ${message.from} to ${message.to}: "${message.body || message.text || ''}"`);
+          console.log(`🚫 DEPLOYMENT VERSION: ${DEPLOYMENT_VERSION}`);
           
           // Return success to webhook but don't process the message
           return new Response(
             JSON.stringify({ 
               success: true, 
+              processed: false,
+              reason: 'MESSAGE_REJECTED_INVALID_DESTINATION',
               message: 'Webhook received but message rejected - invalid destination number',
               businessPhoneNumber: BUSINESS_PHONE_NUMBER,
               rejectedDestination: message.to,
+              deploymentVersion: DEPLOYMENT_VERSION,
               timestamp: new Date().toISOString()
             }),
             {
@@ -341,11 +363,14 @@ serve(async (req) => {
           );
         }
         
+        console.log(`✅ ✅ MESSAGE ACCEPTED BY ${DEPLOYMENT_VERSION} ✅ ✅`);
+        
         if (message.direction === 'incoming') {
           console.log('=== PROCESSING INCOMING MESSAGE ===');
           console.log('From:', message.from);
           console.log('To:', message.to);
           console.log('Body:', message.body || message.text || '');
+          console.log(`🚀 PROCESSING VERSION: ${DEPLOYMENT_VERSION}`);
           
           // Get or create SMS conversation using the external service
           let smsConversation;
@@ -408,6 +433,7 @@ serve(async (req) => {
           console.log('- API key configured:', !!apiKey);
           console.log('- API key length:', apiKey ? apiKey.length : 0);
           console.log('- Message text:', messageText);
+          console.log(`🚀 PROCESSING VERSION: ${DEPLOYMENT_VERSION}`);
           
           if (messageText) {
             console.log('🔄 Processing message with conversation service...');
@@ -449,6 +475,7 @@ serve(async (req) => {
                 
                 if (responseMessages.length > 0) {
                   console.log('💬 Generated response messages:', responseMessages.length);
+                  console.log(`🚀 SENDING FROM VERSION: ${DEPLOYMENT_VERSION}`);
                   
                   // ALWAYS store the bot response first, regardless of SMS sending success
                   if (smsConversation) {
@@ -479,6 +506,7 @@ serve(async (req) => {
                   if (apiKey && apiKey.trim().length > 0) {
                     console.log('📤 Attempting to send SMS responses...');
                     console.log(`📤 Enforcing outgoing from business number: ${BUSINESS_PHONE_NUMBER}`);
+                    console.log(`🚀 SENDING WITH VERSION: ${DEPLOYMENT_VERSION}`);
                     
                     // Send each message segment with a small delay between them
                     let allSent = true;
@@ -492,14 +520,14 @@ serve(async (req) => {
                       const smsResult = await sendSmsResponse(apiKey, message.from, BUSINESS_PHONE_NUMBER, messageSegment);
                       
                       if (smsResult.success) {
-                        console.log(`✅ Segment ${i + 1} sent successfully`);
+                        console.log(`✅ Segment ${i + 1} sent successfully by ${DEPLOYMENT_VERSION}`);
                         
                         // Add a small delay between messages to avoid rate limiting
                         if (i < responseMessages.length - 1) {
                           await new Promise(resolve => setTimeout(resolve, 1000));
                         }
                       } else {
-                        console.error(`❌ Failed to send segment ${i + 1}:`, smsResult.error);
+                        console.error(`❌ Failed to send segment ${i + 1} from ${DEPLOYMENT_VERSION}:`, smsResult.error);
                         allSent = false;
                         lastError = smsResult;
                         break; // Stop sending if one fails
@@ -507,30 +535,12 @@ serve(async (req) => {
                     }
                     
                     if (allSent) {
-                      console.log('✅ ✅ ALL SMS SEGMENTS SENT SUCCESSFULLY! ✅ ✅');
+                      console.log(`✅ ✅ ALL SMS SEGMENTS SENT SUCCESSFULLY BY ${DEPLOYMENT_VERSION}! ✅ ✅`);
                     } else {
-                      console.error('❌ ❌ FAILED TO SEND ALL SMS SEGMENTS ❌ ❌');
+                      console.error(`❌ ❌ FAILED TO SEND ALL SMS SEGMENTS FROM ${DEPLOYMENT_VERSION} ❌ ❌`);
                       console.error('Last error:', lastError?.error);
                       console.error('Status:', lastError?.status);
                       console.error('Details:', lastError?.details);
-                      
-                      // Log specific guidance based on error type
-                      const errorMessage = typeof lastError?.error === 'string' 
-                        ? lastError.error 
-                        : lastError?.error?.message || JSON.stringify(lastError?.error);
-                      
-                      if (errorMessage.includes('invalid') || errorMessage.includes('expired')) {
-                        console.error('🔑 ACTION REQUIRED: Update the OPENPHONE_API_KEY secret in Supabase');
-                        console.error('🔍 Go to: Supabase Dashboard > Settings > Edge Functions > Secrets');
-                        console.error('🔍 Check your OpenPhone account for a valid API key');
-                      } else if (lastError?.status === 403) {
-                        console.error('🚫 ACTION REQUIRED: API key lacks SMS sending permissions');
-                        console.error('🔍 Check your OpenPhone account permissions and plan');
-                      } else if (lastError?.status === 402) {
-                        console.error('💳 ACTION REQUIRED: OpenPhone account has insufficient credits');
-                        console.error('🔍 Add credits to your OpenPhone account to send SMS messages');
-                        console.error('🔍 Go to: OpenPhone Dashboard > Billing > Add Credits');
-                      }
                     }
                   } else {
                     console.error('❌ OPENPHONE_API_KEY not found in environment variables');
@@ -555,9 +565,11 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           success: true, 
+          processed: true,
           received: true,
           processed_at: new Date().toISOString(),
-          businessPhoneNumber: BUSINESS_PHONE_NUMBER
+          businessPhoneNumber: BUSINESS_PHONE_NUMBER,
+          deploymentVersion: DEPLOYMENT_VERSION
         }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -569,10 +581,12 @@ serve(async (req) => {
       console.error('❌ ❌ WEBHOOK PROCESSING ERROR ❌ ❌');
       console.error('Error message:', error.message);
       console.error('Stack trace:', error.stack);
+      console.error(`❌ ERROR IN DEPLOYMENT VERSION: ${DEPLOYMENT_VERSION}`);
       return new Response(
         JSON.stringify({ 
           error: 'Internal server error',
           message: error.message,
+          deploymentVersion: DEPLOYMENT_VERSION,
           timestamp: new Date().toISOString()
         }),
         {
@@ -594,3 +608,4 @@ serve(async (req) => {
 })
 
 console.log(`OpenPhone webhook function is ready to serve requests through business number: ${BUSINESS_PHONE_NUMBER}`)
+console.log(`🚀 DEPLOYMENT VERSION: ${DEPLOYMENT_VERSION}`)
