@@ -105,7 +105,7 @@ export class EnhancedConversationService {
           return { messages, resetDetected: true, conversationReset: true };
         } catch (resetError) {
           console.error("❌ Error processing complete reset command:", resetError);
-          const fallbackResponse = "No problem! I've reset our conversation. Please send me your property code to get started.";
+          const fallbackResponse = "Hi! I'm your Hostly AI Concierge. I can help with property info, local recommendations, and more! To get started, please send me your property code (the numbers from your booking confirmation).";
           return { messages: [fallbackResponse], resetDetected: true, error: 'reset_fallback' };
         }
       }
@@ -121,7 +121,7 @@ export class EnhancedConversationService {
         
         if (!possiblePropertyCode) {
           console.log("❌ No property code found in message");
-          const errorResponse = "Hi! Please send me your property code (the numbers from your booking confirmation).";
+          const errorResponse = "Hi! I'm your Hostly AI Concierge. To get started, please send me your property code (the numbers from your booking confirmation).";
           const messages = MultiPartResponseFormatter.formatResponse(errorResponse);
           return { messages, propertyCodeMissing: true };
         }
@@ -134,17 +134,20 @@ export class EnhancedConversationService {
           if (propertyResult) {
             console.log("✅ Property found:", propertyResult.property_name);
             
-            // Update conversation state to confirmed
+            // Update conversation state to awaiting_confirmation
             await this.conversationManager.updateConversationState(phoneNumber, {
               property_id: propertyResult.property_id,
-              property_confirmed: true,
-              conversation_state: 'confirmed'
+              conversation_state: 'awaiting_confirmation',
+              conversation_context: {
+                ...conversation.conversation_context,
+                pending_property: propertyResult
+              }
             });
             
-            const welcomeResponse = this.responseGenerator.generateWelcomeMessage(propertyResult);
-            console.log("📝 Generated welcome response:", welcomeResponse);
-            const messages = MultiPartResponseFormatter.formatResponse(welcomeResponse);
-            return { messages, propertyConfirmed: true };
+            const confirmationResponse = `Great! You're staying at ${propertyResult.property_name}, ${propertyResult.address}. Correct? Reply Y or N.`;
+            console.log("📝 Generated confirmation response:", confirmationResponse);
+            const messages = MultiPartResponseFormatter.formatResponse(confirmationResponse);
+            return { messages, propertyFound: true, awaitingConfirmation: true };
           } else {
             console.log("❌ Property not found for code:", possiblePropertyCode);
             const errorResponse = `I couldn't find property code ${possiblePropertyCode}. Please check your booking confirmation and try again.`;
@@ -155,6 +158,55 @@ export class EnhancedConversationService {
           console.error("❌ Error in property lookup:", propertyError);
           const fallbackResponse = "I'm having trouble finding that property code. Could you try again?";
           return { messages: [fallbackResponse], error: 'property_lookup_error' };
+        }
+      }
+
+      // HANDLE CONFIRMATION RESPONSES
+      if (conversation.conversation_state === 'awaiting_confirmation') {
+        console.log("🎯 Processing confirmation response");
+        
+        const normalizedInput = cleanMessage.toLowerCase().trim();
+        const isYes = ['y', 'yes', 'yeah', 'yep', 'correct', 'right', 'true', '1', 'ok', 'okay', 'yup', 'sure', 'absolutely', 'definitely'].includes(normalizedInput);
+        const isNo = ['n', 'no', 'nope', 'wrong', 'incorrect', 'false', '0', 'nah', 'negative'].includes(normalizedInput);
+
+        if (isYes) {
+          console.log("✅ User confirmed property");
+          
+          await this.conversationManager.updateConversationState(phoneNumber, {
+            property_confirmed: true,
+            conversation_state: 'confirmed',
+            conversation_context: {
+              ...conversation.conversation_context,
+              property_confirmed_at: new Date().toISOString()
+            }
+          });
+          
+          const welcomeResponse = "I'm your Hostly AI Concierge! I can help with property info, local tips, and more! What's your name so I can personalize our conversation?";
+          console.log("📝 Generated welcome response:", welcomeResponse);
+          const messages = MultiPartResponseFormatter.formatResponse(welcomeResponse);
+          return { messages, propertyConfirmed: true, askingForName: true };
+          
+        } else if (isNo) {
+          console.log("❌ User rejected property - resetting to awaiting_property_id");
+          
+          await this.conversationManager.updateConversationState(phoneNumber, {
+            property_id: null,
+            conversation_state: 'awaiting_property_id',
+            conversation_context: {
+              ...conversation.conversation_context,
+              pending_property: null
+            }
+          });
+          
+          const retryResponse = "No problem! Let's try again. Please send me your correct property code (the numbers from your booking confirmation).";
+          const messages = MultiPartResponseFormatter.formatResponse(retryResponse);
+          return { messages, propertyRejected: true };
+          
+        } else {
+          console.log("❓ Unclear confirmation response");
+          const clarificationResponse = "Please reply with Y for Yes or N for No to confirm if this is the correct property.";
+          const messages = MultiPartResponseFormatter.formatResponse(clarificationResponse);
+          return { messages, needsClarification: true };
         }
       }
 
@@ -203,7 +255,7 @@ export class EnhancedConversationService {
         }
 
         try {
-          // Handle name detection
+          // Handle name detection first
           const nameDetection = NameHandler.detectAndExtractName(cleanMessage);
           if (nameDetection.nameDetected && nameDetection.extractedName) {
             console.log("👋 Name detected:", nameDetection.extractedName);
@@ -217,7 +269,7 @@ export class EnhancedConversationService {
               }
             });
             
-            const nameResponse = NameHandler.generateNameResponse(nameDetection.extractedName);
+            const nameResponse = `Great to meet you, ${nameDetection.extractedName}! How can I assist you today?`;
             const messages = MultiPartResponseFormatter.formatResponse(nameResponse);
             return { messages, nameDetected: true };
           }
@@ -377,14 +429,14 @@ export class EnhancedConversationService {
       console.error("❌ Error stack:", error.stack);
       
       // Enhanced fallback based on the type of error
-      let errorMessage = "I'm here to help! ";
+      let errorMessage = "Hi! I'm your Hostly AI Concierge. ";
       
       if (error.message?.includes('property')) {
-        errorMessage += "Could you try sending your property code?";
+        errorMessage += "To get started, please send me your property code (the numbers from your booking confirmation).";
       } else if (error.message?.includes('recommendation')) {
-        errorMessage += "What would you like recommendations for?";
+        errorMessage += "I can help with property info, local recommendations, and more! What can I assist you with?";
       } else {
-        errorMessage += "What can I assist you with today?";
+        errorMessage += "I can help with property info, local recommendations, and more! What can I assist you with?";
       }
       
       console.log("🚨 Using enhanced error fallback response:", errorMessage);

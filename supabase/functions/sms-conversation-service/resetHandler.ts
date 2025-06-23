@@ -31,10 +31,10 @@ export class ResetHandler {
   static generateResetResponse(): string {
     console.log('🔄 ResetHandler.generateResetResponse called');
     
-    // Use a single, consistent response template asking for property code
-    const response = "No problem! I've reset our conversation. Please send me your property code to get started.";
+    // Enhanced reset response with Hostly branding and more information
+    const response = "Hi! I'm your Hostly AI Concierge. I can help with property info, local recommendations, and more! To get started, please send me your property code (the numbers from your booking confirmation).";
     
-    console.log('✅ Generated consistent reset response:', response);
+    console.log('✅ Generated enhanced reset response:', response);
     return response;
   }
 
@@ -58,7 +58,8 @@ export class ResetHandler {
           last_interaction: new Date().toISOString(),
           last_response_type: 'reset_response',
           global_recommendation_blacklist: globalBlacklist,
-          reset_count: (context?.reset_count || 0) + 1
+          reset_count: (context?.reset_count || 0) + 1,
+          pending_property: null
         },
         last_recommendations: null,
         last_message_type: null
@@ -82,7 +83,8 @@ export class ResetHandler {
           last_interaction: new Date().toISOString(),
           last_response_type: 'reset_response',
           global_recommendation_blacklist: [],
-          reset_count: 1
+          reset_count: 1,
+          pending_property: null
         },
         last_recommendations: null,
         last_message_type: null

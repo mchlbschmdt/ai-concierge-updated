@@ -9,6 +9,7 @@ export interface Conversation {
   timezone: string;
   last_interaction_timestamp: string;
   property_confirmed?: boolean;
+  guest_name?: string;
   last_recommendations?: string;
   last_message_type?: string;
   created_at?: string;
@@ -26,6 +27,15 @@ export interface Property {
   parking_instructions?: string;
   check_in_time?: string;
   check_out_time?: string;
+  access_instructions?: string;
+  directions_to_property?: string;
+  emergency_contact?: string;
+  house_rules?: string;
+  amenities?: string;
+  local_recommendations?: string;
+  cleaning_instructions?: string;
+  special_notes?: string;
+  knowledge_base?: string;
 }
 
 export interface ProcessMessageResult {
