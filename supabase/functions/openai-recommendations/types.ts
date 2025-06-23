@@ -3,10 +3,15 @@ export interface RecommendationRequest {
   prompt: string;
   propertyAddress?: string;
   guestContext?: {
+    guestName?: string;
     currentLocation?: string;
     previousAskedAbout?: string[];
-    timeOfDay?: string;
     transportMode?: string;
+    timeOfDay?: string;
+    dayOfWeek?: string;
+    previousInterests?: string[];
+    lastActivity?: string;
+    isCheckoutSoon?: boolean;
   };
   requestType?: string;
   previousRecommendations?: string;

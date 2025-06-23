@@ -1,7 +1,5 @@
 
-import { getEnhancedSystemPrompt } from './promptBuilders.ts';
-
-export async function callOpenAI(enhancedPrompt: string, isFollowUpQuestion: boolean, openAIApiKey: string) {
+export async function callOpenAI(enhancedPrompt: string, systemPrompt: string, openAIApiKey: string) {
   console.log('🚀 Enhanced prompt built, calling OpenAI API...');
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -15,7 +13,7 @@ export async function callOpenAI(enhancedPrompt: string, isFollowUpQuestion: boo
       messages: [
         { 
           role: 'system', 
-          content: getEnhancedSystemPrompt(isFollowUpQuestion)
+          content: systemPrompt
         },
         { role: 'user', content: enhancedPrompt }
       ],

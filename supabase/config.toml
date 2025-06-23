@@ -1,23 +1,39 @@
 
-project_id = "zutwyyepahbbvrcbsbke"
+# This file configures your Supabase Edge functions.
+# For more details, refer to the docs at:
+# https://supabase.com/docs/guides/functions/config
 
-[functions.openphone-webhook]
-verify_jwt = false
-
-[functions.send-sms]
-verify_jwt = false
-
-[functions.test-openphone-key]
-verify_jwt = false
+zutwyyepahbbvrcbsbke = "zutwyyepahbbvrcbsbke"
 
 [functions.health-check]
-verify_jwt = false
-
-[functions.send-sms-with-test]
 verify_jwt = false
 
 [functions.minimal-test]
 verify_jwt = false
 
+[functions.openai-recommendations]
+verify_jwt = false
+
+[functions.openphone-webhook]
+verify_jwt = false
+
 [functions.send-auth-email]
+verify_jwt = false
+
+[functions.send-sms]
+verify_jwt = false
+
+[functions.send-sms-with-test]
+verify_jwt = false
+
+[functions.sms-conversation-service]
+verify_jwt = false
+
+[functions.contextual-recommendations]
+verify_jwt = false
+
+[functions.test-openphone-key]
+verify_jwt = false
+
+[functions.google-auth]
 verify_jwt = false

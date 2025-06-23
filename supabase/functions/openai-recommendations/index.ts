@@ -3,20 +3,20 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders } from './corsHeaders.ts';
 import { checkIfFollowUpQuestion } from './followUpDetection.ts';
-import { buildEnhancedPrompt } from './promptBuilders.ts';
+import { buildPersonalizedPrompt, getContextualSystemPrompt } from './enhancedPromptBuilders.ts';
 import { callOpenAI } from './openaiService.ts';
 import type { RecommendationRequest, RecommendationResponse, ErrorResponse } from './types.ts';
 
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
 
 serve(async (req) => {
-  // Handle CORS preflight requests
+  //Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    console.log('🤖 Enhanced OpenAI recommendations function called');
+    console.log('🤖 Context-Aware OpenAI recommendations function called');
     
     if (!openAIApiKey) {
       console.error('❌ OPENAI_API_KEY not found in environment');
@@ -45,13 +45,16 @@ serve(async (req) => {
     // Enhanced follow-up question detection
     const isFollowUpQuestion = checkIfFollowUpQuestion(prompt, previousRecommendations);
 
-    // Build enhanced context-aware prompt
-    const enhancedPrompt = buildEnhancedPrompt(prompt, propertyAddress, guestContext, requestType, previousRecommendations, isFollowUpQuestion);
-
-    // Call OpenAI API
-    const recommendation = await callOpenAI(enhancedPrompt, isFollowUpQuestion, openAIApiKey);
+    // Build personalized context-aware prompt
+    const personalizedPrompt = buildPersonalizedPrompt(prompt, propertyAddress, guestContext, requestType, previousRecommendations, isFollowUpQuestion);
     
-    console.log('✅ Enhanced OpenAI recommendation generated successfully');
+    // Get personalized system message
+    const systemMessage = getContextualSystemPrompt(isFollowUpQuestion, guestContext);
+
+    // Call OpenAI API with enhanced context
+    const recommendation = await callOpenAI(personalizedPrompt, systemMessage, openAIApiKey);
+    
+    console.log('✅ Contextual OpenAI recommendation generated successfully');
     console.log('📝 Recommendation length:', recommendation.length);
 
     return new Response(
@@ -61,7 +64,7 @@ serve(async (req) => {
       }
     );
   } catch (error) {
-    console.error('❌ Error in enhanced openai-recommendations function:', error);
+    console.error('❌ Error in contextual openai-recommendations function:', error);
     return new Response(
       JSON.stringify({ error: 'Internal server error' } as ErrorResponse),
       {
