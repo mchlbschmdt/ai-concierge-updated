@@ -4,7 +4,6 @@ export class FuzzyMatchingService {
     'hot': ['not', 'got', 'hto', 'hoot'],
     'now': ['and', 'noe', 'bow', 'new'],
     'quick': ['quik', 'qiuck', 'quikc', 'quck'],
-    'food': ['foood', 'fod', 'foo', 'foods'],
     'eat': ['eet', 'eeat', 'et'],
     'restaurant': ['restaraunt', 'restraunt', 'resturant'],
     'delivery': ['delivry', 'delevery', 'delievery'],
@@ -67,10 +66,10 @@ export class FuzzyMatchingService {
           return word.replace(cleanWord, correct);
         }
         
-        // Fuzzy matching for close typos
-        if (this.levenshteinDistance(cleanWord, correct) <= 2 && cleanWord.length > 2) {
+        // More strict fuzzy matching - only for very close typos and longer words
+        if (cleanWord.length > 4 && this.levenshteinDistance(cleanWord, correct) === 1) {
           const similarity = 1 - (this.levenshteinDistance(cleanWord, correct) / Math.max(cleanWord.length, correct.length));
-          if (similarity > 0.7) {
+          if (similarity > 0.85) {
             corrections.push(`"${word}" → "${correct}"`);
             return word.replace(cleanWord, correct);
           }

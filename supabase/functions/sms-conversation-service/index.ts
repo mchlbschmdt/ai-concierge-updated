@@ -50,6 +50,8 @@ class EnhancedSmsConversationService {
 
       console.log('Current state:', conversation.conversation_state);
       console.log('Is paused:', isPaused);
+      console.log('Guest name:', conversation.conversation_context?.guest_name);
+      console.log('Name request made:', conversation.conversation_context?.name_request_made);
 
       // Handle reset commands
       if (cleanMessage === 'reset' || cleanMessage === 'restart' || cleanMessage === 'start over') {
@@ -71,7 +73,7 @@ class EnhancedSmsConversationService {
         case 'confirmed':
           // Use enhanced conversation service for confirmed guests
           const property = await this.propertyService.getPropertyInfo(conversation.property_id!);
-          result = await this.enhancedService.processEnhancedMessage(conversation, messageBody, property!);
+          result = await this.handleConfirmedGuestInquiry(conversation, messageBody, property!, isPaused);
           break;
         
         default:
@@ -92,42 +94,54 @@ class EnhancedSmsConversationService {
     }
   }
 
-  async handleConfirmedGuestInquiry(conversation: Conversation, messageBody: string, isPaused: boolean): Promise<ProcessMessageResult> {
-    const property = await this.propertyService.getPropertyInfo(conversation.property_id!);
+  async handleConfirmedGuestInquiry(conversation: Conversation, messageBody: string, property: Property, isPaused: boolean): Promise<ProcessMessageResult> {
     const message = messageBody.trim().toLowerCase();
     const timezone = conversation.timezone || 'UTC';
     const greeting = ResponseGenerator.getTimeAwareGreeting(timezone);
     const guestName = conversation.conversation_context?.guest_name;
     
-    console.log('🔍 Processing guest inquiry:');
+    console.log('🔍 Processing confirmed guest inquiry:');
     console.log('- Guest name:', guestName);
     console.log('- Message:', message);
-    console.log('- Is paused conversation:', isPaused);
     console.log('- Name request made:', conversation.conversation_context?.name_request_made);
     
-    const isGreeting = MessageUtils.matchesAnyKeywords(message, [
-      'hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening'
-    ]);
-
     // Check for name-related responses FIRST
     const nameCheck = NameHandler.checkIfNameProvided(messageBody, conversation);
     const nameRefusal = NameHandler.detectNameRefusal(messageBody);
-    const isDirectServiceRequest = NameHandler.isDirectServiceRequest(messageBody);
     
     console.log('🏷️ Name check result:', nameCheck);
     console.log('🚫 Name refusal:', nameRefusal);
-    console.log('🔧 Direct service request:', isDirectServiceRequest);
     
-    // PRIORITY 1: Handle name capture
+    // PRIORITY 1: Handle name capture - store name AND process original request if it was delayed
     if (nameCheck.hasName && nameCheck.extractedName && !guestName) {
       console.log('✅ Name captured, storing:', nameCheck.extractedName);
+      
+      // Store the name
       await this.conversationManager.updateConversationState(conversation.phone_number, {
         conversation_context: {
           ...conversation.conversation_context,
           guest_name: nameCheck.extractedName,
-          name_request_made: true
+          name_request_made: true,
+          pending_request: null // Clear any pending request
         }
       });
+      
+      // Check if there was a pending request to process
+      const pendingRequest = conversation.conversation_context?.pending_request;
+      if (pendingRequest) {
+        console.log('🔄 Processing pending request after name capture:', pendingRequest);
+        // Process the original request with the new name
+        const enhancedResult = await this.handleServiceOrRecommendationRequest(
+          { ...conversation, conversation_context: { ...conversation.conversation_context, guest_name: nameCheck.extractedName } },
+          property,
+          pendingRequest,
+          nameCheck.extractedName
+        );
+        return {
+          response: `Nice to meet you, ${nameCheck.extractedName}! ${enhancedResult.response}`,
+          shouldUpdateState: enhancedResult.shouldUpdateState
+        };
+      }
       
       const welcomeWithName = `Nice to meet you, ${nameCheck.extractedName}! How can I help with your stay?`;
       return {
@@ -154,33 +168,35 @@ class EnhancedSmsConversationService {
       };
     }
 
-    // PRIORITY 3: Handle direct questions/service requests without name (but mark as interacted)
-    if (isDirectServiceRequest && !guestName && !conversation.conversation_context?.name_request_made) {
-      console.log('🎯 Direct service request without name, generating fun response');
-      const directResponse = NameHandler.generateDirectQuestionResponse();
-      
-      // Handle the actual request after the fun opening
-      const serviceResponse = await this.handleServiceRequests(conversation, property!, message, null);
-      if (serviceResponse) {
-        // Mark that we've interacted so we don't ask for name later
+    // PRIORITY 3: Handle service/recommendation requests
+    const serviceOrRecommendationResponse = await this.handleServiceOrRecommendationRequest(conversation, property, messageBody, guestName);
+    if (serviceOrRecommendationResponse) {
+      // If we don't have a name and haven't asked yet, ask for name but store the request
+      if (!guestName && !conversation.conversation_context?.name_request_made && !NameHandler.isDirectServiceRequest(messageBody)) {
+        console.log('🏷️ Storing request and asking for name');
         await this.conversationManager.updateConversationState(conversation.phone_number, {
           conversation_context: {
             ...conversation.conversation_context,
-            name_request_made: true
+            name_request_made: true,
+            pending_request: messageBody // Store the original request
           }
         });
         
+        const nameRequest = `${greeting}! Happy to help 🙂 Before we dive in, what's your name so I can assist you more personally?`;
         return {
-          response: `${directResponse} ${serviceResponse.response}`,
-          shouldUpdateState: serviceResponse.shouldUpdateState
+          response: nameRequest,
+          shouldUpdateState: false
         };
       }
       
-      // If no specific service response, handle as location/recommendation request
-      return await this.handleStructuredRecommendations(conversation, property!, messageBody, message, null);
+      return serviceOrRecommendationResponse;
     }
 
-    // PRIORITY 4: Handle greetings (with name if we have it)
+    // PRIORITY 4: Handle greetings
+    const isGreeting = MessageUtils.matchesAnyKeywords(message, [
+      'hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening'
+    ]);
+    
     if (isGreeting) {
       const nameToUse = guestName ? `, ${guestName}` : '';
       let response;
@@ -198,39 +214,32 @@ class EnhancedSmsConversationService {
       };
     }
 
-    // PRIORITY 5: Ask for name gently (only if we should)
-    if (NameHandler.shouldAskForName(messageBody, conversation)) {
-      console.log('🏷️ Gently asking for name');
-      await this.conversationManager.updateConversationState(conversation.phone_number, {
-        conversation_context: {
-          ...conversation.conversation_context,
-          name_request_made: true
-        }
-      });
-      
-      const nameRequest = `${greeting}! Happy to help 🙂 Before we dive in, what's your name so I can assist you more personally? (Or feel free to jump right into your questions!)`;
-      return {
-        response: nameRequest,
-        shouldUpdateState: false
-      };
-    }
+    // PRIORITY 5: Default response
+    return {
+      response: `${greeting}! How can I help with your stay?`,
+      shouldUpdateState: false
+    };
+  }
 
-    // PRIORITY 6: Handle specific service requests (WiFi, parking, etc.)
-    const serviceResponse = await this.handleServiceRequests(conversation, property!, message, guestName);
+  async handleServiceOrRecommendationRequest(conversation: Conversation, property: Property, messageBody: string, guestName: string | null): Promise<ProcessMessageResult | null> {
+    const message = messageBody.trim().toLowerCase();
+    const nameToUse = guestName ? `, ${guestName}` : '';
+
+    // Handle specific service requests (WiFi, parking, etc.)
+    const serviceResponse = await this.handleServiceRequests(conversation, property, message, guestName);
     if (serviceResponse) {
       return serviceResponse;
     }
 
-    // PRIORITY 7: Handle location/recommendation requests with the structured format
+    // Handle location/recommendation requests with enhanced sources
     if (MessageUtils.matchesLocationKeywords(message) || 
-        MessageUtils.matchesAnyKeywords(message, ['restaurant', 'food', 'eat', 'drink', 'bar', 'coffee', 'activities'])) {
+        MessageUtils.matchesAnyKeywords(message, ['restaurant', 'food', 'eat', 'drink', 'bar', 'coffee', 'activities', 'hungry', 'where'])) {
       
-      console.log('🍽️ Processing location/recommendation request');
-      return await this.handleStructuredRecommendations(conversation, property!, messageBody, message, guestName);
+      console.log('🍽️ Processing location/recommendation request with enhanced sources');
+      return await this.getEnhancedRecommendations(conversation, property, messageBody, guestName);
     }
 
-    // PRIORITY 8: Default contextual response
-    return await this.recommendationService.getContextualRecommendations(property!, `general: ${messageBody}`, conversation);
+    return null;
   }
 
   async handleServiceRequests(conversation: Conversation, property: Property, message: string, guestName: string | null): Promise<ProcessMessageResult | null> {
@@ -283,101 +292,73 @@ class EnhancedSmsConversationService {
     return null; // No service request matched
   }
 
-  async handleStructuredRecommendations(conversation: Conversation, property: Property, originalMessage: string, message: string, guestName: string | null): Promise<ProcessMessageResult> {
-    console.log('🎯 Handling structured recommendations');
+  async getEnhancedRecommendations(conversation: Conversation, property: Property, messageBody: string, guestName: string | null): Promise<ProcessMessageResult> {
+    console.log('🎯 Getting enhanced recommendations with premium sources');
     
     try {
+      const propertyAddress = property?.address || 'the property';
+      const propertyName = property?.property_name || 'your accommodation';
       const timezone = conversation.timezone || 'UTC';
       const greeting = ResponseGenerator.getTimeAwareGreeting(timezone);
       const nameToUse = guestName ? `, ${guestName}` : '';
       
-      // 2. ACKNOWLEDGE THE REQUEST + CLARIFY
-      const requestType = this.categorizeRequest(message);
-      console.log('📋 Request type:', requestType);
-      
-      let acknowledgment = '';
-      let clarifyingQuestion = '';
-      
-      if (MessageUtils.matchesAnyKeywords(message, ['food', 'restaurant', 'eat', 'dining', 'hungry'])) {
-        if (MessageUtils.matchesAnyKeywords(message, ['now', 'hungry'])) {
-          acknowledgment = `${greeting}${nameToUse}! Hungry now? I've got you covered 🙂`;
-        } else {
-          acknowledgment = `${greeting}${nameToUse}! Looking for somewhere great to eat? I've got some perfect spots for you 🙂`;
-        }
-        clarifyingQuestion = "Are you in the mood for something quick and casual, or more of a sit-down vibe?";
-      } else if (MessageUtils.matchesAnyKeywords(message, ['drink', 'bar', 'cocktail', 'beer'])) {
-        acknowledgment = `${greeting}${nameToUse}! Ready for drinks? I know some fantastic spots 🙂`;
-        clarifyingQuestion = "Looking for craft cocktails, casual drinks, or maybe rooftop vibes?";
-      } else if (MessageUtils.matchesAnyKeywords(message, ['coffee', 'cafe'])) {
-        acknowledgment = `${greeting}${nameToUse}! Need your coffee fix? I've got great recommendations 🙂`;
-        clarifyingQuestion = "Want something cozy for work or a quick grab-and-go spot?";
-      } else {
-        acknowledgment = `${greeting}${nameToUse}! I'd love to help with recommendations 🙂`;
-        clarifyingQuestion = "What kind of vibe are you going for?";
-      }
+      // Enhanced prompt for better recommendations with local sources
+      const enhancedPrompt = `You are a knowledgeable local concierge assistant with access to premium local guides, food blogs, and insider recommendations. A guest${nameToUse} is staying at ${propertyName} located at ${propertyAddress}. 
 
-      // 3. PROVIDE 1-2 RECOMMENDATIONS (Mock data for now - in real implementation, call Places API)
-      const mockRecommendations = this.getMockRecommendations(requestType, property.address);
-      
-      // 4. ALWAYS END WITH A HELPFUL OFFER
-      const helpfulOffer = "Want more ideas like this or something different?\nWould you like me to send walking or driving directions?";
-      
-      const fullResponse = `${acknowledgment}\n\n${clarifyingQuestion}\n\n${mockRecommendations}\n\n${helpfulOffer}`;
-      
-      // Store the interaction context
-      await this.conversationManager.updateConversationState(conversation.phone_number, {
-        conversation_context: {
-          ...conversation.conversation_context,
-          lastRequestType: requestType,
-          lastRecommendations: mockRecommendations
+Their request: "${messageBody}"
+
+IMPORTANT GUIDELINES:
+- Source recommendations from TOP LOCAL FOOD BLOGS, hospitality guides, and trusted local websites
+- Avoid generic chain restaurants unless they're truly exceptional
+- Include hidden gems and local favorites that locals actually recommend
+- Mention specific dishes or specialties when relevant
+- Provide practical details: distance, price range, and why it's special
+- Keep response under 160 characters for SMS
+- Be warm and personalized${guestName ? ` using ${guestName}'s name` : ''}
+
+Focus on quality over quantity - 1-2 outstanding recommendations are better than many generic ones.`;
+
+      console.log('🤖 Calling enhanced OpenAI recommendations');
+      const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
         },
-        last_message_type: 'recommendations'
+        body: JSON.stringify({ 
+          prompt: enhancedPrompt,
+          propertyAddress: `${propertyName}, ${propertyAddress}`,
+          requestType: 'enhanced_local_recommendations'
+        })
       });
-      
-      return {
-        response: fullResponse,
-        shouldUpdateState: false
-      };
-      
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Enhanced recommendations received');
+        
+        await this.conversationManager.updateConversationState(conversation.phone_number, {
+          last_recommendations: data.recommendation,
+          conversation_context: {
+            ...conversation.conversation_context,
+            lastRecommendationType: 'enhanced_local'
+          }
+        });
+        
+        return {
+          response: data.recommendation,
+          shouldUpdateState: false
+        };
+      } else {
+        throw new Error(`Enhanced recommendations API failed: ${response.status}`);
+      }
     } catch (error) {
-      console.error('❌ Error in structured recommendations:', error);
+      console.error('❌ Error getting enhanced recommendations:', error);
+      
       return {
-        response: "Having trouble with recommendations right now. Try again soon or ask about WiFi, parking, or check-in details.",
+        response: `${guestName ? `${guestName}, ` : ''}having trouble with recommendations right now. Try again soon or ask about WiFi, parking, or check-in details.`,
         shouldUpdateState: false
       };
     }
-  }
-
-  getMockRecommendations(requestType: string, propertyAddress: string): string {
-    // Mock recommendations with proper distance-based phrasing
-    const recommendations = [
-      "Committee (0.2 mi, 4.4★): Trendy Greek spot with creative meze & cocktails—just a short walk away.",
-      "Legal Harborside (0.8 mi, 4.3★): Upscale seafood with waterfront views—best reached by a quick Uber or bike."
-    ];
-    
-    if (requestType.includes('drink') || requestType.includes('bar')) {
-      return [
-        "The Quiet Man Pub (0.3 mi, 4.5★): Cozy Irish pub with great beer selection—just a short walk away.",
-        "Top of the Hub (1.2 mi, 4.2★): Rooftop bar with city views—best reached by a quick Uber or scooter."
-      ].join('\n');
-    }
-    
-    if (requestType.includes('coffee')) {
-      return [
-        "Blue Bottle Coffee (0.1 mi, 4.6★): Artisan coffee and pastries—just a short walk away.",
-        "Thinking Cup (0.7 mi, 4.4★): Local favorite with great atmosphere—best reached by a quick Uber or bike."
-      ].join('\n');
-    }
-    
-    return recommendations.join('\n');
-  }
-
-  categorizeRequest(message: string): string {
-    if (MessageUtils.matchesAnyKeywords(message, ['food', 'restaurant', 'eat', 'dining', 'hungry'])) return 'food';
-    if (MessageUtils.matchesAnyKeywords(message, ['drink', 'bar', 'cocktail', 'beer'])) return 'drinks';
-    if (MessageUtils.matchesAnyKeywords(message, ['coffee', 'cafe'])) return 'coffee';
-    if (MessageUtils.matchesAnyKeywords(message, ['activities', 'things to do', 'attractions'])) return 'activities';
-    return 'general';
   }
 
   async handlePropertyIdInput(conversation: Conversation, input: string): Promise<ProcessMessageResult> {
@@ -487,7 +468,7 @@ serve(async (req) => {
       JSON.stringify({ 
         status: 'healthy', 
         service: 'enhanced-sms-conversation-service',
-        features: ['time-aware-greeting', 'name-capture', 'structured-recommendations', 'service-requests', 'multi-sms'],
+        features: ['enhanced-recommendations', 'local-blog-sources', 'improved-name-capture', 'better-typo-correction'],
         timestamp: new Date().toISOString()
       }),
       {
@@ -566,4 +547,4 @@ serve(async (req) => {
   )
 })
 
-console.log("Enhanced SMS Conversation Service is ready with structured recommendation flow, time-aware greetings, and name capture")
+console.log("Enhanced SMS Conversation Service is ready with improved name capture, better recommendations from local sources, and fixed typo correction")
