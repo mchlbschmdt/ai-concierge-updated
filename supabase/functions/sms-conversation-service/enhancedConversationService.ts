@@ -1,4 +1,3 @@
-
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { ConversationManager } from './conversationManager.ts';
 import { PropertyService } from './propertyService.ts';
@@ -11,6 +10,8 @@ import { NameHandler } from './nameHandler.ts';
 import { MultiPartResponseFormatter } from './multiPartResponseFormatter.ts';
 import { ConversationMemoryManager } from './conversationMemoryManager.ts';
 import { TravelConversationService } from './travelConversationService.ts';
+import { ConversationContextTracker, ConversationFlow } from './conversationContextTracker.ts';
+import { ConversationalResponseGenerator } from './conversationalResponseGenerator.ts';
 
 export class EnhancedConversationService {
   private conversationManager: ConversationManager;
@@ -175,7 +176,8 @@ export class EnhancedConversationService {
             conversation_state: 'confirmed',
             conversation_context: {
               ...conversation.conversation_context,
-              property_confirmed_at: new Date().toISOString()
+              property_confirmed_at: new Date().toISOString(),
+              conversationFlow: { conversationDepth: 0, recentTopics: [] } // Initialize conversation flow
             }
           });
           
@@ -210,7 +212,7 @@ export class EnhancedConversationService {
 
       // ENHANCED CONFIRMED GUEST PROCESSING
       if (conversation.conversation_state === 'confirmed') {
-        console.log("🎯 Processing confirmed guest message");
+        console.log("🎯 Processing confirmed guest message with enhanced conversation flow");
         
         // Validate we have property information
         if (!conversation.property_id) {
@@ -253,6 +255,12 @@ export class EnhancedConversationService {
         }
 
         try {
+          // Get current conversation flow
+          const currentFlow: ConversationFlow = conversation.conversation_context?.conversationFlow || {
+            conversationDepth: 0,
+            recentTopics: []
+          };
+
           // Handle name detection first
           const nameDetection = NameHandler.detectAndExtractName(cleanMessage);
           if (nameDetection.nameDetected && nameDetection.extractedName) {
@@ -272,10 +280,47 @@ export class EnhancedConversationService {
             return { messages, nameDetected: true };
           }
           
-          // Generate contextual response based on conversation history and current message
-          const contextualResponse = this.generateContextualResponse(conversation, cleanMessage, property);
-          const messages = MultiPartResponseFormatter.formatResponse(contextualResponse);
-          return { messages, contextualResponse: true };
+          // Recognize intent with enhanced context
+          const intentResult = IntentRecognitionService.recognizeIntent(cleanMessage);
+          console.log("🎯 Intent recognition result:", intentResult);
+
+          // Check for follow-up intent
+          const followUpIntent = ConversationContextTracker.detectFollowUpIntent(cleanMessage, currentFlow);
+          const finalIntent = followUpIntent || intentResult.intent;
+          
+          console.log("🔄 Final intent (with follow-up detection):", finalIntent);
+
+          // Generate conversational response
+          const conversationalResponse = ConversationalResponseGenerator.generateContextualResponse(
+            finalIntent,
+            currentFlow,
+            property,
+            cleanMessage,
+            conversation.guest_name
+          );
+
+          // Update conversation flow context
+          const updatedFlow = ConversationContextTracker.updateConversationFlow(
+            currentFlow,
+            finalIntent,
+            cleanMessage,
+            conversationalResponse
+          );
+
+          // Update conversation state with new flow
+          await this.conversationManager.updateConversationState(phoneNumber, {
+            conversation_context: {
+              ...conversation.conversation_context,
+              conversationFlow: updatedFlow,
+              last_intent: finalIntent,
+              last_response: conversationalResponse
+            }
+          });
+
+          console.log("✅ Updated conversation flow:", updatedFlow);
+          
+          const messages = MultiPartResponseFormatter.formatResponse(conversationalResponse);
+          return { messages, conversationalResponse: true, intent: finalIntent };
           
         } catch (confirmedError) {
           console.error("❌ Error processing confirmed guest message:", confirmedError);
