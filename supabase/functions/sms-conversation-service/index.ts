@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { ConversationManager } from './conversationManager.ts'
@@ -16,6 +15,11 @@ const corsHeaders = {
 
 console.log("Enhanced SMS Conversation Service starting up...")
 
+interface MultiMessageResult {
+  messages: string[];
+  shouldUpdateState: boolean;
+}
+
 class EnhancedSmsConversationService {
   private conversationManager: ConversationManager;
   private propertyService: PropertyService;
@@ -27,7 +31,7 @@ class EnhancedSmsConversationService {
     this.recommendationService = new RecommendationService(supabase, this.conversationManager);
   }
 
-  async processMessage(phoneNumber: string, messageBody: string): Promise<ProcessMessageResult> {
+  async processMessage(phoneNumber: string, messageBody: string): Promise<MultiMessageResult> {
     console.log('=== PROCESSING ENHANCED MESSAGE ===');
     console.log('Phone:', phoneNumber);
     console.log('Message:', messageBody);
@@ -43,32 +47,39 @@ class EnhancedSmsConversationService {
       // Handle reset commands
       if (cleanMessage === 'reset' || cleanMessage === 'restart' || cleanMessage === 'start over') {
         await this.conversationManager.resetConversation(phoneNumber);
-        return {
-          response: "I've reset our conversation. Please text your property ID to get started.",
-          shouldUpdateState: true
-        };
+        return this.wrapSingleResponse("I've reset our conversation. Please text your property ID to get started.");
       }
+
+      let result: ProcessMessageResult;
 
       switch (conversation.conversation_state) {
         case 'awaiting_property_id':
-          return await this.handlePropertyIdInput(conversation, cleanMessage);
+          result = await this.handlePropertyIdInput(conversation, cleanMessage);
+          break;
         
         case 'awaiting_confirmation':
-          return await this.handleConfirmation(conversation, cleanMessage);
+          result = await this.handleConfirmation(conversation, cleanMessage);
+          break;
         
         case 'confirmed':
-          return await this.handleConfirmedGuestInquiry(conversation, messageBody, isPaused);
+          result = await this.handleConfirmedGuestInquiry(conversation, messageBody, isPaused);
+          break;
         
         default:
           await this.conversationManager.resetConversation(phoneNumber);
-          return this.getWelcomeMessage();
+          result = this.getWelcomeMessage();
       }
+
+      // Split the response into multiple messages if needed
+      const messageSegments = MessageUtils.ensureSmsLimit(result.response);
+      return {
+        messages: messageSegments,
+        shouldUpdateState: result.shouldUpdateState
+      };
+
     } catch (error) {
       console.error('Error processing message:', error);
-      return {
-        response: "Sorry, I encountered an error. Please try again or text 'reset'.",
-        shouldUpdateState: false
-      };
+      return this.wrapSingleResponse("Sorry, I encountered an error. Please try again or text 'reset'.");
     }
   }
 
@@ -85,17 +96,7 @@ class EnhancedSmsConversationService {
     // Check if we need to capture the guest's name
     const nameCheck = NameHandler.checkIfNameProvided(messageBody, conversation);
     
-    if (!nameCheck.hasName && !isGreeting && !MessageUtils.matchesLocationKeywords(message) && 
-        !MessageUtils.matchesServiceKeywords(message)) {
-      // Ask for name with time-aware greeting
-      const nameRequest = `${greeting}! Happy to help 🙂 Before we dive in, what's your name so I can assist you more personally?`;
-      return {
-        response: MessageUtils.ensureSmsLimit(nameRequest),
-        shouldUpdateState: false
-      };
-    }
-
-    // If name was just provided, store it and continue
+    // If name was just provided, store it and acknowledge
     if (nameCheck.extractedName && !guestName) {
       await this.conversationManager.updateConversationState(conversation.phone_number, {
         conversation_context: {
@@ -106,7 +107,20 @@ class EnhancedSmsConversationService {
       
       const welcomeWithName = `Nice to meet you, ${nameCheck.extractedName}! How can I help with your stay?`;
       return {
-        response: MessageUtils.ensureSmsLimit(welcomeWithName),
+        response: welcomeWithName,
+        shouldUpdateState: false
+      };
+    }
+
+    // If we should ask for name (not a greeting, no name provided, no name stored)
+    if (NameHandler.shouldAskForName(messageBody, conversation) && 
+        !isGreeting && 
+        !MessageUtils.matchesLocationKeywords(message) && 
+        !MessageUtils.matchesServiceKeywords(message)) {
+      
+      const nameRequest = `${greeting}! Happy to help 🙂 Before we dive in, what's your name so I can assist you more personally?`;
+      return {
+        response: nameRequest,
         shouldUpdateState: false
       };
     }
@@ -117,14 +131,14 @@ class EnhancedSmsConversationService {
       const nameToUse = guestName ? `, ${guestName}` : '';
       let response = `${greeting}${nameToUse}! Welcome back! ${contextualFollowUp}How can I help?`;
       return {
-        response: MessageUtils.ensureSmsLimit(response),
+        response: response,
         shouldUpdateState: false
       };
     } else if (isGreeting) {
       const nameToUse = guestName ? `, ${guestName}` : '';
       let response = `${greeting}${nameToUse}! How can I help with your stay?`;
       return {
-        response: MessageUtils.ensureSmsLimit(response),
+        response: response,
         shouldUpdateState: false
       };
     }
@@ -142,7 +156,7 @@ class EnhancedSmsConversationService {
         const response = `Here you go${nameToUse}!\n\nWiFi: ${property.wifi_name}\nPassword: ${property.wifi_password}\n\nAnything else?`;
         await this.conversationManager.updateConversationContext(conversation, 'wifi');
         return {
-          response: MessageUtils.ensureSmsLimit(response),
+          response: response,
           shouldUpdateState: false
         };
       } else {
@@ -159,7 +173,7 @@ class EnhancedSmsConversationService {
         await this.conversationManager.updateConversationContext(conversation, 'parking');
         const nameToUse = guestName ? `, ${guestName}` : '';
         return {
-          response: MessageUtils.ensureSmsLimit(property.parking_instructions + `\n\nOther questions${nameToUse}?`),
+          response: property.parking_instructions + `\n\nOther questions${nameToUse}?`,
           shouldUpdateState: false
         };
       } else {
@@ -177,7 +191,7 @@ class EnhancedSmsConversationService {
       const nameToUse = guestName ? `, ${guestName}` : '';
       const response = `Check-in: ${checkIn}\nCheck-out: ${checkOut}\n\nAnything else${nameToUse}?`;
       return {
-        response: MessageUtils.ensureSmsLimit(response),
+        response: response,
         shouldUpdateState: false
       };
     }
@@ -219,7 +233,7 @@ class EnhancedSmsConversationService {
 
       const response = `Great! You're staying at ${property.property_name}, ${property.address}. Correct? Reply Y or N.`;
       return {
-        response: MessageUtils.ensureSmsLimit(response),
+        response: response,
         shouldUpdateState: true
       };
     } catch (error) {
@@ -249,7 +263,7 @@ class EnhancedSmsConversationService {
       const response = `${greeting}! I'm your AI concierge. I can help with WiFi, parking, directions, and local tips. What do you need?`;
       
       return {
-        response: MessageUtils.ensureSmsLimit(response),
+        response: response,
         shouldUpdateState: true
       };
     } else if (isNo) {
@@ -276,6 +290,14 @@ class EnhancedSmsConversationService {
       shouldUpdateState: false
     };
   }
+
+  private wrapSingleResponse(response: string): MultiMessageResult {
+    const messageSegments = MessageUtils.ensureSmsLimit(response);
+    return {
+      messages: messageSegments,
+      shouldUpdateState: true
+    };
+  }
 }
 
 serve(async (req) => {
@@ -291,7 +313,7 @@ serve(async (req) => {
       JSON.stringify({ 
         status: 'healthy', 
         service: 'enhanced-sms-conversation-service',
-        features: ['continuity', 'personalization', 'time-awareness', 'friendly-format', 'name-capture'],
+        features: ['continuity', 'personalization', 'time-awareness', 'friendly-format', 'name-capture', 'multi-sms'],
         timestamp: new Date().toISOString()
       }),
       {
@@ -370,4 +392,4 @@ serve(async (req) => {
   )
 })
 
-console.log("Enhanced SMS Conversation Service is ready with friendly, time-aware recommendation format and name capture")
+console.log("Enhanced SMS Conversation Service is ready with friendly, time-aware recommendation format, name capture, and multi-SMS support")

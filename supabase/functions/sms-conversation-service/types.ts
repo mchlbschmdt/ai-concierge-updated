@@ -32,3 +32,8 @@ export interface ProcessMessageResult {
   response: string;
   shouldUpdateState: boolean;
 }
+
+export interface MultiMessageResult {
+  messages: string[];
+  shouldUpdateState: boolean;
+}
