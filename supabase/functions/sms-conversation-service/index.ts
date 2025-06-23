@@ -590,7 +590,7 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
         conversation_state: 'awaiting_confirmation'
       });
 
-      const response = `Great! You're staying at ${property.property_name}. Correct? Reply Y or N.`;
+      const response = `Great! You're staying at ${property.property_name}, ${property.address}. Correct? Reply Y or N.`;
       return {
         response: this.ensureSmsLimit(response),
         shouldUpdateState: true
