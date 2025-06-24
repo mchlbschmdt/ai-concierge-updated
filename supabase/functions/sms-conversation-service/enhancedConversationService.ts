@@ -40,16 +40,41 @@ export class EnhancedConversationService {
       };
     }
 
-    // Check for dining conversation follow-up FIRST
+    // ENHANCED: Check for dining follow-up OR new food request FIRST
     const diningState = conversation.conversation_context?.dining_conversation_state;
-    if (diningState === 'awaiting_vibe_preference') {
-      console.log('🍽️ Detected dining follow-up - user is responding to vibe question');
+    const lowerMessage = message.toLowerCase();
+    
+    // Check if this is a food-related request (even if dining state says completed)
+    const isFoodRelated = this.isFoodRelatedMessage(message);
+    
+    if (diningState === 'awaiting_vibe_preference' || (isFoodRelated && diningState === 'provided_additional_recs')) {
+      console.log('🍽️ Detected dining follow-up or new food request');
+      
+      // If they're asking for different food after completing a dining conversation, reset the state
+      if (diningState === 'provided_additional_recs' && isFoodRelated) {
+        console.log('🔄 Resetting dining state for new food request');
+        await this.conversationManager.updateConversationState(phoneNumber, {
+          conversation_context: {
+            ...conversation.conversation_context,
+            dining_conversation_state: 'awaiting_vibe_preference',
+            dining_curated_used: [] // Reset used recommendations for fresh start
+          }
+        });
+      }
+      
       return await this.handleDiningFollowUp(property, message, conversation.conversation_context, '', phoneNumber);
     }
 
-    // Recognize intent
+    // Recognize intent with enhanced food detection
     const intentResult = IntentRecognitionService.recognizeIntent(message);
     console.log('🧠 Intent recognized:', intentResult);
+
+    // OVERRIDE: If intent is generic but message is clearly food-related, change to food recommendation
+    if ((intentResult.intent === 'general_inquiry' || intentResult.intent === 'ask_multiple_requests') && isFoodRelated) {
+      console.log('🍽️ Overriding intent to food recommendations due to food keywords');
+      intentResult.intent = 'ask_food_recommendations';
+      intentResult.confidence = 0.9;
+    }
 
     // Handle conversation reset
     if (intentResult.intent === 'conversation_reset') {
@@ -211,6 +236,22 @@ export class EnhancedConversationService {
       conversationalResponse: true,
       intent: finalIntent
     };
+  }
+
+  // NEW: Enhanced food detection method
+  private isFoodRelatedMessage(message: string): boolean {
+    const lowerMessage = message.toLowerCase();
+    const foodKeywords = [
+      'food', 'restaurant', 'eat', 'dining', 'hungry', 'meal', 'lunch', 'dinner', 'breakfast',
+      'burger', 'pizza', 'sushi', 'italian', 'mexican', 'chinese', 'american', 'cuisine',
+      'cafe', 'bistro', 'grill', 'bar', 'pub', 'deli', 'bakery', 'seafood', 'steakhouse',
+      'casual', 'upscale', 'fine dining', 'fast food', 'takeout', 'delivery', 'reservation',
+      'menu', 'chef', 'cook', 'taste', 'flavor', 'spicy', 'sweet', 'savory',
+      'close by', 'nearby restaurant', 'good food', 'best restaurant', 'where to eat',
+      'hungry for', 'craving', 'something to eat', 'grab a bite', 'food recommendation'
+    ];
+    
+    return foodKeywords.some(keyword => lowerMessage.includes(keyword));
   }
 
   private async handleConversationalDining(property: Property, message: string, conversation: any, phoneNumber: string) {
