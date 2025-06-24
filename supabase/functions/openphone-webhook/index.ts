@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -513,8 +512,20 @@ serve(async (req) => {
                     let lastError = null;
                     
                     for (let i = 0; i < responseMessages.length; i++) {
-                      const messageSegment = responseMessages[i];
-                      console.log(`📤 Sending segment ${i + 1}/${responseMessages.length}:`, messageSegment.substring(0, 50) + '...');
+                      let messageSegment = responseMessages[i];
+                      
+                      // FIX: Handle both string and array formats correctly
+                      if (Array.isArray(messageSegment)) {
+                        // If it's an array, join the elements into a single string
+                        messageSegment = messageSegment.join(' ');
+                        console.log(`📤 Converted array segment ${i + 1} to string:`, messageSegment.substring(0, 50) + '...');
+                      } else if (typeof messageSegment !== 'string') {
+                        // If it's not a string or array, convert to string
+                        messageSegment = String(messageSegment);
+                        console.log(`📤 Converted segment ${i + 1} to string:`, messageSegment.substring(0, 50) + '...');
+                      } else {
+                        console.log(`📤 Sending segment ${i + 1}/${responseMessages.length}:`, messageSegment.substring(0, 50) + '...');
+                      }
                       
                       // Always use business phone number for outgoing messages
                       const smsResult = await sendSmsResponse(apiKey, message.from, BUSINESS_PHONE_NUMBER, messageSegment);
