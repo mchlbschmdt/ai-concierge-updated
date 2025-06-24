@@ -1,4 +1,6 @@
+
 import { Conversation, Property } from './types.ts';
+import { ResetHandler } from './resetHandler.ts';
 
 export class ConversationManager {
   constructor(private supabase: any) {}
@@ -83,14 +85,31 @@ export class ConversationManager {
   }
 
   async resetConversation(phoneNumber: string): Promise<Conversation> {
-    return await this.updateConversationState(phoneNumber, {
-      conversation_state: 'awaiting_property_id',
-      property_id: null,
-      property_confirmed: false,
-      conversation_context: {},
-      last_message_type: null,
-      last_recommendations: null
-    });
+    console.log('🔄 Resetting conversation with complete memory clear for:', phoneNumber);
+    
+    // Use the enhanced reset handler to get complete reset updates
+    const resetUpdates = ResetHandler.getCompleteResetUpdates({});
+    
+    return await this.updateConversationState(phoneNumber, resetUpdates);
+  }
+
+  // Add method to clear recommendation memory specifically for testing
+  async clearRecommendationMemory(phoneNumber: string): Promise<Conversation> {
+    console.log('🧹 Clearing recommendation memory for testing:', phoneNumber);
+    
+    const resetUpdates = {
+      conversation_context: {
+        recommendation_history: {},
+        recent_intents: [],
+        global_recommendation_blacklist: [],
+        conversation_depth: 0,
+        last_interaction: new Date().toISOString()
+      },
+      last_recommendations: null,
+      last_message_type: null
+    };
+    
+    return await this.updateConversationState(phoneNumber, resetUpdates);
   }
 
   async updateConversationContext(conversation: Conversation, messageType: string): Promise<void> {

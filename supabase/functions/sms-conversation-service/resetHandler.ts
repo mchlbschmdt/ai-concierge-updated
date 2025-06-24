@@ -42,7 +42,7 @@ export class ResetHandler {
     console.log('🧹 ResetHandler.getCompleteResetUpdates called');
     
     try {
-      // Preserve global blacklist but clear everything else for a complete reset
+      // Preserve only essential cross-session data, clear everything else
       const globalBlacklist = context?.global_recommendation_blacklist || [];
       
       const resetUpdates = {
@@ -50,7 +50,7 @@ export class ResetHandler {
         property_id: null,
         property_confirmed: false,
         conversation_context: {
-          recommendation_history: {},
+          recommendation_history: {}, // Clear all recommendation history
           recent_intents: ['conversation_reset'],
           last_intent: 'conversation_reset',
           conversation_depth: 0,
@@ -61,11 +61,11 @@ export class ResetHandler {
           pending_property: null,
           guest_name: null
         },
-        last_recommendations: null,
+        last_recommendations: null, // Clear cached recommendations
         last_message_type: null
       };
       
-      console.log('✅ Successfully prepared complete reset updates:', resetUpdates);
+      console.log('✅ Successfully prepared complete reset updates with cleared recommendation history:', resetUpdates);
       return resetUpdates;
     } catch (error) {
       console.error('❌ Error preparing reset updates:', error);
@@ -89,6 +89,42 @@ export class ResetHandler {
         last_recommendations: null,
         last_message_type: null
       };
+    }
+  }
+
+  // Add method to clear specific phone number's conversation memory
+  static async clearConversationMemory(supabase: any, phoneNumber: string): Promise<void> {
+    console.log('🧹 Clearing conversation memory for phone number:', phoneNumber);
+    
+    try {
+      const resetUpdates = {
+        conversation_state: 'property_confirmed', // Keep property confirmed if they had one
+        conversation_context: {
+          recommendation_history: {}, // Clear all recommendation history
+          recent_intents: [],
+          conversation_depth: 0,
+          last_interaction: new Date().toISOString(),
+          global_recommendation_blacklist: [], // Clear blacklist for fresh start
+          reset_count: 0
+        },
+        last_recommendations: null, // Clear cached recommendations
+        last_message_type: null
+      };
+
+      const { error } = await supabase
+        .from('sms_conversations')
+        .update(resetUpdates)
+        .eq('phone_number', phoneNumber);
+
+      if (error) {
+        console.error('❌ Error clearing conversation memory:', error);
+        throw error;
+      }
+
+      console.log('✅ Successfully cleared conversation memory for:', phoneNumber);
+    } catch (error) {
+      console.error('❌ Failed to clear conversation memory:', error);
+      throw error;
     }
   }
 }

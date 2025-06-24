@@ -1,3 +1,4 @@
+
 export interface ConversationMemory {
   last_intent?: string;
   recent_intents?: string[];
@@ -153,33 +154,31 @@ export class ConversationMemoryManager {
     const memory: ConversationMemory = existingContext || {};
     const resetCount = (memory.conversation_reset_count || 0) + 1;
     
-    // Preserve global blacklist across resets (this is key!)
-    const globalBlacklist = memory.global_recommendation_blacklist || [];
+    // COMPLETELY clear global blacklist for fresh recommendations
+    console.log('🧹 Clearing all recommendation memory for fresh start');
     
-    console.log('🚫 Preserving global recommendation blacklist:', globalBlacklist);
-    
-    // Clear conversation state but preserve essential cross-session data
+    // Clear ALL conversation state for complete reset
     const clearedContext = {
       // Preserve essential info
       guest_name: guestName || existingContext?.guest_name,
       property_id: existingContext?.property_id,
       property_confirmed: existingContext?.property_confirmed,
       
-      // Preserve global blacklist (key for preventing repetition)
-      global_recommendation_blacklist: globalBlacklist,
+      // CLEAR global blacklist for fresh recommendations
+      global_recommendation_blacklist: [],
       
       // Reset conversation state
       last_intent: 'conversation_reset',
       recent_intents: ['conversation_reset'],
-      recommendation_history: {}, // Clear session-specific recommendations
+      recommendation_history: {}, // Clear ALL session-specific recommendations
       conversation_reset_count: resetCount,
       conversation_depth: 0,
       last_interaction: new Date().toISOString(),
       last_response_type: 'reset_response'
     };
 
-    // Generate contextual reset response with variety promise
-    const response = this.generateResetResponse(guestName, resetCount, globalBlacklist.length > 0);
+    // Generate contextual reset response emphasizing fresh start
+    const response = this.generateResetResponse(guestName, resetCount, false); // Always treat as fresh start
 
     return { context: clearedContext, response };
   }
@@ -187,26 +186,13 @@ export class ConversationMemoryManager {
   private static generateResetResponse(guestName?: string, resetCount?: number, hasHistory?: boolean): string {
     const namePrefix = guestName ? `${guestName}, ` : '';
     
-    let responses = [];
-    
-    if (hasHistory) {
-      // When we have previous recommendations, emphasize variety
-      responses = [
-        `${namePrefix}no problem! Let's explore some completely different options. What would you like to try - different dining spots, activities, or local gems?`,
-        `${namePrefix}sure thing! I'll suggest some fresh options you haven't heard about yet. Looking for food, things to do, or property info?`,
-        `${namePrefix}absolutely! Time for some new discoveries. What sounds good - different restaurants, activities, or other local spots?`,
-        `${namePrefix}let's start fresh with some new recommendations! Are you in the mood for different dining, activities, or anything else?`,
-        `${namePrefix}happy to help with something completely different! What can I suggest - new food spots, activities, or property details?`
-      ];
-    } else {
-      // Standard reset responses
-      responses = [
-        `${namePrefix}no problem! What would you like to explore instead? I can help with dining, activities, local spots, or property details.`,
-        `${namePrefix}let's try something different! Are you looking for restaurants, things to do, or information about your stay?`,
-        `${namePrefix}sure thing! What can I help you with? Dining options, local activities, or property information?`,
-        `${namePrefix}of course! What would you like to know about? Food, activities, or details about your stay?`
-      ];
-    }
+    // Always emphasize fresh start after clearing memory
+    const responses = [
+      `${namePrefix}let's start fresh! What would you like to explore? I can help with dining, activities, local spots, or property details.`,
+      `${namePrefix}perfect! What can I help you discover? Looking for restaurants, things to do, or information about your stay?`,
+      `${namePrefix}sure thing! What sounds interesting - food options, local activities, or property information?`,
+      `${namePrefix}absolutely! What would you like to know about? Dining, attractions, or details about your stay?`
+    ];
 
     // Use reset count to ensure variety in responses
     const responseIndex = (resetCount || 0) % responses.length;
@@ -275,6 +261,22 @@ export class ConversationMemoryManager {
     }
 
     return contextParts.length > 0 ? contextParts.join('. ') + '.' : '';
+  }
+
+  // Add method to completely clear recommendation memory for testing
+  static clearRecommendationMemory(context: any): any {
+    console.log('🧹 Completely clearing recommendation memory for fresh testing');
+    
+    const clearedContext = {
+      ...context,
+      recommendation_history: {},
+      global_recommendation_blacklist: [],
+      recent_intents: [],
+      last_intent: null,
+      last_response_type: null
+    };
+    
+    return clearedContext;
   }
 
   private static extractPlaceNames(content: string): string[] {

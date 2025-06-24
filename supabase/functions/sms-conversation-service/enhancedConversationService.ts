@@ -84,6 +84,7 @@ export class EnhancedConversationService {
       
       if (propertyRecommendations) {
         console.log('🏠 Using property-specific recommendations');
+        console.log('📝 Property recommendation content length:', propertyRecommendations.length);
         
         // Update conversation memory with property recommendation
         const updatedContext = ConversationMemoryManager.updateMemory(
@@ -215,8 +216,12 @@ export class EnhancedConversationService {
     const localRecs = property.local_recommendations;
     
     if (!localRecs) {
+      console.log('❌ No local recommendations found in property');
       return null;
     }
+
+    console.log('🔍 Checking property recommendations for intent:', intent);
+    console.log('📄 Local recommendations length:', localRecs.length);
 
     const lowerMessage = message.toLowerCase();
     const guestName = property.knowledge_base?.guest_name;
@@ -228,53 +233,73 @@ export class EnhancedConversationService {
       const regex = new RegExp(`${upperCategory}:\\s*([^A-Z]*?)(?=[A-Z][A-Z]+:|$)`, 'i');
       const match = text.match(regex);
       
+      console.log(`🔍 Extracting ${category} section:`, match ? 'Found' : 'Not found');
+      
       if (match && match[1]) {
-        return match[1].trim();
+        const extracted = match[1].trim();
+        console.log(`✅ Extracted ${category} section length:`, extracted.length);
+        return extracted;
       }
       return null;
     };
 
     // Check for food/restaurant recommendations
     if (intent === 'ask_food_recommendations') {
+      console.log('🍽️ Processing food recommendation request');
+      
       // Try to extract just the RESTAURANTS section
       let restaurantSection = extractCategorySection(localRecs, 'RESTAURANTS');
       
       // If no specific RESTAURANTS section, check if the whole text is about food
       if (!restaurantSection && (localRecs.toLowerCase().includes('restaurant') || localRecs.toLowerCase().includes('food') || localRecs.toLowerCase().includes('dining'))) {
+        console.log('🍽️ No RESTAURANTS section found, using full text as food-related');
         restaurantSection = localRecs;
       }
       
       if (restaurantSection) {
-        return `${namePrefix}here are my top local dining recommendations: ${restaurantSection}\n\nWould you like directions to any of these places?`;
+        const response = `${namePrefix}here are my top local dining recommendations: ${restaurantSection}\n\nWould you like directions to any of these places?`;
+        console.log('✅ Generated food recommendation response length:', response.length);
+        return response;
       }
     }
 
     // Check for activities
     if (intent === 'ask_activities') {
+      console.log('🎯 Processing activities recommendation request');
+      
       let activitiesSection = extractCategorySection(localRecs, 'ATTRACTIONS') || extractCategorySection(localRecs, 'ACTIVITIES');
       
       if (!activitiesSection && (localRecs.toLowerCase().includes('activity') || localRecs.toLowerCase().includes('attraction') || localRecs.toLowerCase().includes('visit'))) {
+        console.log('🎯 No ACTIVITIES section found, using full text as activity-related');
         activitiesSection = localRecs;
       }
       
       if (activitiesSection) {
-        return `${namePrefix}here are some great local activities: ${activitiesSection}\n\nNeed more details about any of these?`;
+        const response = `${namePrefix}here are some great local activities: ${activitiesSection}\n\nNeed more details about any of these?`;
+        console.log('✅ Generated activities recommendation response length:', response.length);
+        return response;
       }
     }
 
     // Check for grocery/shopping
     if (intent === 'ask_grocery_stores') {
+      console.log('🛒 Processing grocery recommendation request');
+      
       let shoppingSection = extractCategorySection(localRecs, 'SHOPPING') || extractCategorySection(localRecs, 'STORES');
       
       if (!shoppingSection && (localRecs.toLowerCase().includes('grocery') || localRecs.toLowerCase().includes('store') || localRecs.toLowerCase().includes('market'))) {
+        console.log('🛒 No SHOPPING section found, using full text as shopping-related');
         shoppingSection = localRecs;
       }
       
       if (shoppingSection) {
-        return `${namePrefix}here are nearby shopping options: ${shoppingSection}\n\nWant directions to any of these stores?`;
+        const response = `${namePrefix}here are nearby shopping options: ${shoppingSection}\n\nWant directions to any of these stores?`;
+        console.log('✅ Generated shopping recommendation response length:', response.length);
+        return response;
       }
     }
 
+    console.log('❌ No matching recommendations found for intent:', intent);
     return null;
   }
 }
