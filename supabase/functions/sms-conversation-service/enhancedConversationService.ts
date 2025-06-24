@@ -209,34 +209,46 @@ export class EnhancedConversationService {
   private async handleConversationalDining(property: Property, message: string, conversation: any, phoneNumber: string) {
     console.log('🍽️ Starting conversational dining flow');
     
-    const guestName = property.knowledge_base?.guest_name;
+    // FORCE CLEAR ALL DINING MEMORY for fresh start
+    console.log('🧹 Force clearing ALL dining and recommendation memory');
+    await this.conversationManager.updateConversationState(phoneNumber, {
+      conversation_context: {
+        ...conversation.conversation_context,
+        // Clear ALL recommendation memory
+        recommendation_history: {},
+        global_recommendation_blacklist: [],
+        dining_curated_used: [],
+        dining_conversation_state: null,
+        dining_vibe_preference: null,
+        // Clear recent intents that might interfere
+        recent_intents: ['ask_food_recommendations'],
+        last_intent: 'ask_food_recommendations',
+        last_response_type: null
+      },
+      last_recommendations: null,
+      last_message_type: 'ask_food_recommendations'
+    });
+    
+    const guestName = conversation.conversation_context?.guest_name;
     const namePrefix = guestName ? `${guestName}, ` : '';
     
-    // Check if this is a follow-up response to a dining question
-    const context = conversation.conversation_context || {};
-    const isDiningFollowUp = context.last_intent === 'ask_food_recommendations' && 
-                           context.dining_conversation_state;
-    
-    if (isDiningFollowUp) {
-      console.log('🔄 Handling dining follow-up conversation');
-      return await this.handleDiningFollowUp(property, message, context, namePrefix, phoneNumber);
-    }
-    
-    // First time dining request - start with one curated recommendation
+    // Get ONLY a restaurant recommendation (fixed extraction logic)
     const curatedRestaurant = this.getCuratedRestaurantRecommendation(property);
     
     if (curatedRestaurant) {
-      console.log('🏠 Starting with curated restaurant recommendation');
+      console.log('🏠 Starting with curated restaurant recommendation:', curatedRestaurant);
       
       const response = `${namePrefix}${curatedRestaurant}\n\nWhat's your vibe — casual local spot, rooftop cocktails, or something upscale?`;
       
       // Update context to track dining conversation state
       const updatedContext = {
-        ...context,
+        ...conversation.conversation_context,
         last_intent: 'ask_food_recommendations',
         dining_conversation_state: 'awaiting_vibe_preference',
         dining_curated_used: [curatedRestaurant],
-        conversation_depth: (context.conversation_depth || 0) + 1,
+        recommendation_history: {},
+        global_recommendation_blacklist: [],
+        conversation_depth: 1,
         last_interaction: new Date().toISOString()
       };
       
@@ -256,10 +268,12 @@ export class EnhancedConversationService {
       const result = await this.getSingleRestaurantRecommendation(property, message, conversation);
       
       const updatedContext = {
-        ...context,
+        ...conversation.conversation_context,
         last_intent: 'ask_food_recommendations',
         dining_conversation_state: 'awaiting_vibe_preference',
-        conversation_depth: (context.conversation_depth || 0) + 1,
+        recommendation_history: {},
+        global_recommendation_blacklist: [],
+        conversation_depth: 1,
         last_interaction: new Date().toISOString()
       };
       
@@ -274,6 +288,70 @@ export class EnhancedConversationService {
         intent: 'ask_food_recommendations'
       };
     }
+  }
+
+  private getCuratedRestaurantRecommendation(property: Property): string | null {
+    const localRecs = property.local_recommendations;
+    if (!localRecs) return null;
+    
+    console.log('🔍 Extracting ONLY restaurant recommendations from property data');
+    
+    // FIXED: Only extract from RESTAURANTS section, NEVER from beaches or other sections
+    const restaurantMatch = localRecs.match(/RESTAURANTS?:\s*([^A-Z]*?)(?=[A-Z][A-Z]+:|$)/i);
+    
+    if (!restaurantMatch || !restaurantMatch[1]) {
+      console.log('❌ No RESTAURANTS section found in property data');
+      return null;
+    }
+    
+    const restaurantText = restaurantMatch[1].trim();
+    console.log('📋 Found RESTAURANTS section:', restaurantText);
+    
+    // Extract the first actual restaurant (not beaches!)
+    const lines = restaurantText.split(/[.\n]/).filter(line => line.trim().length > 0);
+    
+    for (const line of lines) {
+      const cleaned = line.trim().replace(/^[-•*]\s*/, '');
+      
+      // SAFEGUARD: Explicitly reject anything with "beach" in it
+      if (cleaned.toLowerCase().includes('beach')) {
+        console.log('🚫 Skipping beach entry:', cleaned);
+        continue;
+      }
+      
+      // Only accept lines that look like restaurants
+      if (cleaned.length > 10 && this.isActualRestaurant(cleaned)) {
+        console.log('✅ Found valid restaurant recommendation:', cleaned);
+        return cleaned;
+      }
+    }
+    
+    console.log('❌ No valid restaurant recommendations found');
+    return null;
+  }
+
+  private isActualRestaurant(text: string): boolean {
+    const lowerText = text.toLowerCase();
+    
+    // SAFEGUARD: Explicitly reject beaches
+    if (lowerText.includes('beach') || lowerText.includes('swimming') || lowerText.includes('surfing')) {
+      return false;
+    }
+    
+    // Look for restaurant indicators
+    const restaurantIndicators = [
+      'restaurant', 'dining', 'cuisine', 'menu', 'chef', 'bar', 'cafe', 'bistro', 
+      'grill', 'kitchen', 'eatery', 'food', 'tasting', 'cocktail', 'wine'
+    ];
+    
+    const hasRestaurantIndicator = restaurantIndicators.some(indicator => 
+      lowerText.includes(indicator)
+    );
+    
+    // Also check if it has proper noun structure (restaurant names)
+    const hasProperNoun = /[A-Z][a-z]+/.test(text);
+    
+    return hasRestaurantIndicator || (hasProperNoun && text.length < 100);
   }
 
   private async handleDiningFollowUp(property: Property, message: string, context: any, namePrefix: string, phoneNumber: string) {
@@ -325,52 +403,19 @@ export class EnhancedConversationService {
     };
   }
 
-  private getCuratedRestaurantRecommendation(property: Property): string | null {
-    const localRecs = property.local_recommendations;
-    if (!localRecs) return null;
-    
-    console.log('🔍 Extracting single restaurant recommendation from property data');
-    
-    // Try to extract restaurants section first
-    const restaurantMatch = localRecs.match(/RESTAURANTS?:\s*([^A-Z]*?)(?=[A-Z][A-Z]+:|$)/i);
-    let restaurantText = '';
-    
-    if (restaurantMatch && restaurantMatch[1]) {
-      restaurantText = restaurantMatch[1].trim();
-    } else if (localRecs.toLowerCase().includes('restaurant') || localRecs.toLowerCase().includes('dining')) {
-      // Fallback to using content that mentions restaurants
-      restaurantText = localRecs;
-    }
-    
-    if (!restaurantText) return null;
-    
-    // Extract the first restaurant mentioned
-    const lines = restaurantText.split(/[.\n]/).filter(line => line.trim().length > 0);
-    
-    for (const line of lines) {
-      if (line.toLowerCase().includes('restaurant') || 
-          line.toLowerCase().includes('dining') ||
-          line.toLowerCase().includes('food') ||
-          this.containsRestaurantName(line)) {
-        const cleaned = line.trim().replace(/^[-•*]\s*/, '');
-        if (cleaned.length > 10) {
-          console.log('✅ Found curated restaurant recommendation:', cleaned);
-          return cleaned;
-        }
-      }
-    }
-    
-    return null;
-  }
-
   private getAdditionalRestaurantRecommendations(property: Property, vibeType: string, usedRecs: string[]): string[] {
     const localRecs = property.local_recommendations;
     if (!localRecs) return [];
     
     console.log('🔍 Getting additional restaurant recommendations for vibe:', vibeType);
     
+    // FIXED: Only look in RESTAURANTS section
+    const restaurantMatch = localRecs.match(/RESTAURANTS?:\s*([^A-Z]*?)(?=[A-Z][A-Z]+:|$)/i);
+    if (!restaurantMatch || !restaurantMatch[1]) return [];
+    
+    const restaurantText = restaurantMatch[1].trim();
     const recommendations = [];
-    const lines = localRecs.split(/[.\n]/).filter(line => line.trim().length > 0);
+    const lines = restaurantText.split(/[.\n]/).filter(line => line.trim().length > 0);
     
     for (const line of lines) {
       const cleaned = line.trim().replace(/^[-•*]\s*/, '');
@@ -378,11 +423,11 @@ export class EnhancedConversationService {
       if (cleaned.length < 10) continue;
       if (usedRecs.some(used => cleaned.includes(used) || used.includes(cleaned))) continue;
       
+      // SAFEGUARD: Skip beaches
+      if (cleaned.toLowerCase().includes('beach')) continue;
+      
       const lowerLine = cleaned.toLowerCase();
-      const isRestaurant = lowerLine.includes('restaurant') || 
-                          lowerLine.includes('dining') ||
-                          lowerLine.includes('food') ||
-                          this.containsRestaurantName(cleaned);
+      const isRestaurant = this.isActualRestaurant(cleaned);
       
       if (!isRestaurant) continue;
       
@@ -405,13 +450,6 @@ export class EnhancedConversationService {
     
     console.log('✅ Found additional recommendations:', recommendations.length);
     return recommendations;
-  }
-
-  private containsRestaurantName(text: string): boolean {
-    // Check if the text contains what looks like a restaurant name (proper nouns)
-    const hasProperNoun = /[A-Z][a-z]+/.test(text);
-    const hasRestaurantIndicators = /\b(restaurant|cafe|bar|grill|kitchen|bistro|eatery)\b/i.test(text);
-    return hasProperNoun && (hasRestaurantIndicators || text.length < 50);
   }
 
   private async getSingleRestaurantRecommendation(property: Property, message: string, conversation: any) {
