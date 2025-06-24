@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -439,6 +440,7 @@ serve(async (req) => {
             
             try {
               // Call external SMS conversation service to process the message
+              // FIX: Send 'message' instead of 'messageBody'
               const processResponse = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/sms-conversation-service', {
                 method: 'POST',
                 headers: {
@@ -448,7 +450,7 @@ serve(async (req) => {
                 body: JSON.stringify({
                   action: 'processMessage',
                   phoneNumber: message.from,
-                  messageBody: messageText
+                  message: messageText  // Changed from messageBody to message
                 })
               });
 
