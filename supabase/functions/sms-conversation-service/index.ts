@@ -54,6 +54,157 @@ function isResetCommand(message: string): boolean {
   });
 }
 
+async function handlePropertyCodeInput(conversationManager: ConversationManager, propertyService: PropertyService, phoneNumber: string, messageBody: string) {
+  console.log("🏠 Handling property code input:", messageBody);
+  
+  // Extract property code from message
+  const propertyCode = messageBody.trim().match(/\d+/)?.[0];
+  
+  if (!propertyCode) {
+    console.log("❌ No property code found in message");
+    return {
+      messages: ["Hi! Please text your property ID number from your booking confirmation. Text 'reset' if needed."],
+      conversationalResponse: false,
+      intent: 'awaiting_property_code'
+    };
+  }
+
+  console.log("🔍 Looking up property code:", propertyCode);
+  
+  try {
+    const property = await propertyService.findPropertyByCode(propertyCode);
+    
+    if (!property) {
+      console.log("❌ Property not found for code:", propertyCode);
+      return {
+        messages: [`Property ID ${propertyCode} not found. Check your booking confirmation or text 'reset'.`],
+        conversationalResponse: false,
+        intent: 'property_not_found'
+      };
+    }
+
+    console.log("✅ Property found:", property.property_name);
+    
+    // Update conversation with property ID and move to confirmation state
+    await conversationManager.updateConversationState(phoneNumber, {
+      property_id: property.property_id,
+      conversation_state: 'awaiting_confirmation'
+    });
+
+    const confirmationMessage = `Great! You're staying at ${property.property_name} (${property.address}). Correct? Reply Y or N.`;
+    
+    return {
+      messages: [confirmationMessage],
+      conversationalResponse: false,
+      intent: 'property_confirmation'
+    };
+  } catch (error) {
+    console.error("❌ Error looking up property:", error);
+    return {
+      messages: ["Trouble looking up that property ID. Try again or text 'reset'."],
+      conversationalResponse: false,
+      intent: 'property_lookup_error'
+    };
+  }
+}
+
+async function handlePropertyConfirmation(conversationManager: ConversationManager, propertyService: PropertyService, phoneNumber: string, messageBody: string) {
+  console.log("✅ Handling property confirmation:", messageBody);
+  
+  const normalizedInput = messageBody.toLowerCase().trim();
+  const isYes = ['y', 'yes', 'yeah', 'yep', 'correct', 'right', 'true', '1', 'ok', 'okay', 'yup', 'sure', 'absolutely', 'definitely'].includes(normalizedInput);
+  const isNo = ['n', 'no', 'nope', 'wrong', 'incorrect', 'false', '0', 'nah', 'negative'].includes(normalizedInput);
+
+  if (isYes) {
+    console.log("✅ Property confirmed by user");
+    
+    // Get property info for timezone
+    const conversation = await conversationManager.getExistingConversation(phoneNumber);
+    const property = conversation?.property_id ? await propertyService.getPropertyById(conversation.property_id) : null;
+    const timezone = guessTimezoneFromAddress(property?.address) || 'UTC';
+    
+    await conversationManager.updateConversationState(phoneNumber, {
+      property_confirmed: true,
+      conversation_state: 'confirmed',
+      timezone: timezone
+    });
+
+    const greeting = getTimeAwareGreeting(timezone);
+    const response = `${greeting}! I'm your AI concierge. I can help with WiFi, parking, directions, and local recommendations. What do you need?`;
+    
+    return {
+      messages: [response],
+      conversationalResponse: true,
+      intent: 'property_confirmed'
+    };
+  } else if (isNo) {
+    console.log("❌ Property not confirmed by user");
+    
+    await conversationManager.updateConversationState(phoneNumber, {
+      property_id: null,
+      conversation_state: 'awaiting_property_id'
+    });
+
+    return {
+      messages: ["No problem! Please provide your correct property ID from your booking confirmation."],
+      conversationalResponse: false,
+      intent: 'property_rejected'
+    };
+  } else {
+    console.log("❓ Unclear confirmation response");
+    
+    return {
+      messages: ["Please reply Y for Yes or N for No to confirm the property. Text 'reset' to start over."],
+      conversationalResponse: false,
+      intent: 'unclear_confirmation'
+    };
+  }
+}
+
+function getTimeAwareGreeting(timezone = 'UTC'): string {
+  try {
+    const now = new Date();
+    const localTime = new Date(now.toLocaleString("en-US", {timeZone: timezone}));
+    const hour = localTime.getHours();
+    
+    if (hour >= 5 && hour < 12) return 'Good morning';
+    if (hour >= 12 && hour < 17) return 'Good afternoon';
+    if (hour >= 17 && hour < 22) return 'Good evening';
+    return 'Hello'; // Late night/early morning
+  } catch (error) {
+    console.error('Error getting time-aware greeting:', error);
+    return 'Hello';
+  }
+}
+
+function guessTimezoneFromAddress(address?: string): string {
+  if (!address) return 'UTC';
+  
+  const addressLower = address.toLowerCase();
+  
+  // Common timezone mappings based on location keywords
+  const timezoneMap: Record<string, string> = {
+    'san juan': 'America/Puerto_Rico',
+    'puerto rico': 'America/Puerto_Rico',
+    'miami': 'America/New_York',
+    'new york': 'America/New_York',
+    'los angeles': 'America/Los_Angeles',
+    'chicago': 'America/Chicago',
+    'denver': 'America/Denver',
+    'london': 'Europe/London',
+    'paris': 'Europe/Paris',
+    'tokyo': 'Asia/Tokyo'
+  };
+
+  for (const [location, timezone] of Object.entries(timezoneMap)) {
+    if (addressLower.includes(location)) {
+      return timezone;
+    }
+  }
+
+  return 'UTC';
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -186,9 +337,27 @@ serve(async (req) => {
         });
       }
 
-      // PRIORITY 5: Continue with property-based conversation flow
+      // PRIORITY 5: Handle property-based conversation flow
       const conversation = await conversationManager.getOrCreateConversation(phoneNumber);
       console.log("Current state:", conversation.conversation_state);
+
+      // NEW: Handle property code input when awaiting property ID
+      if (conversation.conversation_state === 'awaiting_property_id') {
+        console.log("🏠 Processing property code input");
+        const result = await handlePropertyCodeInput(conversationManager, propertyService, phoneNumber, messageBody);
+        return new Response(JSON.stringify(result), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // NEW: Handle property confirmation
+      if (conversation.conversation_state === 'awaiting_confirmation') {
+        console.log("✅ Processing property confirmation");
+        const result = await handlePropertyConfirmation(conversationManager, propertyService, phoneNumber, messageBody);
+        return new Response(JSON.stringify(result), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
 
       // For confirmed guests, always use enhanced service
       if (conversation.conversation_state === 'confirmed') {
@@ -202,7 +371,7 @@ serve(async (req) => {
         });
       }
 
-      // For non-confirmed states, use enhanced processing
+      // For any other states, use enhanced processing
       const result = await enhancedService.processMessage(phoneNumber, messageBody);
       console.log("✅ Enhanced processing result V2.1:", result);
       
