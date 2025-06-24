@@ -93,20 +93,15 @@ export class ConversationManager {
     return await this.updateConversationState(phoneNumber, resetUpdates);
   }
 
-  // Add method to clear recommendation memory specifically for testing
-  async clearRecommendationMemory(phoneNumber: string): Promise<Conversation> {
-    console.log('🧹 Clearing recommendation memory for testing:', phoneNumber);
+  // Force clear ALL conversation memory for testing
+  async forceResetConversationMemory(phoneNumber: string): Promise<Conversation> {
+    console.log('🧹 FORCE CLEARING ALL CONVERSATION MEMORY for:', phoneNumber);
     
     const resetUpdates = {
-      conversation_context: {
-        recommendation_history: {},
-        recent_intents: [],
-        global_recommendation_blacklist: [],
-        conversation_depth: 0,
-        last_interaction: new Date().toISOString()
-      },
+      conversation_context: {},
       last_recommendations: null,
-      last_message_type: null
+      last_message_type: null,
+      preferences: {}
     };
     
     return await this.updateConversationState(phoneNumber, resetUpdates);

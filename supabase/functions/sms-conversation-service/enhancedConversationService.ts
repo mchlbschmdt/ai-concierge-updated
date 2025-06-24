@@ -25,7 +25,7 @@ export class EnhancedConversationService {
     phoneNumber: string,
     message: string
   ): Promise<{ messages: string[]; conversationalResponse: boolean; intent: string }> {
-    console.log('🎯 Enhanced Conversation Service V2.1 - Processing message:', message);
+    console.log('🎯 Enhanced Conversation Service V2.2 - Processing message:', message);
 
     // Get conversation and property
     const conversation = await this.conversationManager.getOrCreateConversation(phoneNumber);
@@ -52,7 +52,9 @@ export class EnhancedConversationService {
       );
       
       await this.conversationManager.updateConversationState(phoneNumber, {
-        conversation_context: resetResult.context
+        conversation_context: resetResult.context,
+        last_recommendations: null,
+        last_message_type: null
       });
 
       return {
@@ -62,7 +64,13 @@ export class EnhancedConversationService {
       };
     }
 
-    // Check for repetition prevention
+    // Handle food recommendation with new conversational flow
+    if (intentResult.intent === 'ask_food_recommendations') {
+      console.log('🍽️ Processing food recommendation with new conversational flow');
+      return await this.handleConversationalDining(property, message, conversation, phoneNumber);
+    }
+
+    // Check for repetition prevention for other intents
     if (ConversationMemoryManager.shouldPreventRepetition(conversation.conversation_context, intentResult.intent)) {
       const repetitionResponse = ConversationMemoryManager.generateRepetitionResponse(
         intentResult.intent, 
@@ -75,18 +83,15 @@ export class EnhancedConversationService {
       };
     }
 
-    // Handle recommendation intents with property data first, then OpenAI
-    if (this.isRecommendationIntent(intentResult.intent)) {
-      console.log('🍽️ Processing recommendation request');
+    // Handle other recommendation intents with existing logic
+    if (this.isOtherRecommendationIntent(intentResult.intent)) {
+      console.log('🎯 Processing other recommendation request');
       
-      // First check if property has specific recommendations
       const propertyRecommendations = this.checkPropertyRecommendations(property, intentResult.intent, message);
       
       if (propertyRecommendations) {
         console.log('🏠 Using property-specific recommendations');
-        console.log('📝 Property recommendation content length:', propertyRecommendations.length);
         
-        // Update conversation memory with property recommendation
         const updatedContext = ConversationMemoryManager.updateMemory(
           conversation.conversation_context,
           intentResult.intent,
@@ -107,10 +112,8 @@ export class EnhancedConversationService {
         };
       } else {
         console.log('🤖 Using OpenAI recommendations');
-        // Use OpenAI recommendations service
         const result = await this.recommendationService.getEnhancedRecommendations(property, message, conversation);
         
-        // Update conversation memory with OpenAI recommendation
         const updatedContext = ConversationMemoryManager.updateMemory(
           conversation.conversation_context,
           intentResult.intent,
@@ -203,13 +206,293 @@ export class EnhancedConversationService {
     };
   }
 
-  private isRecommendationIntent(intent: string): boolean {
-    const recommendationIntents = [
-      'ask_food_recommendations',
+  private async handleConversationalDining(property: Property, message: string, conversation: any, phoneNumber: string) {
+    console.log('🍽️ Starting conversational dining flow');
+    
+    const guestName = property.knowledge_base?.guest_name;
+    const namePrefix = guestName ? `${guestName}, ` : '';
+    
+    // Check if this is a follow-up response to a dining question
+    const context = conversation.conversation_context || {};
+    const isDiningFollowUp = context.last_intent === 'ask_food_recommendations' && 
+                           context.dining_conversation_state;
+    
+    if (isDiningFollowUp) {
+      console.log('🔄 Handling dining follow-up conversation');
+      return await this.handleDiningFollowUp(property, message, context, namePrefix, phoneNumber);
+    }
+    
+    // First time dining request - start with one curated recommendation
+    const curatedRestaurant = this.getCuratedRestaurantRecommendation(property);
+    
+    if (curatedRestaurant) {
+      console.log('🏠 Starting with curated restaurant recommendation');
+      
+      const response = `${namePrefix}${curatedRestaurant}\n\nWhat's your vibe — casual local spot, rooftop cocktails, or something upscale?`;
+      
+      // Update context to track dining conversation state
+      const updatedContext = {
+        ...context,
+        last_intent: 'ask_food_recommendations',
+        dining_conversation_state: 'awaiting_vibe_preference',
+        dining_curated_used: [curatedRestaurant],
+        conversation_depth: (context.conversation_depth || 0) + 1,
+        last_interaction: new Date().toISOString()
+      };
+      
+      await this.conversationManager.updateConversationState(phoneNumber, {
+        conversation_context: updatedContext,
+        last_message_type: 'ask_food_recommendations'
+      });
+      
+      return {
+        messages: [MessageUtils.ensureSmsLimit(response)],
+        conversationalResponse: true,
+        intent: 'ask_food_recommendations'
+      };
+    } else {
+      console.log('🤖 No curated restaurants - using OpenAI for single recommendation');
+      // Fallback to OpenAI but request just one recommendation with follow-up
+      const result = await this.getSingleRestaurantRecommendation(property, message, conversation);
+      
+      const updatedContext = {
+        ...context,
+        last_intent: 'ask_food_recommendations',
+        dining_conversation_state: 'awaiting_vibe_preference',
+        conversation_depth: (context.conversation_depth || 0) + 1,
+        last_interaction: new Date().toISOString()
+      };
+      
+      await this.conversationManager.updateConversationState(phoneNumber, {
+        conversation_context: updatedContext,
+        last_message_type: 'ask_food_recommendations'
+      });
+      
+      return {
+        messages: [result.response],
+        conversationalResponse: true,
+        intent: 'ask_food_recommendations'
+      };
+    }
+  }
+
+  private async handleDiningFollowUp(property: Property, message: string, context: any, namePrefix: string, phoneNumber: string) {
+    console.log('🔄 Processing dining follow-up based on user preference');
+    
+    const lowerMessage = message.toLowerCase();
+    let vibeType = 'general';
+    
+    // Determine vibe from user response
+    if (lowerMessage.includes('casual') || lowerMessage.includes('local')) {
+      vibeType = 'casual';
+    } else if (lowerMessage.includes('upscale') || lowerMessage.includes('fancy') || lowerMessage.includes('fine')) {
+      vibeType = 'upscale';
+    } else if (lowerMessage.includes('rooftop') || lowerMessage.includes('cocktail') || lowerMessage.includes('drinks')) {
+      vibeType = 'rooftop';
+    }
+    
+    console.log('🎯 Detected vibe preference:', vibeType);
+    
+    // Get 1-2 additional recommendations based on vibe
+    const additionalRecs = this.getAdditionalRestaurantRecommendations(property, vibeType, context.dining_curated_used || []);
+    
+    let response = '';
+    if (additionalRecs.length > 0) {
+      response = `${namePrefix}Perfect! You might also like:\n${additionalRecs.join('\n')}\n\nWant something quieter or looking for late-night options?`;
+    } else {
+      // Fallback to OpenAI for vibe-specific recommendations
+      const result = await this.getVibeBasedRecommendations(property, vibeType, message);
+      response = result.response;
+    }
+    
+    // Update conversation state
+    const updatedContext = {
+      ...context,
+      dining_conversation_state: 'provided_additional_recs',
+      dining_vibe_preference: vibeType,
+      conversation_depth: (context.conversation_depth || 0) + 1,
+      last_interaction: new Date().toISOString()
+    };
+    
+    await this.conversationManager.updateConversationState(phoneNumber, {
+      conversation_context: updatedContext
+    });
+    
+    return {
+      messages: [MessageUtils.ensureSmsLimit(response)],
+      conversationalResponse: true,
+      intent: 'ask_food_recommendations'
+    };
+  }
+
+  private getCuratedRestaurantRecommendation(property: Property): string | null {
+    const localRecs = property.local_recommendations;
+    if (!localRecs) return null;
+    
+    console.log('🔍 Extracting single restaurant recommendation from property data');
+    
+    // Try to extract restaurants section first
+    const restaurantMatch = localRecs.match(/RESTAURANTS?:\s*([^A-Z]*?)(?=[A-Z][A-Z]+:|$)/i);
+    let restaurantText = '';
+    
+    if (restaurantMatch && restaurantMatch[1]) {
+      restaurantText = restaurantMatch[1].trim();
+    } else if (localRecs.toLowerCase().includes('restaurant') || localRecs.toLowerCase().includes('dining')) {
+      // Fallback to using content that mentions restaurants
+      restaurantText = localRecs;
+    }
+    
+    if (!restaurantText) return null;
+    
+    // Extract the first restaurant mentioned
+    const lines = restaurantText.split(/[.\n]/).filter(line => line.trim().length > 0);
+    
+    for (const line of lines) {
+      if (line.toLowerCase().includes('restaurant') || 
+          line.toLowerCase().includes('dining') ||
+          line.toLowerCase().includes('food') ||
+          this.containsRestaurantName(line)) {
+        const cleaned = line.trim().replace(/^[-•*]\s*/, '');
+        if (cleaned.length > 10) {
+          console.log('✅ Found curated restaurant recommendation:', cleaned);
+          return cleaned;
+        }
+      }
+    }
+    
+    return null;
+  }
+
+  private getAdditionalRestaurantRecommendations(property: Property, vibeType: string, usedRecs: string[]): string[] {
+    const localRecs = property.local_recommendations;
+    if (!localRecs) return [];
+    
+    console.log('🔍 Getting additional restaurant recommendations for vibe:', vibeType);
+    
+    const recommendations = [];
+    const lines = localRecs.split(/[.\n]/).filter(line => line.trim().length > 0);
+    
+    for (const line of lines) {
+      const cleaned = line.trim().replace(/^[-•*]\s*/, '');
+      
+      if (cleaned.length < 10) continue;
+      if (usedRecs.some(used => cleaned.includes(used) || used.includes(cleaned))) continue;
+      
+      const lowerLine = cleaned.toLowerCase();
+      const isRestaurant = lowerLine.includes('restaurant') || 
+                          lowerLine.includes('dining') ||
+                          lowerLine.includes('food') ||
+                          this.containsRestaurantName(cleaned);
+      
+      if (!isRestaurant) continue;
+      
+      // Match vibe preferences
+      let matches = false;
+      if (vibeType === 'casual' && (lowerLine.includes('local') || lowerLine.includes('casual'))) {
+        matches = true;
+      } else if (vibeType === 'upscale' && (lowerLine.includes('fine') || lowerLine.includes('upscale') || lowerLine.includes('tasting'))) {
+        matches = true;
+      } else if (vibeType === 'rooftop' && (lowerLine.includes('rooftop') || lowerLine.includes('bar') || lowerLine.includes('cocktail'))) {
+        matches = true;
+      } else if (vibeType === 'general') {
+        matches = true;
+      }
+      
+      if (matches && recommendations.length < 2) {
+        recommendations.push(cleaned);
+      }
+    }
+    
+    console.log('✅ Found additional recommendations:', recommendations.length);
+    return recommendations;
+  }
+
+  private containsRestaurantName(text: string): boolean {
+    // Check if the text contains what looks like a restaurant name (proper nouns)
+    const hasProperNoun = /[A-Z][a-z]+/.test(text);
+    const hasRestaurantIndicators = /\b(restaurant|cafe|bar|grill|kitchen|bistro|eatery)\b/i.test(text);
+    return hasProperNoun && (hasRestaurantIndicators || text.length < 50);
+  }
+
+  private async getSingleRestaurantRecommendation(property: Property, message: string, conversation: any) {
+    console.log('🤖 Getting single restaurant recommendation from OpenAI');
+    
+    const prompt = `You are a local dining concierge. A guest at ${property.property_name || 'the property'}, ${property.address} is asking: "${message}"
+
+Provide EXACTLY ONE restaurant recommendation in this format:
+"[Restaurant Name] ([distance], ⭐[rating]) — [brief insider description]"
+
+Then ask a follow-up question about their vibe: "What's your vibe — casual local spot, rooftop cocktails, or something upscale?"
+
+Keep it conversational and friendly. Total response under 160 characters.`;
+
+    try {
+      const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+        },
+        body: JSON.stringify({ prompt })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return { response: data.recommendation };
+      }
+    } catch (error) {
+      console.error('❌ Error getting single restaurant recommendation:', error);
+    }
+    
+    return { response: "Having trouble with dining recommendations right now. Try asking about WiFi or check-in details instead!" };
+  }
+
+  private async getVibeBasedRecommendations(property: Property, vibeType: string, message: string) {
+    console.log('🤖 Getting vibe-based recommendations from OpenAI');
+    
+    const vibeDescriptions = {
+      casual: 'casual local spots with authentic atmosphere',
+      upscale: 'upscale fine dining restaurants',
+      rooftop: 'rooftop bars and cocktail lounges',
+      general: 'great dining options'
+    };
+    
+    const prompt = `You are a local dining concierge. A guest at ${property.property_name || 'the property'}, ${property.address} wants ${vibeDescriptions[vibeType] || 'dining recommendations'}.
+
+Provide 1-2 restaurants that match their preference:
+Format: "[Name] ([distance], ⭐[rating]) — [brief description]"
+
+End with: "Want something quieter or looking for late-night options?"
+
+Keep conversational, under 160 characters total.`;
+
+    try {
+      const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+        },
+        body: JSON.stringify({ prompt })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return { response: data.recommendation };
+      }
+    } catch (error) {
+      console.error('❌ Error getting vibe-based recommendations:', error);
+    }
+    
+    return { response: "Having trouble with dining recommendations right now. Try asking about WiFi or check-in details instead!" };
+  }
+
+  private isOtherRecommendationIntent(intent: string): boolean {
+    const otherRecommendationIntents = [
       'ask_activities',
       'ask_grocery_stores'
     ];
-    return recommendationIntents.includes(intent);
+    return otherRecommendationIntents.includes(intent);
   }
 
   private checkPropertyRecommendations(property: Property, intent: string, message: string): string | null {
@@ -221,85 +504,47 @@ export class EnhancedConversationService {
     }
 
     console.log('🔍 Checking property recommendations for intent:', intent);
-    console.log('📄 Local recommendations length:', localRecs.length);
-
     const lowerMessage = message.toLowerCase();
     const guestName = property.knowledge_base?.guest_name;
     const namePrefix = guestName ? `${guestName}, ` : '';
 
-    // Parse the structured recommendations by category
     const extractCategorySection = (text: string, category: string): string | null => {
       const upperCategory = category.toUpperCase();
       const regex = new RegExp(`${upperCategory}:\\s*([^A-Z]*?)(?=[A-Z][A-Z]+:|$)`, 'i');
       const match = text.match(regex);
-      
-      console.log(`🔍 Extracting ${category} section:`, match ? 'Found' : 'Not found');
-      
-      if (match && match[1]) {
-        const extracted = match[1].trim();
-        console.log(`✅ Extracted ${category} section length:`, extracted.length);
-        return extracted;
-      }
-      return null;
+      return match && match[1] ? match[1].trim() : null;
     };
 
-    // Check for food/restaurant recommendations
-    if (intent === 'ask_food_recommendations') {
-      console.log('🍽️ Processing food recommendation request');
-      
-      // Try to extract just the RESTAURANTS section
-      let restaurantSection = extractCategorySection(localRecs, 'RESTAURANTS');
-      
-      // If no specific RESTAURANTS section, check if the whole text is about food
-      if (!restaurantSection && (localRecs.toLowerCase().includes('restaurant') || localRecs.toLowerCase().includes('food') || localRecs.toLowerCase().includes('dining'))) {
-        console.log('🍽️ No RESTAURANTS section found, using full text as food-related');
-        restaurantSection = localRecs;
-      }
-      
-      if (restaurantSection) {
-        const response = `${namePrefix}here are my top local dining recommendations: ${restaurantSection}\n\nWould you like directions to any of these places?`;
-        console.log('✅ Generated food recommendation response length:', response.length);
-        return response;
-      }
-    }
-
-    // Check for activities
     if (intent === 'ask_activities') {
       console.log('🎯 Processing activities recommendation request');
       
       let activitiesSection = extractCategorySection(localRecs, 'ATTRACTIONS') || extractCategorySection(localRecs, 'ACTIVITIES');
       
       if (!activitiesSection && (localRecs.toLowerCase().includes('activity') || localRecs.toLowerCase().includes('attraction') || localRecs.toLowerCase().includes('visit'))) {
-        console.log('🎯 No ACTIVITIES section found, using full text as activity-related');
         activitiesSection = localRecs;
       }
       
       if (activitiesSection) {
         const response = `${namePrefix}here are some great local activities: ${activitiesSection}\n\nNeed more details about any of these?`;
-        console.log('✅ Generated activities recommendation response length:', response.length);
         return response;
       }
     }
 
-    // Check for grocery/shopping
     if (intent === 'ask_grocery_stores') {
       console.log('🛒 Processing grocery recommendation request');
       
       let shoppingSection = extractCategorySection(localRecs, 'SHOPPING') || extractCategorySection(localRecs, 'STORES');
       
       if (!shoppingSection && (localRecs.toLowerCase().includes('grocery') || localRecs.toLowerCase().includes('store') || localRecs.toLowerCase().includes('market'))) {
-        console.log('🛒 No SHOPPING section found, using full text as shopping-related');
         shoppingSection = localRecs;
       }
       
       if (shoppingSection) {
         const response = `${namePrefix}here are nearby shopping options: ${shoppingSection}\n\nWant directions to any of these stores?`;
-        console.log('✅ Generated shopping recommendation response length:', response.length);
         return response;
       }
     }
 
-    console.log('❌ No matching recommendations found for intent:', intent);
     return null;
   }
 }
