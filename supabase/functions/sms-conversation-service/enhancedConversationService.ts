@@ -1,4 +1,3 @@
-
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { IntentRecognitionService } from './intentRecognitionService.ts';
 import { ConversationMemoryManager } from './conversationMemoryManager.ts';
@@ -223,24 +222,56 @@ export class EnhancedConversationService {
     const guestName = property.knowledge_base?.guest_name;
     const namePrefix = guestName ? `${guestName}, ` : '';
 
+    // Parse the structured recommendations by category
+    const extractCategorySection = (text: string, category: string): string | null => {
+      const upperCategory = category.toUpperCase();
+      const regex = new RegExp(`${upperCategory}:\\s*([^A-Z]*?)(?=[A-Z][A-Z]+:|$)`, 'i');
+      const match = text.match(regex);
+      
+      if (match && match[1]) {
+        return match[1].trim();
+      }
+      return null;
+    };
+
     // Check for food/restaurant recommendations
     if (intent === 'ask_food_recommendations') {
-      if (localRecs.includes('restaurant') || localRecs.includes('food') || localRecs.includes('dining')) {
-        return `${namePrefix}here are my top local dining recommendations: ${localRecs}\n\nWould you like directions to any of these places?`;
+      // Try to extract just the RESTAURANTS section
+      let restaurantSection = extractCategorySection(localRecs, 'RESTAURANTS');
+      
+      // If no specific RESTAURANTS section, check if the whole text is about food
+      if (!restaurantSection && (localRecs.toLowerCase().includes('restaurant') || localRecs.toLowerCase().includes('food') || localRecs.toLowerCase().includes('dining'))) {
+        restaurantSection = localRecs;
+      }
+      
+      if (restaurantSection) {
+        return `${namePrefix}here are my top local dining recommendations: ${restaurantSection}\n\nWould you like directions to any of these places?`;
       }
     }
 
     // Check for activities
     if (intent === 'ask_activities') {
-      if (localRecs.includes('activity') || localRecs.includes('attraction') || localRecs.includes('visit')) {
-        return `${namePrefix}here are some great local activities: ${localRecs}\n\nNeed more details about any of these?`;
+      let activitiesSection = extractCategorySection(localRecs, 'ATTRACTIONS') || extractCategorySection(localRecs, 'ACTIVITIES');
+      
+      if (!activitiesSection && (localRecs.toLowerCase().includes('activity') || localRecs.toLowerCase().includes('attraction') || localRecs.toLowerCase().includes('visit'))) {
+        activitiesSection = localRecs;
+      }
+      
+      if (activitiesSection) {
+        return `${namePrefix}here are some great local activities: ${activitiesSection}\n\nNeed more details about any of these?`;
       }
     }
 
     // Check for grocery/shopping
     if (intent === 'ask_grocery_stores') {
-      if (localRecs.includes('grocery') || localRecs.includes('store') || localRecs.includes('market')) {
-        return `${namePrefix}here are nearby shopping options: ${localRecs}\n\nWant directions to any of these stores?`;
+      let shoppingSection = extractCategorySection(localRecs, 'SHOPPING') || extractCategorySection(localRecs, 'STORES');
+      
+      if (!shoppingSection && (localRecs.toLowerCase().includes('grocery') || localRecs.toLowerCase().includes('store') || localRecs.toLowerCase().includes('market'))) {
+        shoppingSection = localRecs;
+      }
+      
+      if (shoppingSection) {
+        return `${namePrefix}here are nearby shopping options: ${shoppingSection}\n\nWant directions to any of these stores?`;
       }
     }
 
