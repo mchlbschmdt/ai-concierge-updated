@@ -40,6 +40,13 @@ export class EnhancedConversationService {
       };
     }
 
+    // Check for dining conversation follow-up FIRST
+    const diningState = conversation.conversation_context?.dining_conversation_state;
+    if (diningState === 'awaiting_vibe_preference') {
+      console.log('🍽️ Detected dining follow-up - user is responding to vibe question');
+      return await this.handleDiningFollowUp(property, message, conversation.conversation_context, '', phoneNumber);
+    }
+
     // Recognize intent
     const intentResult = IntentRecognitionService.recognizeIntent(message);
     console.log('🧠 Intent recognized:', intentResult);
@@ -357,33 +364,53 @@ export class EnhancedConversationService {
   private async handleDiningFollowUp(property: Property, message: string, context: any, namePrefix: string, phoneNumber: string) {
     console.log('🔄 Processing dining follow-up based on user preference');
     
+    const guestName = context?.guest_name;
+    const actualNamePrefix = guestName ? `${guestName}, ` : '';
+    
     const lowerMessage = message.toLowerCase();
     let vibeType = 'general';
     
-    // Determine vibe from user response
-    if (lowerMessage.includes('casual') || lowerMessage.includes('local')) {
+    // Determine vibe from user response - enhanced detection
+    if (lowerMessage.includes('casual') || lowerMessage.includes('local') || lowerMessage.includes('simple') || lowerMessage.includes('easy')) {
       vibeType = 'casual';
     } else if (lowerMessage.includes('upscale') || lowerMessage.includes('fancy') || lowerMessage.includes('fine')) {
       vibeType = 'upscale';
-    } else if (lowerMessage.includes('rooftop') || lowerMessage.includes('cocktail') || lowerMessage.includes('drinks')) {
+    } else if (lowerMessage.includes('rooftop') || lowerMessage.includes('cocktail') || lowerMessage.includes('drinks') || lowerMessage.includes('bar')) {
       vibeType = 'rooftop';
+    } else if (lowerMessage.includes('burger') || lowerMessage.includes('close') || lowerMessage.includes('quick') || lowerMessage.includes('nearby')) {
+      vibeType = 'casual'; // Burger request = casual dining
     }
     
-    console.log('🎯 Detected vibe preference:', vibeType);
+    console.log('🎯 Detected vibe preference:', vibeType, 'from message:', message);
     
-    // Get 1-2 additional recommendations based on vibe
+    // Get 1-2 additional recommendations based on vibe and user request
     const additionalRecs = this.getAdditionalRestaurantRecommendations(property, vibeType, context.dining_curated_used || []);
     
     let response = '';
     if (additionalRecs.length > 0) {
-      response = `${namePrefix}Perfect! You might also like:\n${additionalRecs.join('\n')}\n\nWant something quieter or looking for late-night options?`;
+      // Filter for burger places if they mentioned burger
+      if (lowerMessage.includes('burger')) {
+        const burgerRecs = additionalRecs.filter(rec => 
+          rec.toLowerCase().includes('burger') || 
+          rec.toLowerCase().includes('american') || 
+          rec.toLowerCase().includes('grill')
+        );
+        if (burgerRecs.length > 0) {
+          response = `${actualNamePrefix}Perfect for burgers! Try:\n${burgerRecs.slice(0, 2).join('\n')}\n\nWant something even closer or different cuisine?`;
+        } else {
+          response = `${actualNamePrefix}For good casual spots nearby:\n${additionalRecs.slice(0, 2).join('\n')}\n\nWant burger recommendations specifically?`;
+        }
+      } else {
+        response = `${actualNamePrefix}Perfect! You might also like:\n${additionalRecs.slice(0, 2).join('\n')}\n\nWant something quieter or looking for late-night options?`;
+      }
     } else {
       // Fallback to OpenAI for vibe-specific recommendations
+      console.log('🤖 No curated recs found, using OpenAI for specific request');
       const result = await this.getVibeBasedRecommendations(property, vibeType, message);
       response = result.response;
     }
     
-    // Update conversation state
+    // Update conversation state - mark as completed
     const updatedContext = {
       ...context,
       dining_conversation_state: 'provided_additional_recs',
