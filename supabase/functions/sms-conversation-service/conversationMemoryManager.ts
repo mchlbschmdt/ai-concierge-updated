@@ -1,4 +1,3 @@
-
 export interface ConversationMemory {
   last_intent?: string;
   recent_intents?: string[];
@@ -154,15 +153,14 @@ export class ConversationMemoryManager {
     const memory: ConversationMemory = existingContext || {};
     const resetCount = (memory.conversation_reset_count || 0) + 1;
     
-    // COMPLETELY clear global blacklist for fresh recommendations
-    console.log('🧹 Clearing all recommendation memory for fresh start');
+    // FIXED: COMPLETELY clear property context for fresh start
+    console.log('🧹 Clearing ALL conversation state including property context');
     
-    // Clear ALL conversation state for complete reset
+    // Clear ALL conversation state for complete reset - INCLUDING PROPERTY
     const clearedContext = {
-      // Preserve essential info
-      guest_name: guestName || existingContext?.guest_name,
-      property_id: existingContext?.property_id,
-      property_confirmed: existingContext?.property_confirmed,
+      // CLEAR property context completely
+      property_id: null,
+      property_confirmed: false,
       
       // CLEAR global blacklist for fresh recommendations
       global_recommendation_blacklist: [],
@@ -177,8 +175,8 @@ export class ConversationMemoryManager {
       last_response_type: 'reset_response'
     };
 
-    // Generate contextual reset response emphasizing fresh start
-    const response = this.generateResetResponse(guestName, resetCount, false); // Always treat as fresh start
+    // Generate contextual reset response asking for property code
+    const response = "Hi! I'm your Hostly AI Concierge. I can help with property info, local recommendations, and more! To get started, please send me your property code (the numbers from your booking confirmation).";
 
     return { context: clearedContext, response };
   }

@@ -1,3 +1,4 @@
+
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { IntentRecognitionService } from './intentRecognitionService.ts';
 import { ConversationMemoryManager } from './conversationMemoryManager.ts';
@@ -8,6 +9,7 @@ import { ResponseGenerator } from './responseGenerator.ts';
 import { MessageUtils } from './messageUtils.ts';
 import { ConversationManager } from './conversationManager.ts';
 import { PropertyService } from './propertyService.ts';
+import { ResetHandler } from './resetHandler.ts';
 import { Property } from './types.ts';
 
 export class EnhancedConversationService {
@@ -76,21 +78,21 @@ export class EnhancedConversationService {
       intentResult.confidence = 0.9;
     }
 
-    // Handle conversation reset
+    // Handle conversation reset - FIXED TO USE PROPER RESET HANDLER
     if (intentResult.intent === 'conversation_reset') {
-      const resetResult = ConversationMemoryManager.handleConversationReset(
-        conversation.conversation_context,
-        conversation.conversation_context?.guest_name
-      );
+      console.log('🔄 PROCESSING RESET - Using ResetHandler for complete property clearing');
       
-      await this.conversationManager.updateConversationState(phoneNumber, {
-        conversation_context: resetResult.context,
-        last_recommendations: null,
-        last_message_type: null
-      });
+      // Use ResetHandler instead of ConversationMemoryManager for complete reset
+      const resetUpdates = ResetHandler.getCompleteResetUpdates(conversation.conversation_context);
+      console.log('🧹 Reset updates prepared:', resetUpdates);
+      
+      await this.conversationManager.updateConversationState(phoneNumber, resetUpdates);
+      
+      const resetResponse = ResetHandler.generateResetResponse();
+      console.log('✅ Reset response generated:', resetResponse);
 
       return {
-        messages: [resetResult.response],
+        messages: [resetResponse],
         conversationalResponse: true,
         intent: 'conversation_reset'
       };

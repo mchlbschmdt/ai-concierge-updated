@@ -1,4 +1,3 @@
-
 import { Conversation, Property } from './types.ts';
 import { ResetHandler } from './resetHandler.ts';
 
@@ -89,6 +88,7 @@ export class ConversationManager {
     
     // Use the enhanced reset handler to get complete reset updates
     const resetUpdates = ResetHandler.getCompleteResetUpdates({});
+    console.log('🧹 Complete reset updates:', resetUpdates);
     
     return await this.updateConversationState(phoneNumber, resetUpdates);
   }
@@ -97,12 +97,8 @@ export class ConversationManager {
   async forceResetConversationMemory(phoneNumber: string): Promise<Conversation> {
     console.log('🧹 FORCE CLEARING ALL CONVERSATION MEMORY for:', phoneNumber);
     
-    const resetUpdates = {
-      conversation_context: {},
-      last_recommendations: null,
-      last_message_type: null,
-      preferences: {}
-    };
+    // Use ResetHandler for complete property clearing
+    const resetUpdates = ResetHandler.getCompleteResetUpdates({});
     
     return await this.updateConversationState(phoneNumber, resetUpdates);
   }
