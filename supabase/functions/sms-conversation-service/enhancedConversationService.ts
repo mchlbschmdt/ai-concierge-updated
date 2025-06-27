@@ -1,4 +1,3 @@
-
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { IntentRecognitionService } from './intentRecognitionService.ts';
 import { ConversationMemoryManager } from './conversationMemoryManager.ts';
@@ -29,8 +28,18 @@ export class EnhancedConversationService {
   ): Promise<{ messages: string[]; conversationalResponse: boolean; intent: string }> {
     console.log('🎯 Enhanced Conversation Service V2.2 - Processing message:', message);
 
-    // Get conversation and property
+    // Get conversation
     const conversation = await this.conversationManager.getOrCreateConversation(phoneNumber);
+    console.log('📋 Current conversation state:', conversation.conversation_state);
+    console.log('🏠 Current property_id:', conversation.property_id);
+
+    // PRIORITY: Handle property code validation if user is awaiting property ID
+    if (conversation.conversation_state === 'awaiting_property_id' && !conversation.property_id) {
+      console.log('🔍 User in awaiting_property_id state, checking for property code...');
+      return await this.handlePropertyCodeValidation(phoneNumber, message, conversation);
+    }
+
+    // Get property after potential code validation
     const property = conversation.property_id ? await this.propertyService.getPropertyById(conversation.property_id) : null;
 
     if (!property) {
@@ -238,6 +247,73 @@ export class EnhancedConversationService {
       conversationalResponse: true,
       intent: finalIntent
     };
+  }
+
+  // NEW: Handle property code validation
+  private async handlePropertyCodeValidation(phoneNumber: string, message: string, conversation: any) {
+    console.log('🔍 Processing potential property code:', message);
+    
+    // Clean the message to extract potential property code
+    const cleanedMessage = message.trim().replace(/\D/g, ''); // Remove all non-digits
+    
+    if (!cleanedMessage || cleanedMessage.length < 3) {
+      console.log('❌ Message does not appear to be a valid property code');
+      return {
+        messages: ["Please send your property code (the numbers from your booking confirmation). For example: 1434"],
+        conversationalResponse: false,
+        intent: 'invalid_property_code'
+      };
+    }
+
+    console.log('🔍 Attempting to find property with code:', cleanedMessage);
+    
+    try {
+      // Look up the property by code
+      const property = await this.propertyService.findPropertyByCode(cleanedMessage);
+      
+      if (property) {
+        console.log('✅ Valid property code found! Property:', property.property_name);
+        
+        // Update conversation with property information
+        const updatedContext = {
+          ...conversation.conversation_context,
+          property_confirmed: true,
+          last_intent: 'property_code_validated',
+          conversation_depth: 1,
+          last_interaction: new Date().toISOString()
+        };
+
+        await this.conversationManager.updateConversationState(phoneNumber, {
+          property_id: property.property_id,
+          property_confirmed: true,
+          conversation_state: 'property_confirmed',
+          conversation_context: updatedContext,
+          last_message_type: 'property_code_validation'
+        });
+
+        const welcomeMessage = `Welcome to ${property.property_name}! I'm your AI concierge and I'm here to help with any questions about your stay. What would you like to know?`;
+        
+        return {
+          messages: [welcomeMessage],
+          conversationalResponse: true,
+          intent: 'property_code_validated'
+        };
+      } else {
+        console.log('❌ Invalid property code entered');
+        return {
+          messages: [`I couldn't find a property with code "${cleanedMessage}". Please double-check your property code from your booking confirmation and try again.`],
+          conversationalResponse: false,
+          intent: 'invalid_property_code'
+        };
+      }
+    } catch (error) {
+      console.error('❌ Error validating property code:', error);
+      return {
+        messages: ["There was an error processing your property code. Please try again or contact support."],
+        conversationalResponse: false,
+        intent: 'property_code_error'
+      };
+    }
   }
 
   // NEW: Enhanced food detection method
