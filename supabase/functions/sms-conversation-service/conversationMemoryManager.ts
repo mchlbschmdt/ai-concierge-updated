@@ -6,19 +6,40 @@ export interface ConversationMemory {
   recommendation_history?: RecommendationHistory;
   conversation_reset_count?: number;
   guest_name?: string;
+  guest_preferences?: GuestPreferences;
   global_recommendation_blacklist?: string[]; // Persistent across resets
 }
 
+export interface GuestPreferences {
+  food_preferences?: string[];
+  activity_preferences?: string[];
+  dietary_restrictions?: string[];
+  preferred_price_range?: string;
+  preferred_distance?: string;
+  dislikes?: string[];
+  likes?: string[];
+}
+
 export interface RecommendationHistory {
-  food_recommendations?: string[];
-  activities?: string[];
-  grocery_stores?: string[];
+  food_recommendations?: RecommendationItem[];
+  activities?: RecommendationItem[];
+  grocery_stores?: RecommendationItem[];
   last_recommendation_type?: string;
   last_recommendation_timestamp?: string;
   avoided_recommendations?: string[];
   specific_places_mentioned?: string[];
   recommendation_categories_used?: string[];
   geographic_areas_covered?: string[];
+  venue_vibes_requested?: string[];
+  busyness_queries?: string[];
+}
+
+export interface RecommendationItem {
+  name: string;
+  type: string;
+  timestamp: string;
+  guest_feedback?: 'liked' | 'disliked' | 'neutral';
+  vibe_description?: string;
 }
 
 export class ConversationMemoryManager {
@@ -26,7 +47,7 @@ export class ConversationMemoryManager {
     existingContext: any, 
     newIntent: string, 
     responseType: string,
-    recommendationData?: { type: string; content: string }
+    recommendationData?: { type: string; content: string; vibe?: string }
   ): any {
     const memory: ConversationMemory = existingContext || {};
     const now = new Date().toISOString();
@@ -34,6 +55,13 @@ export class ConversationMemoryManager {
     // Preserve guest name and global blacklist across all updates
     if (existingContext?.guest_name) {
       memory.guest_name = existingContext.guest_name;
+    }
+    
+    // Preserve guest preferences
+    if (existingContext?.guest_preferences) {
+      memory.guest_preferences = existingContext.guest_preferences;
+    } else {
+      memory.guest_preferences = {};
     }
     
     // Preserve global blacklist (survives resets)
@@ -63,7 +91,7 @@ export class ConversationMemoryManager {
       memory.intent_history = memory.intent_history.slice(-10);
     }
 
-    // Enhanced recommendation tracking with better place extraction
+    // Enhanced recommendation tracking
     if (recommendationData) {
       if (!memory.recommendation_history) {
         memory.recommendation_history = {};
@@ -88,51 +116,45 @@ export class ConversationMemoryManager {
         ].slice(-50);
       }
       
-      // Track by recommendation type
+      // Track by recommendation type with enhanced data
+      const recommendationItem: RecommendationItem = {
+        name: placeNames[0] || 'Unknown',
+        type: recType,
+        timestamp: now,
+        vibe_description: recommendationData.vibe
+      };
+      
       if (recType === 'ask_food_recommendations') {
         if (!memory.recommendation_history.food_recommendations) {
           memory.recommendation_history.food_recommendations = [];
         }
-        memory.recommendation_history.food_recommendations.push(content);
-        
-        // Track categories used
-        if (!memory.recommendation_history.recommendation_categories_used) {
-          memory.recommendation_history.recommendation_categories_used = [];
-        }
-        memory.recommendation_history.recommendation_categories_used.push('food');
+        memory.recommendation_history.food_recommendations.push(recommendationItem);
       } else if (recType === 'ask_activities') {
         if (!memory.recommendation_history.activities) {
           memory.recommendation_history.activities = [];
         }
-        memory.recommendation_history.activities.push(content);
-        
-        if (!memory.recommendation_history.recommendation_categories_used) {
-          memory.recommendation_history.recommendation_categories_used = [];
-        }
-        memory.recommendation_history.recommendation_categories_used.push('activities');
+        memory.recommendation_history.activities.push(recommendationItem);
       } else if (recType === 'ask_grocery_stores') {
         if (!memory.recommendation_history.grocery_stores) {
           memory.recommendation_history.grocery_stores = [];
         }
-        memory.recommendation_history.grocery_stores.push(content);
-        
-        if (!memory.recommendation_history.recommendation_categories_used) {
-          memory.recommendation_history.recommendation_categories_used = [];
-        }
-        memory.recommendation_history.recommendation_categories_used.push('grocery');
+        memory.recommendation_history.grocery_stores.push(recommendationItem);
       }
       
-      // Track specific places mentioned in current session
-      if (placeNames.length > 0) {
-        if (!memory.recommendation_history.specific_places_mentioned) {
-          memory.recommendation_history.specific_places_mentioned = [];
+      // Track vibe requests
+      if (newIntent === 'ask_venue_vibe') {
+        if (!memory.recommendation_history.venue_vibes_requested) {
+          memory.recommendation_history.venue_vibes_requested = [];
         }
-        memory.recommendation_history.specific_places_mentioned.push(...placeNames);
-        
-        // Keep only unique places and limit to last 20 for current session
-        memory.recommendation_history.specific_places_mentioned = [
-          ...new Set(memory.recommendation_history.specific_places_mentioned)
-        ].slice(-20);
+        memory.recommendation_history.venue_vibes_requested.push(content);
+      }
+      
+      // Track busyness queries
+      if (newIntent === 'ask_venue_busyness') {
+        if (!memory.recommendation_history.busyness_queries) {
+          memory.recommendation_history.busyness_queries = [];
+        }
+        memory.recommendation_history.busyness_queries.push(content);
       }
       
       memory.recommendation_history.last_recommendation_type = recType;
@@ -147,6 +169,68 @@ export class ConversationMemoryManager {
     };
   }
 
+  // NEW: Generate recall-based responses
+  static generateRecallResponse(
+    context: any, 
+    newRecommendationType: string, 
+    guestName?: string
+  ): string | null {
+    if (!context?.recommendation_history) return null;
+    
+    const history = context.recommendation_history;
+    const namePrefix = guestName ? `${guestName}, s` : 'S';
+    
+    // Check for previous similar recommendations
+    if (newRecommendationType === 'ask_food_recommendations' && history.food_recommendations?.length > 0) {
+      const lastFood = history.food_recommendations[history.food_recommendations.length - 1];
+      return `${namePrefix}ince you liked ${lastFood.name}, here's another spot you might enjoy.`;
+    }
+    
+    if (newRecommendationType === 'ask_activities' && history.activities?.length > 0) {
+      const lastActivity = history.activities[history.activities.length - 1];
+      return `${namePrefix}ince you were interested in ${lastActivity.name}, here's something similar.`;
+    }
+    
+    return null;
+  }
+
+  // NEW: Extract guest preferences from messages
+  static extractPreferences(message: string, existingPreferences: GuestPreferences = {}): GuestPreferences {
+    const lowerMessage = message.toLowerCase();
+    const preferences = { ...existingPreferences };
+    
+    // Food preferences
+    if (lowerMessage.includes('vegetarian') || lowerMessage.includes('vegan')) {
+      if (!preferences.dietary_restrictions) preferences.dietary_restrictions = [];
+      if (lowerMessage.includes('vegetarian')) preferences.dietary_restrictions.push('vegetarian');
+      if (lowerMessage.includes('vegan')) preferences.dietary_restrictions.push('vegan');
+    }
+    
+    // Price preferences
+    if (lowerMessage.includes('cheap') || lowerMessage.includes('budget') || lowerMessage.includes('affordable')) {
+      preferences.preferred_price_range = 'budget';
+    } else if (lowerMessage.includes('upscale') || lowerMessage.includes('fancy') || lowerMessage.includes('expensive')) {
+      preferences.preferred_price_range = 'upscale';
+    }
+    
+    // Distance preferences
+    if (lowerMessage.includes('close') || lowerMessage.includes('nearby') || lowerMessage.includes('walking')) {
+      preferences.preferred_distance = 'walking';
+    } else if (lowerMessage.includes('drive') || lowerMessage.includes('car')) {
+      preferences.preferred_distance = 'driving';
+    }
+    
+    // Likes and dislikes
+    if (lowerMessage.includes('love') || lowerMessage.includes('like') || lowerMessage.includes('enjoy')) {
+      // Extract what they like (simplified)
+      if (!preferences.likes) preferences.likes = [];
+      // This would need more sophisticated NLP in practice
+    }
+    
+    return preferences;
+  }
+
+  // Keep existing methods but add preference tracking
   static handleConversationReset(existingContext: any, guestName?: string): { context: any; response: string } {
     console.log('🔄 Handling conversation reset for guest:', guestName);
     
@@ -172,29 +256,17 @@ export class ConversationMemoryManager {
       conversation_reset_count: resetCount,
       conversation_depth: 0,
       last_interaction: new Date().toISOString(),
-      last_response_type: 'reset_response'
+      last_response_type: 'reset_response',
+      
+      // PRESERVE guest preferences across resets
+      guest_preferences: memory.guest_preferences || {},
+      guest_name: memory.guest_name
     };
 
     // Generate contextual reset response asking for property code
     const response = "Hi! I'm your Hostly AI Concierge. I can help with property info, local recommendations, and more! To get started, please send me your property code (the numbers from your booking confirmation).";
 
     return { context: clearedContext, response };
-  }
-
-  private static generateResetResponse(guestName?: string, resetCount?: number, hasHistory?: boolean): string {
-    const namePrefix = guestName ? `${guestName}, ` : '';
-    
-    // Always emphasize fresh start after clearing memory
-    const responses = [
-      `${namePrefix}let's start fresh! What would you like to explore? I can help with dining, activities, local spots, or property details.`,
-      `${namePrefix}perfect! What can I help you discover? Looking for restaurants, things to do, or information about your stay?`,
-      `${namePrefix}sure thing! What sounds interesting - food options, local activities, or property information?`,
-      `${namePrefix}absolutely! What would you like to know about? Dining, attractions, or details about your stay?`
-    ];
-
-    // Use reset count to ensure variety in responses
-    const responseIndex = (resetCount || 0) % responses.length;
-    return responses[responseIndex];
   }
 
   static shouldPreventRepetition(context: any, newIntent: string): boolean {
@@ -240,6 +312,20 @@ export class ConversationMemoryManager {
     if (globalBlacklist.length > 0) {
       const recentBlacklist = globalBlacklist.slice(-10); // Last 10 places
       contextParts.push(`NEVER mention these places again: ${recentBlacklist.join(', ')}`);
+    }
+    
+    // Add guest preferences context
+    const preferences = context.guest_preferences;
+    if (preferences) {
+      if (preferences.dietary_restrictions?.length > 0) {
+        contextParts.push(`Guest dietary restrictions: ${preferences.dietary_restrictions.join(', ')}`);
+      }
+      if (preferences.preferred_price_range) {
+        contextParts.push(`Price preference: ${preferences.preferred_price_range}`);
+      }
+      if (preferences.preferred_distance) {
+        contextParts.push(`Distance preference: ${preferences.preferred_distance}`);
+      }
     }
     
     // Add session-specific context

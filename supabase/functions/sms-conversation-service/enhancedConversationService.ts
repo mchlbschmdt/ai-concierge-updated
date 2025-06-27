@@ -9,6 +9,8 @@ import { MessageUtils } from './messageUtils.ts';
 import { ConversationManager } from './conversationManager.ts';
 import { PropertyService } from './propertyService.ts';
 import { ResetHandler } from './resetHandler.ts';
+import { VibeDetectionService } from './vibeDetectionService.ts';
+import { PropertyKnowledgeService } from './propertyKnowledgeService.ts';
 import { Property } from './types.ts';
 
 export class EnhancedConversationService {
@@ -26,12 +28,34 @@ export class EnhancedConversationService {
     phoneNumber: string,
     message: string
   ): Promise<{ messages: string[]; conversationalResponse: boolean; intent: string }> {
-    console.log('🎯 Enhanced Conversation Service V2.2 - Processing message:', message);
+    console.log('🎯 Enhanced Conversation Service V2.3 - Processing message:', message);
 
     // Get conversation
     const conversation = await this.conversationManager.getOrCreateConversation(phoneNumber);
     console.log('📋 Current conversation state:', conversation.conversation_state);
     console.log('🏠 Current property_id:', conversation.property_id);
+
+    // PRIORITY: Handle "travel" code before property validation
+    const lowerMessage = message.toLowerCase().trim();
+    if (lowerMessage === 'travel') {
+      console.log('🌍 Travel code detected - routing to travel planner');
+      
+      // Only allow travel code if not already assigned to a property or if they reset
+      if (conversation.property_id && conversation.conversation_state !== 'awaiting_property_id') {
+        return {
+          messages: ["You're currently assigned to a property. Text 'reset' first if you want to use the travel planner."],
+          conversationalResponse: false,
+          intent: 'travel_code_blocked'
+        };
+      }
+      
+      // Route to travel planner (would integrate with existing travel conversation service)
+      return {
+        messages: ["Welcome to the Travel Planner! I can help you discover amazing destinations. Where would you like to explore?"],
+        conversationalResponse: true,
+        intent: 'travel_code_detected'
+      };
+    }
 
     // PRIORITY: Handle property code validation if user is awaiting property ID
     if (conversation.conversation_state === 'awaiting_property_id' && !conversation.property_id) {
@@ -53,7 +77,6 @@ export class EnhancedConversationService {
 
     // ENHANCED: Check for dining follow-up OR new food request FIRST
     const diningState = conversation.conversation_context?.dining_conversation_state;
-    const lowerMessage = message.toLowerCase();
     
     // Check if this is a food-related request (even if dining state says completed)
     const isFoodRelated = this.isFoodRelatedMessage(message);
@@ -76,9 +99,27 @@ export class EnhancedConversationService {
       return await this.handleDiningFollowUp(property, message, conversation.conversation_context, '', phoneNumber);
     }
 
-    // Recognize intent with enhanced food detection
+    // Recognize intent with enhanced detection
     const intentResult = IntentRecognitionService.recognizeIntent(message);
     console.log('🧠 Intent recognized:', intentResult);
+
+    // NEW: Handle vibe questions
+    if (intentResult.intent === 'ask_venue_vibe') {
+      console.log('✨ Processing vibe question');
+      return await this.handleVibeQuestion(property, message, conversation, phoneNumber);
+    }
+
+    // NEW: Handle busyness questions
+    if (intentResult.intent === 'ask_venue_busyness') {
+      console.log('👥 Processing busyness question');
+      return await this.handleBusynessQuestion(property, message, conversation, phoneNumber);
+    }
+
+    // NEW: Handle property-specific questions
+    if (intentResult.intent === 'ask_property_specific') {
+      console.log('🏠 Processing property-specific question');
+      return await this.handlePropertySpecificQuestion(property, message, conversation, phoneNumber);
+    }
 
     // OVERRIDE: If intent is generic but message is clearly food-related, change to food recommendation
     if ((intentResult.intent === 'general_inquiry' || intentResult.intent === 'ask_multiple_requests') && isFoodRelated) {
@@ -247,6 +288,222 @@ export class EnhancedConversationService {
       conversationalResponse: true,
       intent: finalIntent
     };
+  }
+
+  // NEW: Handle vibe questions
+  private async handleVibeQuestion(property: Property, message: string, conversation: any, phoneNumber: string) {
+    console.log('✨ Handling vibe question');
+    
+    // Try to extract place name from message
+    const placeName = this.extractPlaceNameFromMessage(message);
+    
+    if (!placeName) {
+      return {
+        messages: ["What specific place would you like to know the vibe of? For example, 'What's the vibe at Woodsy's Diner?'"],
+        conversationalResponse: true,
+        intent: 'ask_venue_vibe'
+      };
+    }
+    
+    // Check if place is in property recommendations
+    const vibeInfo = this.getVibeFromPropertyRecommendations(property, placeName);
+    
+    let response: string;
+    if (vibeInfo) {
+      response = VibeDetectionService.generateVibeResponse(placeName, vibeInfo);
+    } else {
+      // Generate vibe description using OpenAI
+      response = await this.getVibeFromOpenAI(property, placeName, message);
+    }
+    
+    // Update conversation memory
+    const updatedContext = ConversationMemoryManager.updateMemory(
+      conversation.conversation_context,
+      'ask_venue_vibe',
+      'vibe_response',
+      { type: 'ask_venue_vibe', content: response, vibe: vibeInfo || 'unknown' }
+    );
+    
+    await this.conversationManager.updateConversationState(phoneNumber, {
+      conversation_context: updatedContext
+    });
+    
+    return {
+      messages: [MessageUtils.ensureSmsLimit(response)],
+      conversationalResponse: true,
+      intent: 'ask_venue_vibe'
+    };
+  }
+
+  // NEW: Handle busyness questions
+  private async handleBusynessQuestion(property: Property, message: string, conversation: any, phoneNumber: string) {
+    console.log('👥 Handling busyness question');
+    
+    const placeName = this.extractPlaceNameFromMessage(message);
+    const currentHour = new Date().getHours();
+    
+    if (!placeName) {
+      return {
+        messages: ["Which place are you asking about? For example, 'Is Woodsy's busy right now?'"],
+        conversationalResponse: true,
+        intent: 'ask_venue_busyness'
+      };
+    }
+    
+    // Determine place type from property recommendations
+    const placeType = this.getPlaceTypeFromRecommendations(property, placeName);
+    
+    const response = VibeDetectionService.generateBusynessResponse(placeName, currentHour, placeType);
+    
+    // Update conversation memory
+    const updatedContext = ConversationMemoryManager.updateMemory(
+      conversation.conversation_context,
+      'ask_venue_busyness',
+      'busyness_response',
+      { type: 'ask_venue_busyness', content: response }
+    );
+    
+    await this.conversationManager.updateConversationState(phoneNumber, {
+      conversation_context: updatedContext
+    });
+    
+    return {
+      messages: [MessageUtils.ensureSmsLimit(response)],
+      conversationalResponse: true,
+      intent: 'ask_venue_busyness'
+    };
+  }
+
+  // NEW: Handle property-specific questions
+  private async handlePropertySpecificQuestion(property: Property, message: string, conversation: any, phoneNumber: string) {
+    console.log('🏠 Handling property-specific question');
+    
+    // First, search the knowledge base
+    const knowledgeResult = PropertyKnowledgeService.searchKnowledgeBase(property, message);
+    
+    if (knowledgeResult) {
+      // Found relevant information in knowledge base
+      const response = `${knowledgeResult}\n\nNeed anything else about the property?`;
+      
+      const updatedContext = ConversationMemoryManager.updateMemory(
+        conversation.conversation_context,
+        'ask_property_specific',
+        'knowledge_base_response',
+        { type: 'ask_property_specific', content: response }
+      );
+      
+      await this.conversationManager.updateConversationState(phoneNumber, {
+        conversation_context: updatedContext
+      });
+      
+      return {
+        messages: [MessageUtils.ensureSmsLimit(response)],
+        conversationalResponse: true,
+        intent: 'ask_property_specific'
+      };
+    } else {
+      // No relevant info found - ask clarifying question
+      const clarifyingQuestion = PropertyKnowledgeService.generateClarifyingQuestion(message);
+      const hostContactOffer = PropertyKnowledgeService.generateHostContactOffer();
+      
+      const response = `${clarifyingQuestion}\n\n${hostContactOffer}`;
+      
+      // Store that we're awaiting clarification or host contact
+      const updatedContext = {
+        ...conversation.conversation_context,
+        awaiting_property_clarification: true,
+        original_property_question: message,
+        last_interaction: new Date().toISOString()
+      };
+      
+      await this.conversationManager.updateConversationState(phoneNumber, {
+        conversation_context: updatedContext
+      });
+      
+      return {
+        messages: [MessageUtils.ensureSmsLimit(response)],
+        conversationalResponse: true,
+        intent: 'ask_property_specific'
+      };
+    }
+  }
+
+  // Helper methods for the new functionality
+  private extractPlaceNameFromMessage(message: string): string | null {
+    // Simple extraction - look for capitalized words that might be place names
+    const words = message.split(' ');
+    const capitalizedWords = words.filter(word => /^[A-Z][a-z]+/.test(word));
+    
+    if (capitalizedWords.length > 0) {
+      return capitalizedWords.join(' ');
+    }
+    
+    return null;
+  }
+
+  private getVibeFromPropertyRecommendations(property: Property, placeName: string): string | null {
+    if (!property.local_recommendations) return null;
+    
+    const lowerRecs = property.local_recommendations.toLowerCase();
+    const lowerPlaceName = placeName.toLowerCase();
+    
+    // Look for the place name and surrounding context
+    if (lowerRecs.includes(lowerPlaceName)) {
+      // Extract surrounding context for vibe words
+      const vibeWords = ['casual', 'upscale', 'cozy', 'trendy', 'family-friendly', 'romantic', 'lively', 'quiet'];
+      const foundVibes = vibeWords.filter(vibe => lowerRecs.includes(vibe));
+      
+      if (foundVibes.length > 0) {
+        return foundVibes.join(', ');
+      }
+    }
+    
+    return null;
+  }
+
+  private getPlaceTypeFromRecommendations(property: Property, placeName: string): string {
+    if (!property.local_recommendations) return 'restaurant';
+    
+    const lowerRecs = property.local_recommendations.toLowerCase();
+    const lowerPlaceName = placeName.toLowerCase();
+    
+    if (lowerRecs.includes(lowerPlaceName)) {
+      if (lowerRecs.includes('breakfast') || lowerRecs.includes('diner')) return 'breakfast';
+      if (lowerRecs.includes('bar') || lowerRecs.includes('cocktail')) return 'bar';
+      if (lowerRecs.includes('upscale') || lowerRecs.includes('fine dining')) return 'upscale restaurant';
+    }
+    
+    return 'restaurant';
+  }
+
+  private async getVibeFromOpenAI(property: Property, placeName: string, message: string): Promise<string> {
+    try {
+      const prompt = `A guest staying at ${property.property_name} is asking about the vibe of "${placeName}". 
+      
+      Provide a brief description of the atmosphere/vibe using tags like "casual", "romantic", "family-friendly", "trendy", etc.
+      
+      Format: "${placeName} has a [description] vibe. [Brief details about atmosphere]"
+      
+      Keep under 160 characters for SMS.`;
+
+      const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+        },
+        body: JSON.stringify({ prompt })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.recommendation;
+      }
+    } catch (error) {
+      console.error('❌ Error getting vibe from OpenAI:', error);
+    }
+    
+    return `${placeName} has a great local vibe. Check out photos online to get a better sense of the atmosphere!`;
   }
 
   // NEW: Handle property code validation

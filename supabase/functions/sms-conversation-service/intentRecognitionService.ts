@@ -1,4 +1,6 @@
 
+import { VibeDetectionService } from './vibeDetectionService.ts';
+
 export interface IntentResult {
   intent: string;
   confidence: number;
@@ -10,10 +12,34 @@ export class IntentRecognitionService {
   static recognizeIntent(message: string): IntentResult {
     const lowerMessage = message.toLowerCase().trim();
     
+    // PRIORITY: Check for "travel" code first
+    if (this.isTravelCode(lowerMessage)) {
+      console.log('🌍 Travel code detected:', message);
+      return { intent: 'travel_code_detected', confidence: 0.95, isMultiPart: false };
+    }
+    
     // Reset/restart commands - HIGH PRIORITY - check first!
     if (this.isResetCommand(lowerMessage)) {
       console.log('🔄 Reset command detected:', message);
       return { intent: 'conversation_reset', confidence: 0.95, isMultiPart: false };
+    }
+    
+    // NEW: Vibe/ambience questions
+    if (VibeDetectionService.detectVibeIntent(message)) {
+      console.log('✨ Vibe intent detected:', message);
+      return { intent: 'ask_venue_vibe', confidence: 0.9, isMultiPart: false };
+    }
+    
+    // NEW: Busyness questions
+    if (VibeDetectionService.detectBusynessIntent(message)) {
+      console.log('👥 Busyness intent detected:', message);
+      return { intent: 'ask_venue_busyness', confidence: 0.9, isMultiPart: false };
+    }
+    
+    // NEW: Property-specific questions
+    if (VibeDetectionService.detectPropertySpecificIntent(message)) {
+      console.log('🏠 Property-specific intent detected:', message);
+      return { intent: 'ask_property_specific', confidence: 0.9, isMultiPart: false };
     }
     
     // Multi-part detection - check for "and" patterns
@@ -36,6 +62,12 @@ export class IntentRecognitionService {
       confidence: singleIntent.confidence,
       isMultiPart: false
     };
+  }
+
+  // NEW: Detect "travel" code
+  private static isTravelCode(message: string): boolean {
+    const cleanMessage = message.trim().toLowerCase();
+    return cleanMessage === 'travel';
   }
 
   private static isResetCommand(message: string): boolean {
