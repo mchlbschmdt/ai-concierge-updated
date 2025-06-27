@@ -1,5 +1,8 @@
 
 import { VibeDetectionService } from './vibeDetectionService.ts';
+import { MenuService } from './menuService.ts';
+import { AmenityService } from './amenityService.ts';
+import { WiFiTroubleshootingService } from './wifiTroubleshootingService.ts';
 
 export interface IntentResult {
   intent: string;
@@ -22,6 +25,18 @@ export class IntentRecognitionService {
     if (this.isResetCommand(lowerMessage)) {
       console.log('🔄 Reset command detected:', message);
       return { intent: 'conversation_reset', confidence: 0.95, isMultiPart: false };
+    }
+    
+    // NEW: Menu requests
+    if (MenuService.extractMenuIntent(message)) {
+      console.log('📄 Menu intent detected:', message);
+      return { intent: 'ask_menu', confidence: 0.9, isMultiPart: false };
+    }
+    
+    // NEW: Amenity requests
+    if (AmenityService.detectAmenityQuery(message)) {
+      console.log('🏊 Amenity intent detected:', message);
+      return { intent: 'ask_amenity', confidence: 0.9, isMultiPart: false };
     }
     
     // NEW: Vibe/ambience questions
@@ -134,7 +149,10 @@ export class IntentRecognitionService {
     if (this.matchesKeywords(message, [
       'food', 'restaurant', 'eat', 'dining', 'hungry', 'meal', 'lunch', 'dinner', 'breakfast',
       'where to eat', 'good food', 'best restaurant', 'food recommendations', 'places to eat',
-      'restaurants near', 'food near', 'somewhere to eat', 'grab a bite', 'get food'
+      'restaurants near', 'food near', 'somewhere to eat', 'grab a bite', 'get food',
+      'pizza', 'burger', 'sushi', 'italian', 'mexican', 'chinese', 'american', 'cuisine',
+      'family friendly', 'family-friendly', 'kid friendly', 'casual', 'upscale', 'fine dining',
+      'quick bite', 'fast food', 'takeout', 'delivery', 'cheap eats'
     ])) {
       return { intent: 'ask_food_recommendations', confidence: 0.95 };
     }
