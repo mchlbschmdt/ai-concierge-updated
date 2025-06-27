@@ -15,6 +15,7 @@ import { LocationService } from './locationService.ts';
 import { MenuService } from './menuService.ts';
 import { AmenityService } from './amenityService.ts';
 import { WiFiTroubleshootingService } from './wifiTroubleshootingService.ts';
+import { ContextualResponseService } from './contextualResponseService.ts';
 import { Property } from './types.ts';
 
 export class EnhancedConversationService {
@@ -32,7 +33,7 @@ export class EnhancedConversationService {
     phoneNumber: string,
     message: string
   ): Promise<{ messages: string[]; conversationalResponse: boolean; intent: string }> {
-    console.log('🎯 Enhanced Conversation Service V2.4 - Processing message:', message);
+    console.log('🎯 Enhanced Conversation Service V2.5 - Processing message:', message);
 
     // Get conversation
     const conversation = await this.conversationManager.getOrCreateConversation(phoneNumber);
@@ -44,7 +45,6 @@ export class EnhancedConversationService {
     if (lowerMessage === 'travel') {
       console.log('🌍 Travel code detected - routing to travel planner');
       
-      // Only allow travel code if not already assigned to a property or if they reset
       if (conversation.property_id && conversation.conversation_state !== 'awaiting_property_id') {
         return {
           messages: ["You're currently assigned to a property. Text 'reset' first if you want to use the travel planner."],
@@ -53,7 +53,6 @@ export class EnhancedConversationService {
         };
       }
       
-      // Route to travel planner (would integrate with existing travel conversation service)
       return {
         messages: ["Welcome to the Travel Planner! I can help you discover amazing destinations. Where would you like to explore?"],
         conversationalResponse: true,
@@ -79,7 +78,11 @@ export class EnhancedConversationService {
       };
     }
 
-    // NEW: WiFi Troubleshooting Flow
+    // Get property type for enhanced context
+    const propertyType = LocationService.determinePropertyType(property.address || '');
+    console.log('🏠 Property type determined:', propertyType);
+
+    // WiFi Troubleshooting Flow
     const wifiTroubleshootingState = conversation.conversation_context?.wifi_troubleshooting_state;
     
     if (wifiTroubleshootingState === 'awaiting_troubleshooting_result') {
@@ -90,42 +93,45 @@ export class EnhancedConversationService {
       return await this.handleHostContactResponse(property, message, conversation, phoneNumber);
     }
 
-    // NEW: Check for WiFi issues (only after WiFi-related responses)
+    // Check for WiFi issues (only after WiFi-related responses)
     if (WiFiTroubleshootingService.detectWiFiIssue(message, conversation.last_message_type)) {
       console.log('📶 WiFi issue detected, starting troubleshooting flow');
       return await this.handleWiFiTroubleshooting(property, message, conversation, phoneNumber);
     }
 
-    // NEW: Check for menu-related queries
+    // Enhanced menu-related queries with specific food detection
     if (MenuService.extractMenuIntent(message)) {
       console.log('📄 Menu intent detected');
       return await this.handleMenuRequest(property, message, conversation, phoneNumber);
     }
 
-    // NEW: Check for amenity queries
+    // Enhanced amenity queries
     const amenityType = AmenityService.detectAmenityQuery(message);
     if (amenityType) {
       console.log('🏊 Amenity query detected:', amenityType);
       return await this.handleAmenityRequest(property, message, conversation, phoneNumber, amenityType);
     }
 
-    // ENHANCED: Check for dining follow-up OR new food request FIRST
+    // Check for contextual responses needed
+    if (ContextualResponseService.shouldUseContextualResponse(message, conversation.conversation_context)) {
+      console.log('🎯 Contextual response needed');
+      return await this.handleContextualResponse(property, message, conversation, phoneNumber, propertyType);
+    }
+
+    // Enhanced dining follow-up OR new food request
     const diningState = conversation.conversation_context?.dining_conversation_state;
-    
-    // Check if this is a food-related request (even if dining state says completed)
     const isFoodRelated = this.isFoodRelatedMessage(message);
     
     if (diningState === 'awaiting_vibe_preference' || (isFoodRelated && diningState === 'provided_additional_recs')) {
       console.log('🍽️ Detected dining follow-up or new food request');
       
-      // If they're asking for different food after completing a dining conversation, reset the state
       if (diningState === 'provided_additional_recs' && isFoodRelated) {
         console.log('🔄 Resetting dining state for new food request');
         await this.conversationManager.updateConversationState(phoneNumber, {
           conversation_context: {
             ...conversation.conversation_context,
             dining_conversation_state: 'awaiting_vibe_preference',
-            dining_curated_used: [] // Reset used recommendations for fresh start
+            dining_curated_used: []
           }
         });
       }
@@ -137,36 +143,35 @@ export class EnhancedConversationService {
     const intentResult = IntentRecognitionService.recognizeIntent(message);
     console.log('🧠 Intent recognized:', intentResult);
 
-    // NEW: Handle vibe questions
+    // Handle vibe questions
     if (intentResult.intent === 'ask_venue_vibe') {
       console.log('✨ Processing vibe question');
       return await this.handleVibeQuestion(property, message, conversation, phoneNumber);
     }
 
-    // NEW: Handle busyness questions
+    // Handle busyness questions
     if (intentResult.intent === 'ask_venue_busyness') {
       console.log('👥 Processing busyness question');
       return await this.handleBusynessQuestion(property, message, conversation, phoneNumber);
     }
 
-    // NEW: Handle property-specific questions
+    // Handle property-specific questions
     if (intentResult.intent === 'ask_property_specific') {
       console.log('🏠 Processing property-specific question');
       return await this.handlePropertySpecificQuestion(property, message, conversation, phoneNumber);
     }
 
-    // OVERRIDE: If intent is generic but message is clearly food-related, change to food recommendation
+    // Override generic intent for food-related messages
     if ((intentResult.intent === 'general_inquiry' || intentResult.intent === 'ask_multiple_requests') && isFoodRelated) {
       console.log('🍽️ Overriding intent to food recommendations due to food keywords');
       intentResult.intent = 'ask_food_recommendations';
       intentResult.confidence = 0.9;
     }
 
-    // Handle conversation reset - FIXED TO USE PROPER RESET HANDLER
+    // Handle conversation reset
     if (intentResult.intent === 'conversation_reset') {
       console.log('🔄 PROCESSING RESET - Using ResetHandler for complete property clearing');
       
-      // Use ResetHandler instead of ConversationMemoryManager for complete reset
       const resetUpdates = ResetHandler.getCompleteResetUpdates(conversation.conversation_context);
       console.log('🧹 Reset updates prepared:', resetUpdates);
       
@@ -182,9 +187,9 @@ export class EnhancedConversationService {
       };
     }
 
-    // Handle food recommendation with new conversational flow
+    // Handle food recommendation with enhanced conversational flow
     if (intentResult.intent === 'ask_food_recommendations') {
-      console.log('🍽️ Processing food recommendation with new conversational flow');
+      console.log('🍽️ Processing food recommendation with enhanced conversational flow');
       return await this.handleConversationalDining(property, message, conversation, phoneNumber);
     }
 
@@ -223,8 +228,16 @@ export class EnhancedConversationService {
           last_recommendations: propertyRecommendations
         });
 
+        // Add helpful next step
+        const nextStep = ContextualResponseService.generateNextStepSuggestion(
+          intentResult.intent, 
+          propertyType, 
+          conversation.conversation_context
+        );
+        const responseWithNextStep = `${propertyRecommendations}\n\n${nextStep}`;
+
         return {
-          messages: [MessageUtils.ensureSmsLimit(propertyRecommendations)],
+          messages: [MessageUtils.ensureSmsLimit(responseWithNextStep)],
           conversationalResponse: true,
           intent: intentResult.intent
         };
@@ -260,6 +273,33 @@ export class EnhancedConversationService {
 
     const finalIntent = followUpIntent || intentResult.intent;
     console.log('🔄 Final intent after follow-up detection:', finalIntent);
+
+    // Handle general inquiry with enhanced contextual response
+    if (finalIntent === 'general_inquiry') {
+      console.log('❓ Handling general inquiry with contextual response');
+      
+      const contextualResponse = ContextualResponseService.generateClarificationQuestion(
+        message, 
+        conversation.conversation_context
+      );
+      
+      const updatedContext = ConversationMemoryManager.updateMemory(
+        conversation.conversation_context,
+        finalIntent,
+        'contextual_clarification'
+      );
+
+      await this.conversationManager.updateConversationState(phoneNumber, {
+        conversation_context: updatedContext,
+        last_message_type: finalIntent
+      });
+
+      return {
+        messages: [MessageUtils.ensureSmsLimit(contextualResponse)],
+        conversationalResponse: true,
+        intent: finalIntent
+      };
+    }
 
     // Update conversation flow
     const existingFlow = conversation.conversation_context?.conversationFlow || {};
@@ -309,7 +349,6 @@ export class EnhancedConversationService {
       'conversational_response'
     );
 
-    // Merge the updated flow into the context
     updatedContext.conversationFlow = updatedFlow;
 
     await this.conversationManager.updateConversationState(phoneNumber, {
@@ -317,20 +356,23 @@ export class EnhancedConversationService {
       last_message_type: finalIntent
     });
 
+    // Add helpful next step if it's a standard response
+    const responseWithNextStep = response.includes('?') ? response : 
+      `${response}\n\n${ContextualResponseService.generateNextStepSuggestion(finalIntent, propertyType, updatedContext)}`;
+
     return {
-      messages: [MessageUtils.ensureSmsLimit(response)],
+      messages: [MessageUtils.ensureSmsLimit(responseWithNextStep)],
       conversationalResponse: true,
       intent: finalIntent
     };
   }
 
-  // NEW: Handle WiFi troubleshooting
+  // Handle WiFi troubleshooting
   private async handleWiFiTroubleshooting(property: Property, message: string, conversation: any, phoneNumber: string) {
     console.log('📶 Starting WiFi troubleshooting flow');
     
     const response = WiFiTroubleshootingService.generateTroubleshootingSteps();
     
-    // Update conversation context to track troubleshooting state
     const updatedContext = {
       ...conversation.conversation_context,
       wifi_troubleshooting_state: 'awaiting_troubleshooting_result',
@@ -349,14 +391,13 @@ export class EnhancedConversationService {
     };
   }
 
-  // NEW: Handle WiFi troubleshooting response
+  // Handle WiFi troubleshooting response
   private async handleWiFiTroubleshootingResponse(property: Property, message: string, conversation: any, phoneNumber: string) {
     console.log('📶 Processing WiFi troubleshooting response');
     
     const responseType = WiFiTroubleshootingService.detectTroubleshootingResponse(message);
     
     if (responseType === 'yes') {
-      // WiFi is working now
       const updatedContext = {
         ...conversation.conversation_context,
         wifi_troubleshooting_state: null,
@@ -373,7 +414,6 @@ export class EnhancedConversationService {
         intent: 'wifi_resolved'
       };
     } else if (responseType === 'no') {
-      // WiFi still not working, offer host contact
       const response = WiFiTroubleshootingService.generateHostContactOffer();
       
       const updatedContext = {
@@ -391,7 +431,6 @@ export class EnhancedConversationService {
         intent: 'wifi_troubleshooting_escalation'
       };
     } else {
-      // Unclear response, ask for clarification
       return {
         messages: ["Did the troubleshooting steps help fix the WiFi connection? Reply with 'yes' if it's working or 'no' if you're still having trouble."],
         conversationalResponse: true,
@@ -400,18 +439,14 @@ export class EnhancedConversationService {
     }
   }
 
-  // NEW: Handle host contact response
+  // Handle host contact response
   private async handleHostContactResponse(property: Property, message: string, conversation: any, phoneNumber: string) {
     console.log('📞 Processing host contact response');
     
     const responseType = WiFiTroubleshootingService.detectTroubleshootingResponse(message);
     
     if (responseType === 'yes') {
-      // Contact the host
       const response = WiFiTroubleshootingService.generateHostContactedConfirmation();
-      
-      // TODO: Implement actual host notification logic here
-      // This would integrate with the existing emergency contact system
       
       const updatedContext = {
         ...conversation.conversation_context,
@@ -429,7 +464,6 @@ export class EnhancedConversationService {
         intent: 'host_contacted'
       };
     } else {
-      // Don't contact host
       const updatedContext = {
         ...conversation.conversation_context,
         wifi_troubleshooting_state: null
@@ -447,22 +481,35 @@ export class EnhancedConversationService {
     }
   }
 
-  // NEW: Handle menu requests
+  // Handle menu requests
   private async handleMenuRequest(property: Property, message: string, conversation: any, phoneNumber: string) {
-    console.log('📄 Processing menu request');
+    console.log('📄 Processing enhanced menu request');
     
     const lastRecommendedRestaurant = conversation.conversation_context?.last_recommended_restaurant;
+    const specificFoodQuery = MenuService.detectSpecificFoodQuery(message);
     
     if (lastRecommendedRestaurant) {
       console.log('🍽️ Found last recommended restaurant:', lastRecommendedRestaurant);
+      
+      // Check for specific food queries
+      if (specificFoodQuery) {
+        const specificResponse = MenuService.generateSpecificFoodResponse(message, lastRecommendedRestaurant);
+        return {
+          messages: [MessageUtils.ensureSmsLimit(specificResponse)],
+          conversationalResponse: true,
+          intent: 'menu_request_specific'
+        };
+      }
       
       const menuLink = await MenuService.getMenuLink(lastRecommendedRestaurant);
       
       let response: string;
       if (menuLink) {
-        response = `Here's the menu for ${lastRecommendedRestaurant}: ${menuLink}`;
+        response = `Here's the menu for ${lastRecommendedRestaurant}: ${menuLink}
+
+Want help with reservations or directions?`;
       } else {
-        response = MenuService.generateMenuResponse(lastRecommendedRestaurant);
+        response = MenuService.generateMenuResponse(lastRecommendedRestaurant, property.address);
       }
       
       return {
@@ -479,9 +526,9 @@ export class EnhancedConversationService {
     }
   }
 
-  // NEW: Handle amenity requests
+  // Handle amenity requests
   private async handleAmenityRequest(property: Property, message: string, conversation: any, phoneNumber: string, amenityType: string) {
-    console.log('🏊 Processing amenity request:', amenityType);
+    console.log('🏊 Processing enhanced amenity request:', amenityType);
     
     const propertyType = LocationService.determinePropertyType(property.address || '');
     const response = AmenityService.generateAmenityResponse(amenityType, propertyType, property.property_name);
@@ -505,12 +552,39 @@ export class EnhancedConversationService {
     };
   }
 
-  // NEW: Enhanced property code validation with address injection
+  // Handle contextual responses for vague messages
+  private async handleContextualResponse(property: Property, message: string, conversation: any, phoneNumber: string, propertyType: string) {
+    console.log('🎯 Processing contextual response for vague message');
+    
+    const clarificationResponse = ContextualResponseService.generateClarificationQuestion(
+      message, 
+      conversation.conversation_context
+    );
+    
+    const updatedContext = ConversationMemoryManager.updateMemory(
+      conversation.conversation_context,
+      'contextual_clarification',
+      'clarification_response',
+      { type: 'contextual_clarification', content: clarificationResponse }
+    );
+    
+    await this.conversationManager.updateConversationState(phoneNumber, {
+      conversation_context: updatedContext,
+      last_message_type: 'contextual_clarification'
+    });
+    
+    return {
+      messages: [MessageUtils.ensureSmsLimit(clarificationResponse)],
+      conversationalResponse: true,
+      intent: 'contextual_clarification'
+    };
+  }
+
+  // Enhanced property code validation with address injection
   private async handlePropertyCodeValidation(phoneNumber: string, message: string, conversation: any) {
     console.log('🔍 Processing potential property code:', message);
     
-    // Clean the message to extract potential property code
-    const cleanedMessage = message.trim().replace(/\D/g, ''); // Remove all non-digits
+    const cleanedMessage = message.trim().replace(/\D/g, '');
     
     if (!cleanedMessage || cleanedMessage.length < 3) {
       console.log('❌ Message does not appear to be a valid property code');
@@ -524,13 +598,11 @@ export class EnhancedConversationService {
     console.log('🔍 Attempting to find property with code:', cleanedMessage);
     
     try {
-      // Look up the property by code
       const property = await this.propertyService.findPropertyByCode(cleanedMessage);
       
       if (property) {
         console.log('✅ Valid property code found! Property:', property.property_name);
         
-        // Update conversation with property information
         const updatedContext = {
           ...conversation.conversation_context,
           property_confirmed: true,
@@ -547,7 +619,7 @@ export class EnhancedConversationService {
           last_message_type: 'property_code_validation'
         });
 
-        // NEW: Enhanced welcome message with address injection
+        // ENHANCED: Welcome message with address injection
         const welcomeMessage = property.address 
           ? `Welcome to ${property.property_name} at ${property.address}! I'm your AI concierge and I'm here to help with any questions about your stay. How may I help you today?`
           : `Welcome to ${property.property_name}! I'm your AI concierge and I'm here to help with any questions about your stay. How may I help you today?`;
@@ -575,23 +647,22 @@ export class EnhancedConversationService {
     }
   }
 
-  // Enhanced restaurant recommendation with location awareness
+  // Enhanced restaurant recommendation with accurate distance
   private async getSingleRestaurantRecommendation(property: Property, message: string, conversation: any) {
-    console.log('🤖 Getting single restaurant recommendation from OpenAI with location awareness');
+    console.log('🤖 Getting single restaurant recommendation with enhanced distance accuracy');
     
     const propertyAddress = property.address || 'the property';
     const propertyName = property.property_name || 'your accommodation';
     
-    // Enhanced prompt with location awareness and accurate distance requirements
     const prompt = `You are a local dining concierge. A guest at ${propertyName}, ${propertyAddress} is asking: "${message}"
 
-Provide EXACTLY ONE restaurant recommendation. Use the property address to calculate accurate distance and drive time.
+Provide EXACTLY ONE restaurant recommendation with accurate distance and drive time from the property address.
 
-Format: "[Restaurant Name] ([accurate distance], 🚗 [drive time], ⭐[rating]) — [brief insider description]"
+Format: "[Restaurant Name] ([distance], 🚗 [drive time], ⭐[rating]) — [brief insider description]"
 
 Then ask: "What's your vibe — casual local spot, rooftop cocktails, or something upscale?"
 
-Important: Use real distances from the property address. Be accurate with drive times.
+Important: Calculate real distances from ${propertyAddress}. Be accurate with drive times.
 Keep conversational and friendly. Total response under 160 characters.`;
 
     try {
@@ -607,12 +678,24 @@ Keep conversational and friendly. Total response under 160 characters.`;
       if (response.ok) {
         const data = await response.json();
         
-        // Extract restaurant name for memory tracking
         const restaurantMatch = data.recommendation.match(/^([^(]+)/);
         if (restaurantMatch) {
           const restaurantName = restaurantMatch[1].trim();
           
-          // Update conversation context with last recommended restaurant
+          // Get accurate distance if available
+          const distanceInfo = await LocationService.getAccurateDistance(
+            propertyAddress,
+            restaurantName
+          );
+          
+          let enhancedRecommendation = data.recommendation;
+          if (distanceInfo) {
+            enhancedRecommendation = data.recommendation.replace(
+              /\([^)]+\)/,
+              `(${distanceInfo.distance}, 🚗 ${distanceInfo.duration})`
+            );
+          }
+          
           await this.conversationManager.updateConversationState(conversation.phone_number, {
             conversation_context: {
               ...conversation.conversation_context,
@@ -621,6 +704,8 @@ Keep conversational and friendly. Total response under 160 characters.`;
               last_interaction: new Date().toISOString()
             }
           });
+          
+          return { response: enhancedRecommendation };
         }
         
         return { response: data.recommendation };
@@ -632,57 +717,36 @@ Keep conversational and friendly. Total response under 160 characters.`;
     return { response: "Having trouble with dining recommendations right now. Try asking about WiFi or check-in details instead!" };
   }
 
-  // Enhanced vibe-based recommendations with location accuracy
-  private async getVibeBasedRecommendations(property: Property, vibeType: string, message: string) {
-    console.log('🤖 Getting vibe-based recommendations from OpenAI with location accuracy');
+  // Enhanced amenity request handling with property context
+  private async handleAmenityRequest(property: Property, message: string, conversation: any, phoneNumber: string, amenityType: string) {
+    console.log('🏊 Processing enhanced amenity request:', amenityType);
     
-    const vibeDescriptions = {
-      casual: 'casual local spots with authentic atmosphere',
-      upscale: 'upscale fine dining restaurants',
-      rooftop: 'rooftop bars and cocktail lounges',
-      general: 'great dining options'
+    const propertyType = LocationService.determinePropertyType(property.address || '');
+    const response = AmenityService.generateAmenityResponse(amenityType, propertyType, property.property_name);
+    
+    const updatedContext = ConversationMemoryManager.updateMemory(
+      conversation.conversation_context,
+      'amenity_request',
+      'amenity_response',
+      { type: amenityType, content: response }
+    );
+    
+    await this.conversationManager.updateConversationState(phoneNumber, {
+      conversation_context: updatedContext,
+      last_message_type: 'amenity_request'
+    });
+    
+    return {
+      messages: [MessageUtils.ensureSmsLimit(response)],
+      conversationalResponse: true,
+      intent: 'amenity_request'
     };
-    
-    const propertyAddress = property.address || 'the property';
-    const propertyName = property.property_name || 'your accommodation';
-    
-    const prompt = `You are a local dining concierge. A guest at ${propertyName}, ${propertyAddress} wants ${vibeDescriptions[vibeType] || 'dining recommendations'}.
-
-Provide 1-2 restaurants that match their preference. Use the property address for accurate distances and drive times.
-
-Format: "[Name] ([accurate distance], 🚗 [drive time], ⭐[rating]) — [brief description]"
-
-End with: "Want something quieter or looking for late-night options?"
-
-Important: Calculate real distances from the property address. Be accurate with drive times.
-Keep conversational, under 160 characters total.`;
-
-    try {
-      const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
-        },
-        body: JSON.stringify({ prompt })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        return { response: data.recommendation };
-      }
-    } catch (error) {
-      console.error('❌ Error getting vibe-based recommendations:', error);
-    }
-    
-    return { response: "Having trouble with dining recommendations right now. Try asking about WiFi or check-in details instead!" };
   }
 
-  // NEW: Handle vibe questions
+  // Handle vibe questions
   private async handleVibeQuestion(property: Property, message: string, conversation: any, phoneNumber: string) {
     console.log('✨ Handling vibe question');
     
-    // Try to extract place name from message
     const placeName = this.extractPlaceNameFromMessage(message);
     
     if (!placeName) {
@@ -693,18 +757,15 @@ Keep conversational, under 160 characters total.`;
       };
     }
     
-    // Check if place is in property recommendations
     const vibeInfo = this.getVibeFromPropertyRecommendations(property, placeName);
     
     let response: string;
     if (vibeInfo) {
       response = VibeDetectionService.generateVibeResponse(placeName, vibeInfo);
     } else {
-      // Generate vibe description using OpenAI
       response = await this.getVibeFromOpenAI(property, placeName, message);
     }
     
-    // Update conversation memory
     const updatedContext = ConversationMemoryManager.updateMemory(
       conversation.conversation_context,
       'ask_venue_vibe',
@@ -723,7 +784,7 @@ Keep conversational, under 160 characters total.`;
     };
   }
 
-  // NEW: Handle busyness questions
+  // Handle busyness questions
   private async handleBusynessQuestion(property: Property, message: string, conversation: any, phoneNumber: string) {
     console.log('👥 Handling busyness question');
     
@@ -738,12 +799,10 @@ Keep conversational, under 160 characters total.`;
       };
     }
     
-    // Determine place type from property recommendations
     const placeType = this.getPlaceTypeFromRecommendations(property, placeName);
     
     const response = VibeDetectionService.generateBusynessResponse(placeName, currentHour, placeType);
     
-    // Update conversation memory
     const updatedContext = ConversationMemoryManager.updateMemory(
       conversation.conversation_context,
       'ask_venue_busyness',
@@ -762,15 +821,13 @@ Keep conversational, under 160 characters total.`;
     };
   }
 
-  // NEW: Handle property-specific questions
+  // Handle property-specific questions
   private async handlePropertySpecificQuestion(property: Property, message: string, conversation: any, phoneNumber: string) {
     console.log('🏠 Handling property-specific question');
     
-    // First, search the knowledge base
     const knowledgeResult = PropertyKnowledgeService.searchKnowledgeBase(property, message);
     
     if (knowledgeResult) {
-      // Found relevant information in knowledge base
       const response = `${knowledgeResult}\n\nNeed anything else about the property?`;
       
       const updatedContext = ConversationMemoryManager.updateMemory(
@@ -790,13 +847,11 @@ Keep conversational, under 160 characters total.`;
         intent: 'ask_property_specific'
       };
     } else {
-      // No relevant info found - ask clarifying question
       const clarifyingQuestion = PropertyKnowledgeService.generateClarifyingQuestion(message);
       const hostContactOffer = PropertyKnowledgeService.generateHostContactOffer();
       
       const response = `${clarifyingQuestion}\n\n${hostContactOffer}`;
       
-      // Store that we're awaiting clarification or host contact
       const updatedContext = {
         ...conversation.conversation_context,
         awaiting_property_clarification: true,
@@ -818,7 +873,6 @@ Keep conversational, under 160 characters total.`;
 
   // Helper methods for the new functionality
   private extractPlaceNameFromMessage(message: string): string | null {
-    // Simple extraction - look for capitalized words that might be place names
     const words = message.split(' ');
     const capitalizedWords = words.filter(word => /^[A-Z][a-z]+/.test(word));
     
@@ -835,9 +889,7 @@ Keep conversational, under 160 characters total.`;
     const lowerRecs = property.local_recommendations.toLowerCase();
     const lowerPlaceName = placeName.toLowerCase();
     
-    // Look for the place name and surrounding context
     if (lowerRecs.includes(lowerPlaceName)) {
-      // Extract surrounding context for vibe words
       const vibeWords = ['casual', 'upscale', 'cozy', 'trendy', 'family-friendly', 'romantic', 'lively', 'quiet'];
       const foundVibes = vibeWords.filter(vibe => lowerRecs.includes(vibe));
       
@@ -864,7 +916,30 @@ Keep conversational, under 160 characters total.`;
     return 'restaurant';
   }
 
-  // NEW: Enhanced food detection method
+  private async getVibeFromOpenAI(property: Property, placeName: string, message: string): Promise<string> {
+    const prompt = `A guest is asking about the vibe at ${placeName} near ${property.address}. Provide a brief, helpful description of the atmosphere and ambiance. Keep it under 100 characters and conversational.`;
+    
+    try {
+      const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+        },
+        body: JSON.stringify({ prompt })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.recommendation;
+      }
+    } catch (error) {
+      console.error('❌ Error getting vibe from OpenAI:', error);
+    }
+    
+    return `${placeName} has a great atmosphere! Want more details about their menu or hours?`;
+  }
+
   private isFoodRelatedMessage(message: string): boolean {
     const lowerMessage = message.toLowerCase();
     const foodKeywords = [
@@ -882,20 +957,17 @@ Keep conversational, under 160 characters total.`;
   }
 
   private async handleConversationalDining(property: Property, message: string, conversation: any, phoneNumber: string) {
-    console.log('🍽️ Starting conversational dining flow');
+    console.log('🍽️ Starting enhanced conversational dining flow');
     
-    // FORCE CLEAR ALL DINING MEMORY for fresh start
     console.log('🧹 Force clearing ALL dining and recommendation memory');
     await this.conversationManager.updateConversationState(phoneNumber, {
       conversation_context: {
         ...conversation.conversation_context,
-        // Clear ALL recommendation memory
         recommendation_history: {},
         global_recommendation_blacklist: [],
         dining_curated_used: [],
         dining_conversation_state: null,
         dining_vibe_preference: null,
-        // Clear recent intents that might interfere
         recent_intents: ['ask_food_recommendations'],
         last_intent: 'ask_food_recommendations',
         last_response_type: null
@@ -907,24 +979,35 @@ Keep conversational, under 160 characters total.`;
     const guestName = conversation.conversation_context?.guest_name;
     const namePrefix = guestName ? `${guestName}, ` : '';
     
-    // Get ONLY a restaurant recommendation (fixed extraction logic)
     const curatedRestaurant = this.getCuratedRestaurantRecommendation(property);
     
     if (curatedRestaurant) {
       console.log('🏠 Starting with curated restaurant recommendation:', curatedRestaurant);
       
-      const response = `${namePrefix}${curatedRestaurant}\n\nWhat's your vibe — casual local spot, rooftop cocktails, or something upscale?`;
-      
-      // Extract restaurant name for memory tracking
+      // Get accurate distance if available
       const restaurantMatch = curatedRestaurant.match(/^([^(]+)/);
       const restaurantName = restaurantMatch ? restaurantMatch[1].trim() : curatedRestaurant.split(' ')[0];
       
-      // Update context to track dining conversation state
+      const distanceInfo = await LocationService.getAccurateDistance(
+        property.address || '',
+        restaurantName
+      );
+      
+      let enhancedRestaurant = curatedRestaurant;
+      if (distanceInfo) {
+        enhancedRestaurant = curatedRestaurant.replace(
+          /\([^)]+\)/,
+          `(${distanceInfo.distance}, 🚗 ${distanceInfo.duration})`
+        );
+      }
+      
+      const response = `${namePrefix}${enhancedRestaurant}\n\nWhat's your vibe — casual local spot, rooftop cocktails, or something upscale?`;
+      
       const updatedContext = {
         ...conversation.conversation_context,
         last_intent: 'ask_food_recommendations',
         dining_conversation_state: 'awaiting_vibe_preference',
-        dining_curated_used: [curatedRestaurant],
+        dining_curated_used: [enhancedRestaurant],
         last_recommended_restaurant: restaurantName,
         recommendation_history: {},
         global_recommendation_blacklist: [],
@@ -944,7 +1027,6 @@ Keep conversational, under 160 characters total.`;
       };
     } else {
       console.log('🤖 No curated restaurants - using OpenAI for single recommendation');
-      // Fallback to OpenAI but request just one recommendation with follow-up
       const result = await this.getSingleRestaurantRecommendation(property, message, conversation);
       
       const updatedContext = {
@@ -976,7 +1058,6 @@ Keep conversational, under 160 characters total.`;
     
     console.log('🔍 Extracting ONLY restaurant recommendations from property data');
     
-    // FIXED: Only extract from RESTAURANTS section, NEVER from beaches or other sections
     const restaurantMatch = localRecs.match(/RESTAURANTS?:\s*([^A-Z]*?)(?=[A-Z][A-Z]+:|$)/i);
     
     if (!restaurantMatch || !restaurantMatch[1]) {
@@ -987,19 +1068,16 @@ Keep conversational, under 160 characters total.`;
     const restaurantText = restaurantMatch[1].trim();
     console.log('📋 Found RESTAURANTS section:', restaurantText);
     
-    // Extract the first actual restaurant (not beaches!)
     const lines = restaurantText.split(/[.\n]/).filter(line => line.trim().length > 0);
     
     for (const line of lines) {
       const cleaned = line.trim().replace(/^[-•*]\s*/, '');
       
-      // SAFEGUARD: Explicitly reject anything with "beach" in it
       if (cleaned.toLowerCase().includes('beach')) {
         console.log('🚫 Skipping beach entry:', cleaned);
         continue;
       }
       
-      // Only accept lines that look like restaurants
       if (cleaned.length > 10 && this.isActualRestaurant(cleaned)) {
         console.log('✅ Found valid restaurant recommendation:', cleaned);
         return cleaned;
@@ -1013,12 +1091,10 @@ Keep conversational, under 160 characters total.`;
   private isActualRestaurant(text: string): boolean {
     const lowerText = text.toLowerCase();
     
-    // SAFEGUARD: Explicitly reject beaches
     if (lowerText.includes('beach') || lowerText.includes('swimming') || lowerText.includes('surfing')) {
       return false;
     }
     
-    // Look for restaurant indicators
     const restaurantIndicators = [
       'restaurant', 'dining', 'cuisine', 'menu', 'chef', 'bar', 'cafe', 'bistro', 
       'grill', 'kitchen', 'eatery', 'food', 'tasting', 'cocktail', 'wine'
@@ -1028,7 +1104,6 @@ Keep conversational, under 160 characters total.`;
       lowerText.includes(indicator)
     );
     
-    // Also check if it has proper noun structure (restaurant names)
     const hasProperNoun = /[A-Z][a-z]+/.test(text);
     
     return hasRestaurantIndicator || (hasProperNoun && text.length < 100);
@@ -1043,7 +1118,6 @@ Keep conversational, under 160 characters total.`;
     const lowerMessage = message.toLowerCase();
     let vibeType = 'general';
     
-    // Determine vibe from user response - enhanced detection
     if (lowerMessage.includes('casual') || lowerMessage.includes('local') || lowerMessage.includes('simple') || lowerMessage.includes('easy')) {
       vibeType = 'casual';
     } else if (lowerMessage.includes('upscale') || lowerMessage.includes('fancy') || lowerMessage.includes('fine')) {
@@ -1051,19 +1125,42 @@ Keep conversational, under 160 characters total.`;
     } else if (lowerMessage.includes('rooftop') || lowerMessage.includes('cocktail') || lowerMessage.includes('drinks') || lowerMessage.includes('bar')) {
       vibeType = 'rooftop';
     } else if (lowerMessage.includes('burger') || lowerMessage.includes('close') || lowerMessage.includes('quick') || lowerMessage.includes('nearby')) {
-      vibeType = 'casual'; // Burger request = casual dining
+      vibeType = 'casual';
     }
     
     console.log('🎯 Detected vibe preference:', vibeType, 'from message:', message);
     
-    // Get 1-2 additional recommendations based on vibe and user request
     const additionalRecs = this.getAdditionalRestaurantRecommendations(property, vibeType, context.dining_curated_used || []);
     
     let response = '';
     if (additionalRecs.length > 0) {
-      // Filter for burger places if they mentioned burger
+      // Enhance with accurate distances
+      const enhancedRecs = [];
+      for (const rec of additionalRecs.slice(0, 2)) {
+        const restaurantMatch = rec.match(/^([^(]+)/);
+        if (restaurantMatch) {
+          const restaurantName = restaurantMatch[1].trim();
+          const distanceInfo = await LocationService.getAccurateDistance(
+            property.address || '',
+            restaurantName
+          );
+          
+          if (distanceInfo) {
+            const enhancedRec = rec.replace(
+              /\([^)]+\)/,
+              `(${distanceInfo.distance}, 🚗 ${distanceInfo.duration})`
+            );
+            enhancedRecs.push(enhancedRec);
+          } else {
+            enhancedRecs.push(rec);
+          }
+        } else {
+          enhancedRecs.push(rec);
+        }
+      }
+      
       if (lowerMessage.includes('burger')) {
-        const burgerRecs = additionalRecs.filter(rec => 
+        const burgerRecs = enhancedRecs.filter(rec => 
           rec.toLowerCase().includes('burger') || 
           rec.toLowerCase().includes('american') || 
           rec.toLowerCase().includes('grill')
@@ -1071,19 +1168,17 @@ Keep conversational, under 160 characters total.`;
         if (burgerRecs.length > 0) {
           response = `${actualNamePrefix}Perfect for burgers! Try:\n${burgerRecs.slice(0, 2).join('\n')}\n\nWant something even closer or different cuisine?`;
         } else {
-          response = `${actualNamePrefix}For good casual spots nearby:\n${additionalRecs.slice(0, 2).join('\n')}\n\nWant burger recommendations specifically?`;
+          response = `${actualNamePrefix}For good casual spots nearby:\n${enhancedRecs.slice(0, 2).join('\n')}\n\nWant burger recommendations specifically?`;
         }
       } else {
-        response = `${actualNamePrefix}Perfect! You might also like:\n${additionalRecs.slice(0, 2).join('\n')}\n\nWant something quieter or looking for late-night options?`;
+        response = `${actualNamePrefix}Perfect! You might also like:\n${enhancedRecs.slice(0, 2).join('\n')}\n\nWant something quieter or looking for late-night options?`;
       }
     } else {
-      // Fallback to OpenAI for vibe-specific recommendations
       console.log('🤖 No curated recs found, using OpenAI for specific request');
       const result = await this.getVibeBasedRecommendations(property, vibeType, message);
       response = result.response;
     }
     
-    // Update conversation state - mark as completed
     const updatedContext = {
       ...context,
       dining_conversation_state: 'provided_additional_recs',
@@ -1109,7 +1204,6 @@ Keep conversational, under 160 characters total.`;
     
     console.log('🔍 Getting additional restaurant recommendations for vibe:', vibeType);
     
-    // FIXED: Only look in RESTAURANTS section
     const restaurantMatch = localRecs.match(/RESTAURANTS?:\s*([^A-Z]*?)(?=[A-Z][A-Z]+:|$)/i);
     if (!restaurantMatch || !restaurantMatch[1]) return [];
     
@@ -1123,7 +1217,6 @@ Keep conversational, under 160 characters total.`;
       if (cleaned.length < 10) continue;
       if (usedRecs.some(used => cleaned.includes(used) || used.includes(cleaned))) continue;
       
-      // SAFEGUARD: Skip beaches
       if (cleaned.toLowerCase().includes('beach')) continue;
       
       const lowerLine = cleaned.toLowerCase();
@@ -1131,7 +1224,6 @@ Keep conversational, under 160 characters total.`;
       
       if (!isRestaurant) continue;
       
-      // Match vibe preferences
       let matches = false;
       if (vibeType === 'casual' && (lowerLine.includes('local') || lowerLine.includes('casual'))) {
         matches = true;
@@ -1150,6 +1242,51 @@ Keep conversational, under 160 characters total.`;
     
     console.log('✅ Found additional recommendations:', recommendations.length);
     return recommendations;
+  }
+
+  private async getVibeBasedRecommendations(property: Property, vibeType: string, message: string) {
+    console.log('🤖 Getting vibe-based recommendations from OpenAI with enhanced accuracy');
+    
+    const vibeDescriptions = {
+      casual: 'casual local spots with authentic atmosphere',
+      upscale: 'upscale fine dining restaurants',
+      rooftop: 'rooftop bars and cocktail lounges',
+      general: 'great dining options'
+    };
+    
+    const propertyAddress = property.address || 'the property';
+    const propertyName = property.property_name || 'your accommodation';
+    
+    const prompt = `You are a local dining concierge. A guest at ${propertyName}, ${propertyAddress} wants ${vibeDescriptions[vibeType] || 'dining recommendations'}.
+
+Provide 1-2 restaurants that match their preference. Use accurate distances and drive times from the property address.
+
+Format: "[Name] ([accurate distance], 🚗 [drive time], ⭐[rating]) — [brief description]"
+
+End with: "Want something quieter or looking for late-night options?"
+
+Important: Calculate real distances from ${propertyAddress}. Be accurate with drive times.
+Keep conversational, under 160 characters total.`;
+
+    try {
+      const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+        },
+        body: JSON.stringify({ prompt })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return { response: data.recommendation };
+      }
+    } catch (error) {
+      console.error('❌ Error getting vibe-based recommendations:', error);
+    }
+    
+    return { response: "Having trouble with dining recommendations right now. Try asking about WiFi or check-in details instead!" };
   }
 
   private isOtherRecommendationIntent(intent: string): boolean {
@@ -1190,7 +1327,7 @@ Keep conversational, under 160 characters total.`;
       }
       
       if (activitiesSection) {
-        const response = `${namePrefix}here are some great local activities: ${activitiesSection}\n\nNeed more details about any of these?`;
+        const response = `${namePrefix}here are some great local activities: ${activitiesSection}`;
         return response;
       }
     }
@@ -1205,7 +1342,7 @@ Keep conversational, under 160 characters total.`;
       }
       
       if (shoppingSection) {
-        const response = `${namePrefix}here are nearby shopping options: ${shoppingSection}\n\nWant directions to any of these stores?`;
+        const response = `${namePrefix}here are nearby shopping options: ${shoppingSection}`;
         return response;
       }
     }
