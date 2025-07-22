@@ -49,9 +49,9 @@ export class EnhancedConversationService {
 
       // Handle conversation reset - use the correct method name
       if (intentResult.intent === 'conversation_reset') {
-        await this.conversationManager.clearConversationMemory(phoneNumber);
+        await this.conversationManager.resetConversation(phoneNumber);
         return {
-          response: "Got it! What can I help you with?",
+          response: "Let's start fresh! Please send your property code to begin.",
           shouldUpdateState: false
         };
       }

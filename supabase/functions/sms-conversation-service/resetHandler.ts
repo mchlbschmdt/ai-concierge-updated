@@ -31,10 +31,9 @@ export class ResetHandler {
   static generateResetResponse(): string {
     console.log('🔄 ResetHandler.generateResetResponse called');
     
-    // Enhanced reset response with Hostly branding and more information
-    const response = "Hi! I'm your Hostly AI Concierge. I can help with property info, local recommendations, and more! To get started, please send me your property code (the numbers from your booking confirmation).";
+    const response = "Let's start fresh! Please send your property code to begin.";
     
-    console.log('✅ Generated enhanced reset response:', response);
+    console.log('✅ Generated reset response:', response);
     return response;
   }
 
@@ -61,6 +60,7 @@ export class ResetHandler {
           pending_property: null,
           guest_name: null
         },
+        preferences: {}, // Clear all preferences
         last_recommendations: null, // Clear cached recommendations
         last_message_type: null
       };
@@ -86,6 +86,7 @@ export class ResetHandler {
           pending_property: null,
           guest_name: null
         },
+        preferences: {}, // Clear all preferences
         last_recommendations: null,
         last_message_type: null
       };
