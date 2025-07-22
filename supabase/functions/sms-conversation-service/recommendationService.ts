@@ -6,7 +6,7 @@ import { MessageUtils } from './messageUtils.ts';
 export class RecommendationService {
   constructor(private supabase: any, private conversationManager: any) {}
 
-  async getEnhancedRecommendations(property: Property, originalMessage: string, conversation: Conversation) {
+  async getEnhancedRecommendations(property: Property, originalMessage: string, conversation: Conversation, intentResult?: any) {
     console.log(`🎯 Getting enhanced recommendations for: ${originalMessage}`);
     
     try {
@@ -18,10 +18,10 @@ export class RecommendationService {
       
       const greeting = ResponseGenerator.getTimeAwareGreeting(timezone);
       const personalizedGreeting = ResponseGenerator.getPersonalizedFoodGreeting(originalMessage, greeting, guestName);
-      const clarifyingQuestion = ResponseGenerator.getClarifyingQuestion(originalMessage);
+      const clarifyingQuestion = this.getSmartFollowUpQuestion(originalMessage, intentResult);
       const helpfulOffer = ResponseGenerator.getHelpfulOffer(this.categorizeRequest(originalMessage));
       
-      const guestContext = this.extractGuestContext(originalMessage, context, conversation);
+      const guestContext = this.extractGuestContext(originalMessage, context, conversation, intentResult);
       const requestType = this.categorizeRequest(originalMessage);
       const previousRecommendations = conversation?.last_recommendations || null;
       
@@ -34,29 +34,11 @@ export class RecommendationService {
 
       // Enhanced payload for proximity-based recommendations
       const enhancedPayload = {
-        prompt: `${originalMessage}
-
-ENHANCED LOCATION-AWARE RESPONSE FORMAT:
-1. Start with: "${personalizedGreeting}"
-2. Provide 3 recommendations within 5 miles of ${propertyAddress} with format: "Name (distance, rating★): Brief description—${ResponseGenerator.getDistanceFraming('0.3')}"
-3. Ask: "${clarifyingQuestion}"
-4. End with: "${helpfulOffer}"
-
-CRITICAL PROXIMITY REQUIREMENTS:
-- Focus on places within 5 miles of ${propertyAddress}
-- Only show places with 4.0+ ratings
-- Include exact distance (e.g., "0.2 mi", "3.5 mi")
-- Use distance framing: ≤0.5mi="walking distance", 0.5-1.5mi="short ride", 1.5-5mi="quick drive"
-- Prioritize closest options when multiple good choices exist
-- Keep total response under 160 characters
-- ${memoryContext ? `AVOID REPEATING: ${memoryContext}` : ''}
-
-LOCATION CONTEXT: ${propertyAddress}`,
+        prompt: originalMessage,
         propertyAddress: `${propertyName}, ${propertyAddress}`,
         guestContext: guestContext,
         requestType: requestType,
-        previousRecommendations: previousRecommendations,
-        memoryContext: memoryContext
+        previousRecommendations: previousRecommendations
       };
 
       const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
@@ -99,6 +81,36 @@ LOCATION CONTEXT: ${propertyAddress}`,
         shouldUpdateState: false
       };
     }
+  }
+
+  private getSmartFollowUpQuestion(message: string, intentResult?: any): string {
+    const lowerMessage = message.toLowerCase();
+    
+    // Family-specific follow-ups
+    if (intentResult?.hasKids) {
+      if (lowerMessage.includes('food') || lowerMessage.includes('restaurant')) {
+        return "Want somewhere with a kids menu or family-friendly vibe?";
+      }
+      if (lowerMessage.includes('activity') || lowerMessage.includes('things to do')) {
+        return "Looking for something interactive for the kids?";
+      }
+    }
+    
+    // Checkout-aware follow-ups
+    if (intentResult?.isCheckoutSoon) {
+      return "Want something quick and nearby since you're heading out?";
+    }
+    
+    // Standard follow-ups based on request type
+    if (lowerMessage.includes('food') || lowerMessage.includes('restaurant')) {
+      return "What's your vibe—quick bite, date night, or somewhere with drinks?";
+    }
+    
+    if (lowerMessage.includes('activity') || lowerMessage.includes('things to do')) {
+      return "Are you looking for outdoor fun, something cultural, or family-friendly?";
+    }
+    
+    return "Want something casual or more upscale?";
   }
 
   private async storeTravelRecommendation(location: string, requestType: string, recommendation: string): Promise<void> {
@@ -160,7 +172,7 @@ LOCATION CONTEXT: ${propertyAddress}`,
     }
   }
 
-  async getContextualRecommendations(property: Property, type: string, conversation: Conversation) {
+  async getContextualRecommendations(property: Property, type: string, conversation: Conversation, intentResult?: any) {
     try {
       const propertyName = property?.property_name || 'your accommodation';
       const propertyAddress = property?.address || 'the property';
@@ -176,8 +188,12 @@ LOCATION CONTEXT: ${propertyAddress}`,
       const guestNameNote = guestName ? `Guest's name is ${guestName}. ` : '';
       const memoryContext = this.getRecommendationMemoryContext(context);
       const avoidRepetition = memoryContext ? `AVOID these previously mentioned places: ${memoryContext}. ` : '';
+      
+      // Add family and checkout context
+      const familyNote = intentResult?.hasKids ? 'Guest is traveling with kids - prioritize family-friendly options. ' : '';
+      const checkoutNote = intentResult?.isCheckoutSoon ? 'Guest is checking out soon - prioritize quick/nearby options. ' : '';
 
-      const prompt = `You are a local concierge. Guest at ${propertyName}, ${propertyAddress}. ${guestNameNote}${contextNote}${avoidRepetition}Request: ${type}
+      const prompt = `You are a local concierge. Guest at ${propertyName}, ${propertyAddress}. ${guestNameNote}${contextNote}${avoidRepetition}${familyNote}${checkoutNote}Request: ${type}
 
 CRITICAL PROXIMITY FOCUS: Only recommend places within 5 miles of ${propertyAddress}. Prioritize closest options.
 
@@ -233,23 +249,30 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
     return '';
   }
 
-  private extractGuestContext(message: string, context: any, conversation: Conversation): string {
-    const askedAbout = context.askedAbout || [];
-    const lastMessage = conversation.last_message_type;
-    
-    if (lastMessage === 'recommendations') {
-      return message;
-    }
+  private extractGuestContext(message: string, context: any, conversation: Conversation, intentResult?: any): any {
+    const guestContext = {
+      guestName: context?.guest_name,
+      previousInterests: context?.previousInterests || [],
+      lastActivity: context?.lastActivity,
+      timeOfDay: this.getTimeOfDay(),
+      dayOfWeek: this.getDayOfWeek(),
+      isCheckoutSoon: intentResult?.isCheckoutSoon || false,
+      hasKids: intentResult?.hasKids || false
+    };
 
-    if (askedAbout.includes('wifi')) {
-      return message;
-    }
+    return guestContext;
+  }
 
-    if (askedAbout.includes('parking')) {
-      return message;
-    }
+  private getTimeOfDay(): string {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'morning';
+    if (hour < 17) return 'afternoon';
+    return 'evening';
+  }
 
-    return message;
+  private getDayOfWeek(): string {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    return days[new Date().getDay()];
   }
 
   private categorizeRequest(message: string): string {

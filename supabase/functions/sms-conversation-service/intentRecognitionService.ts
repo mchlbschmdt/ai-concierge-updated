@@ -9,6 +9,8 @@ export interface IntentResult {
   confidence: number;
   subIntents?: string[];
   isMultiPart: boolean;
+  hasKids?: boolean;
+  isCheckoutSoon?: boolean;
 }
 
 export class IntentRecognitionService {
@@ -57,6 +59,10 @@ export class IntentRecognitionService {
       return { intent: 'ask_property_specific', confidence: 0.9, isMultiPart: false };
     }
     
+    // Detect family/kids context
+    const hasKids = this.detectFamilyContext(lowerMessage);
+    const isCheckoutSoon = this.detectCheckoutContext(lowerMessage);
+    
     // Multi-part detection - check for "and" patterns
     const hasMultipleParts = this.detectMultipleRequests(lowerMessage);
     
@@ -66,7 +72,9 @@ export class IntentRecognitionService {
         intent: 'ask_multiple_requests',
         confidence: 0.9,
         subIntents,
-        isMultiPart: true
+        isMultiPart: true,
+        hasKids,
+        isCheckoutSoon
       };
     }
 
@@ -75,8 +83,33 @@ export class IntentRecognitionService {
     return {
       intent: singleIntent.intent,
       confidence: singleIntent.confidence,
-      isMultiPart: false
+      isMultiPart: false,
+      hasKids,
+      isCheckoutSoon
     };
+  }
+
+  // NEW: Detect family/kids context
+  private static detectFamilyContext(message: string): boolean {
+    const familyKeywords = [
+      'kids', 'children', 'family', 'toddler', 'baby', 'child',
+      'family-friendly', 'kid-friendly', 'with kids', 'for kids',
+      'stroller', 'playground', 'child menu', 'family fun',
+      'little ones', 'teenagers', 'teens'
+    ];
+    
+    return familyKeywords.some(keyword => message.includes(keyword));
+  }
+
+  // NEW: Detect checkout context
+  private static detectCheckoutContext(message: string): boolean {
+    const checkoutKeywords = [
+      'checking out', 'leaving today', 'departing', 'quick',
+      'last day', 'final day', 'before we leave', 'heading out',
+      'short time', 'limited time', 'fast', 'nearby only'
+    ];
+    
+    return checkoutKeywords.some(keyword => message.includes(keyword));
   }
 
   // NEW: Detect "travel" code
