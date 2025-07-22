@@ -43,7 +43,7 @@ export default function Properties() {
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-bold text-primary">Properties</h1>
             <Link 
-              to="/dashboard/add-property" 
+              to="/add-property" 
               className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg shadow hover:bg-primary/90 transition"
             >
               <Plus size={18} /> Add Property
@@ -62,7 +62,7 @@ export default function Properties() {
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-bold text-primary">Properties</h1>
             <Link 
-              to="/dashboard/add-property" 
+              to="/add-property" 
               className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg shadow hover:bg-primary/90 transition"
             >
               <Plus size={18} /> Add Property
@@ -80,7 +80,7 @@ export default function Properties() {
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-primary">Properties ({properties.length})</h1>
           <Link 
-            to="/dashboard/add-property" 
+            to="/add-property" 
             className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg shadow hover:bg-primary/90 transition"
           >
             <Plus size={18} /> Add Property
