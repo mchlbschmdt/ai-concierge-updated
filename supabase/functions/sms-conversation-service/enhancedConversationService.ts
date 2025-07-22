@@ -1,3 +1,4 @@
+
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { ConversationManager } from './conversationManager.ts';
 import { IntentRecognitionService } from './intentRecognitionService.ts';
@@ -10,10 +11,12 @@ import { Conversation, Property } from './types.ts';
 export class EnhancedConversationService {
   private conversationManager: ConversationManager;
   private recommendationService: RecommendationService;
+  private propertyService: PropertyService;
 
   constructor(private supabase: SupabaseClient) {
     this.conversationManager = new ConversationManager(supabase);
     this.recommendationService = new RecommendationService(supabase, this.conversationManager);
+    this.propertyService = new PropertyService(supabase);
   }
 
   async processMessage(phoneNumber: string, message: string) {
@@ -47,7 +50,7 @@ export class EnhancedConversationService {
       const intentResult = IntentRecognitionService.recognizeIntent(message);
       console.log('🎯 Intent analysis:', intentResult);
 
-      // Handle conversation reset - use the correct method name
+      // Handle conversation reset first
       if (intentResult.intent === 'conversation_reset') {
         await this.conversationManager.resetConversation(phoneNumber);
         return {
@@ -56,56 +59,72 @@ export class EnhancedConversationService {
         };
       }
 
-      // Get property for context - use the correct static method
-      const property = await PropertyService.getPropertyByPhone(this.supabase, phoneNumber);
-      if (!property) {
-        // If no property is linked, check if this is a property code
-        if (/^\d+$/.test(message.trim())) {
-          // This looks like a property code, let the system handle it
+      // CONVERSATION STATE MACHINE - Handle states before intent processing
+      console.log('🔄 Current conversation state:', conversation.conversation_state);
+
+      // State 1: Awaiting Property ID
+      if (conversation.conversation_state === 'awaiting_property_id') {
+        return await this.handlePropertyIdInput(conversation, message);
+      }
+
+      // State 2: Awaiting Confirmation
+      if (conversation.conversation_state === 'awaiting_confirmation') {
+        return await this.handleConfirmation(conversation, message);
+      }
+
+      // State 3: Confirmed - Check if property is linked
+      if (conversation.conversation_state === 'confirmed') {
+        const property = await PropertyService.getPropertyByPhone(this.supabase, phoneNumber);
+        if (!property) {
+          console.log('❌ No property linked despite confirmed state, resetting conversation');
+          await this.conversationManager.resetConversation(phoneNumber);
           return {
-            response: "Let me look up that property code for you...",
+            response: "Let's start fresh! Please send your property code to begin.",
             shouldUpdateState: false
           };
         }
-        
+
+        // Handle recommendation intents with enhanced context
+        if (this.isRecommendationIntent(intentResult.intent)) {
+          return await this.recommendationService.getEnhancedRecommendations(
+            property, 
+            message, 
+            conversation,
+            intentResult
+          );
+        }
+
+        // Handle property-specific intents
+        const propertyResponse = await this.handlePropertyIntent(intentResult.intent, property, conversation);
+        if (propertyResponse) {
+          await this.conversationManager.updateConversationState(phoneNumber, {
+            last_message_type: intentResult.intent,
+            conversation_context: {
+              ...conversation.conversation_context,
+              lastIntent: intentResult.intent,
+              hasKids: intentResult.hasKids,
+              isCheckoutSoon: intentResult.isCheckoutSoon
+            }
+          });
+          
+          return {
+            response: MessageUtils.ensureSmsLimit(propertyResponse),
+            shouldUpdateState: false
+          };
+        }
+
+        // Fallback response for confirmed guests
         return {
-          response: "Please text your property code to get started, or contact support if you need assistance.",
+          response: "I can help with restaurant recommendations, WiFi, parking, check-in details, and local activities. What would you like to know?",
           shouldUpdateState: false
         };
       }
 
-      // Handle recommendation intents with enhanced context
-      if (this.isRecommendationIntent(intentResult.intent)) {
-        return await this.recommendationService.getEnhancedRecommendations(
-          property, 
-          message, 
-          conversation,
-          intentResult // Pass the full intent result with family/checkout context
-        );
-      }
-
-      // Handle property-specific intents
-      const propertyResponse = await this.handlePropertyIntent(intentResult.intent, property, conversation);
-      if (propertyResponse) {
-        await this.conversationManager.updateConversationState(phoneNumber, {
-          last_message_type: intentResult.intent,
-          conversation_context: {
-            ...conversation.conversation_context,
-            lastIntent: intentResult.intent,
-            hasKids: intentResult.hasKids,
-            isCheckoutSoon: intentResult.isCheckoutSoon
-          }
-        });
-        
-        return {
-          response: MessageUtils.ensureSmsLimit(propertyResponse),
-          shouldUpdateState: false
-        };
-      }
-
-      // Fallback response
+      // Fallback - should not reach here
+      console.log('❌ Unknown conversation state, resetting to awaiting_property_id');
+      await this.conversationManager.resetConversation(phoneNumber);
       return {
-        response: "I can help with restaurant recommendations, WiFi, parking, check-in details, and local activities. What would you like to know?",
+        response: "Let's start fresh! Please send your property code to begin.",
         shouldUpdateState: false
       };
 
@@ -113,6 +132,98 @@ export class EnhancedConversationService {
       console.error('❌ Enhanced conversation service error:', error);
       return {
         response: "Sorry, I'm having trouble right now. Please try again in a moment.",
+        shouldUpdateState: false
+      };
+    }
+  }
+
+  // NEW: Handle property ID input
+  private async handlePropertyIdInput(conversation: Conversation, message: string) {
+    console.log('🏨 Handling property ID input:', message);
+    
+    const propertyCode = message.match(/\d+/)?.[0];
+    
+    if (!propertyCode) {
+      return {
+        response: "Hi! Please text your property ID number from your booking confirmation. Text 'reset' if needed.",
+        shouldUpdateState: false
+      };
+    }
+
+    try {
+      const property = await this.propertyService.findPropertyByCode(propertyCode);
+      
+      if (!property) {
+        return {
+          response: `Property ID ${propertyCode} not found. Check your booking confirmation or text 'reset'.`,
+          shouldUpdateState: false
+        };
+      }
+
+      // Update to awaiting confirmation state with property info
+      await this.conversationManager.updateConversationState(conversation.phone_number, {
+        property_id: property.property_id || property.id,
+        conversation_state: 'awaiting_confirmation',
+        conversation_context: {
+          ...conversation.conversation_context,
+          pending_property: property
+        }
+      });
+
+      const response = `Great! You're staying at ${property.property_name} (${property.address}). Correct? Reply Y or N.`;
+      return {
+        response: MessageUtils.ensureSmsLimit(response),
+        shouldUpdateState: false
+      };
+    } catch (error) {
+      console.error('❌ Error finding property:', error);
+      return {
+        response: "Trouble looking up that property ID. Try again or text 'reset'.",
+        shouldUpdateState: false
+      };
+    }
+  }
+
+  // NEW: Handle confirmation
+  private async handleConfirmation(conversation: Conversation, message: string) {
+    console.log('✅ Handling confirmation:', message);
+    
+    const normalizedInput = message.toLowerCase().trim();
+    const isYes = ['y', 'yes', 'yeah', 'yep', 'correct', 'right', 'true', '1', 'ok', 'okay', 'yup', 'sure', 'absolutely', 'definitely'].includes(normalizedInput);
+    const isNo = ['n', 'no', 'nope', 'wrong', 'incorrect', 'false', '0', 'nah', 'negative'].includes(normalizedInput);
+
+    if (isYes) {
+      // Confirm the property and move to confirmed state
+      await this.conversationManager.updateConversationState(conversation.phone_number, {
+        property_confirmed: true,
+        conversation_state: 'confirmed'
+      });
+
+      const greeting = ResponseGenerator.getTimeAwareGreeting(conversation?.timezone || 'UTC');
+      const response = `${greeting}! I'm your AI concierge. I can help with WiFi, parking, directions, and local recommendations. What do you need?`;
+      
+      return {
+        response: MessageUtils.ensureSmsLimit(response),
+        shouldUpdateState: false
+      };
+    } else if (isNo) {
+      // Reset to awaiting property ID
+      await this.conversationManager.updateConversationState(conversation.phone_number, {
+        property_id: null,
+        conversation_state: 'awaiting_property_id',
+        conversation_context: {
+          ...conversation.conversation_context,
+          pending_property: null
+        }
+      });
+
+      return {
+        response: "No problem! Please provide your correct property ID from your booking confirmation.",
+        shouldUpdateState: false
+      };
+    } else {
+      return {
+        response: "Please reply Y for Yes or N for No to confirm the property. Text 'reset' to start over.",
         shouldUpdateState: false
       };
     }
