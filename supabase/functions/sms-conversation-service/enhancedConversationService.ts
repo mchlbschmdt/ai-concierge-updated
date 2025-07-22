@@ -1,4 +1,3 @@
-
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { ConversationManager } from './conversationManager.ts';
 import { IntentRecognitionService } from './intentRecognitionService.ts';
@@ -48,7 +47,7 @@ export class EnhancedConversationService {
       const intentResult = IntentRecognitionService.recognizeIntent(message);
       console.log('🎯 Intent analysis:', intentResult);
 
-      // Handle conversation reset
+      // Handle conversation reset - use the correct method name
       if (intentResult.intent === 'conversation_reset') {
         await this.conversationManager.clearConversationMemory(phoneNumber);
         return {
@@ -57,11 +56,20 @@ export class EnhancedConversationService {
         };
       }
 
-      // Get property for context
+      // Get property for context - use the correct static method
       const property = await PropertyService.getPropertyByPhone(this.supabase, phoneNumber);
       if (!property) {
+        // If no property is linked, check if this is a property code
+        if (/^\d+$/.test(message.trim())) {
+          // This looks like a property code, let the system handle it
+          return {
+            response: "Let me look up that property code for you...",
+            shouldUpdateState: false
+          };
+        }
+        
         return {
-          response: "I don't have property information for this number. Please contact support.",
+          response: "Please text your property code to get started, or contact support if you need assistance.",
           shouldUpdateState: false
         };
       }

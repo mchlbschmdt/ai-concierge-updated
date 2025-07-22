@@ -1,3 +1,4 @@
+
 import { Conversation, Property } from './types.ts';
 import { ResetHandler } from './resetHandler.ts';
 
@@ -81,6 +82,12 @@ export class ConversationManager {
     }
 
     return data;
+  }
+
+  // Add the missing method that was being called
+  async clearConversationMemory(phoneNumber: string): Promise<Conversation> {
+    console.log('🧹 Clearing conversation memory for:', phoneNumber);
+    return await this.resetConversation(phoneNumber);
   }
 
   async resetConversation(phoneNumber: string): Promise<Conversation> {
