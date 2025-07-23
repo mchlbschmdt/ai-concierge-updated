@@ -186,9 +186,10 @@ export class EnhancedConversationService {
       'pizza', 'seafood', 'italian', 'mexican', 'chinese', 'burger', 'burgers', 'steak',
       'what\'s good', 'where to eat', 'dining', 'spot', 'place to eat',
       'something nearby', 'close by', 'walking distance', 'drive', 'takeout',
-      // Enhanced rejection/continuation patterns
+      // Enhanced rejection/continuation patterns - CRITICAL FOR FLOW CONTINUATION
       'let\'s do', 'how about', 'instead', 'rather', 'looking for', 'find me', 'show me',
-      'give me', 'want', 'need', 'local', 'options', 'recommendations'
+      'give me', 'want', 'need', 'local', 'options', 'recommendations', 'yeah give me',
+      'give me local', 'local options', 'other options', 'something else'
     ];
     
     const hasFood = foodKeywords.some(keyword => lowerMessage.includes(keyword));

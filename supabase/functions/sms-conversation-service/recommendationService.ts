@@ -506,12 +506,15 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
   private categorizeRequest(message: string): string {
     const lowerMessage = message.toLowerCase();
     
-    // Enhanced food detection keywords
+    // Enhanced food detection keywords - MUST MATCH enhancedConversationService.ts
     const foodKeywords = [
       'food', 'restaurant', 'eat', 'dining', 'hungry', 'meal', 'lunch', 'dinner', 'breakfast',
       'burger', 'burgers', 'pizza', 'seafood', 'italian', 'mexican', 'chinese', 'steak',
       'bite', 'grab something', 'quick', 'casual', 'upscale', 'fancy', 'rooftop',
-      'what\'s good', 'where to eat', 'spot', 'place to eat', 'good food'
+      'what\'s good', 'where to eat', 'spot', 'place to eat', 'good food',
+      // CRITICAL: Add continuation patterns that indicate food requests
+      'let\'s do', 'give me', 'local', 'options', 'recommendations', 'yeah give me',
+      'give me local', 'local options', 'other options', 'something else'
     ];
     
     // Check for food-related terms
