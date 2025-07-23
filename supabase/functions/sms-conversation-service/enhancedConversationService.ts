@@ -297,10 +297,10 @@ export class EnhancedConversationService {
     
     // Enhanced WiFi issue detection
     const wifiIssueKeywords = [
-      'wifi not working', 'wifi isn\'t working', 'can't connect', 'won't connect',
+      'wifi not working', "wifi isn't working", "can't connect", "won't connect",
       'not connecting', 'connection failed', 'wifi down', 'internet down',
       'no internet', 'wifi broken', 'wifi issues', 'wifi problems', 'wifi trouble',
-      'still not working', 'still broken', 'didn't help', 'not working'
+      'still not working', 'still broken', "didn't help", 'not working'
     ];
     
     const hasWiFiIssue = wifiIssueKeywords.some(keyword => lowerMessage.includes(keyword));
