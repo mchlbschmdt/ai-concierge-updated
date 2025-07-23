@@ -177,6 +177,36 @@ export class EnhancedConversationService {
   // ENHANCED: Better food intent detection with improved logging
   private async handleEnhancedFoodIntent(conversation: Conversation, message: string, property: Property, intentResult: any) {
     const lowerMessage = message.toLowerCase();
+    const context = conversation.conversation_context || {};
+    
+    // CRITICAL: Check if we're already in an active dining conversation
+    const isInDiningConversation = context?.dining_conversation_state === 'active';
+    
+    if (isInDiningConversation) {
+      console.log('🍽️ Already in active dining conversation - continuing food recommendations');
+      
+      // Extract filters from current message
+      const filters = this.extractFoodFilters(message);
+      console.log('🔍 Food filters detected in active conversation:', filters);
+      
+      // Update preferences if new ones are detected
+      if (filters.length > 0) {
+        await this.conversationManager.updateConversationState(conversation.phone_number, {
+          conversation_context: {
+            ...context,
+            last_food_preferences: filters
+          }
+        });
+      }
+      
+      // Continue with recommendation service
+      return await this.recommendationService.getEnhancedRecommendations(
+        property,
+        message,
+        conversation,
+        { intent: 'ask_food_recommendations', filters, confidence: 0.95 }
+      );
+    }
     
     // Enhanced food keywords detection including rejection/continuation patterns
     const foodKeywords = [
