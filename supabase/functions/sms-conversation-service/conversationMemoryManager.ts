@@ -169,9 +169,25 @@ export class ConversationMemoryManager {
     return `Depth: ${depth}, Last: ${lastIntent}, Recent: ${recentIntents.slice(0, 3).join(', ')}`;
   }
 
-  // Phase 6: Get last recommended restaurant
+  // Enhanced restaurant memory with context tracking
   static getLastRecommendedRestaurant(context: any): string | null {
-    return context?.last_recommended_restaurant || null;
+    return context?.last_recommended_restaurant || context?.last_food_place || null;
+  }
+
+  // Get last food preferences for context-aware responses
+  static getLastFoodPreferences(context: any): string[] {
+    return context?.last_food_preferences || [];
+  }
+
+  // Store restaurant context for follow-up queries
+  static storeRestaurantContext(context: any, restaurantName: string, queryContext: string): any {
+    return {
+      ...context,
+      last_recommended_restaurant: restaurantName,
+      last_food_place: restaurantName,
+      last_restaurant_context: queryContext.toLowerCase(),
+      last_restaurant_timestamp: new Date().toISOString()
+    };
   }
 
   // Phase 6: Get last food query type

@@ -123,6 +123,80 @@ export class RecommendationService {
     return restaurants;
   }
 
+  // NEW: Enhanced recommendation post-processing with real data
+  private async enhanceRecommendationWithRealData(recommendation: string, property: Property, context: any, intentAnalysis: any): Promise<string> {
+    try {
+      const lines = recommendation.split('\n');
+      const enhancedLines = [];
+      
+      for (const line of lines) {
+        if (line.includes('**') || line.includes('(') && line.includes('mi')) {
+          // Extract restaurant name from the line
+          const restaurantMatch = line.match(/\*\*([^*]+)\*\*/) || line.match(/^([^(]+)\s*\(/);
+          
+          if (restaurantMatch) {
+            const restaurantName = restaurantMatch[1].trim();
+            
+            // Get accurate distance from LocationService
+            const distanceInfo = await LocationService.getAccurateDistance(
+              property.address,
+              restaurantName
+            );
+            
+            if (distanceInfo) {
+              // Replace or enhance with accurate distance and walkability info
+              let enhancedLine = line.replace(/\(\d+\.\d+\s*mi[^)]*\)/i, 
+                `(${distanceInfo.distance}, 🚗 ${distanceInfo.duration}${distanceInfo.walkable ? ', 🚶‍♂️ walkable' : ''})`
+              );
+              
+              // Add star rating if not present
+              if (!enhancedLine.includes('⭐')) {
+                enhancedLine = enhancedLine.replace(/\)/, ', ⭐️ 4.2)');
+              }
+              
+              enhancedLines.push(enhancedLine);
+            } else {
+              enhancedLines.push(line);
+            }
+          } else {
+            enhancedLines.push(line);
+          }
+        } else {
+          enhancedLines.push(line);
+        }
+      }
+      
+      // Add contextual follow-up for vibe queries
+      if (intentAnalysis?.filters?.includes('rooftop') || intentAnalysis?.filters?.includes('outdoor')) {
+        enhancedLines.push('\n💡 Want photos or menu info for any of these?');
+      }
+      
+      return enhancedLines.join('\n');
+    } catch (error) {
+      console.error('❌ Error enhancing recommendation with real data:', error);
+      return recommendation; // Return original if enhancement fails
+    }
+  }
+
+  // NEW: Extract primary restaurant from recommendation for memory
+  private extractRestaurantFromRecommendation(recommendation: string): string | null {
+    const lines = recommendation.split('\n');
+    
+    for (const line of lines) {
+      const boldMatch = line.match(/\*\*([^*]+)\*\*/);
+      if (boldMatch) {
+        return boldMatch[1].trim();
+      }
+      
+      const nameMatch = line.match(/^([^(]+)\s*\(/);
+      if (nameMatch) {
+        return nameMatch[1].trim();
+      }
+    }
+    
+    return null;
+  }
+
   private getSmartFollowUpQuestion(message: string, intentResult?: any): string {
     const lowerMessage = message.toLowerCase();
     

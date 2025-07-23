@@ -27,14 +27,25 @@ export class MenuService {
 Want me to find similar restaurants or help with dietary preferences?`;
   }
 
-  // v3.1 New method for menu follow-up context
+  // Enhanced menu follow-up with vibe and visual context
   static generateMenuFollowUp(restaurantName: string, context: string): string {
-    if (context.includes('photo') || context.includes('picture')) {
-      return `Check ${restaurantName}'s Yelp or Google photos for dish pictures! Want me to find similar spots with great visuals?`;
+    if (context.includes('photo') || context.includes('picture') || context.includes('vibe') || context.includes('atmosphere')) {
+      const yelpQuery = encodeURIComponent(`${restaurantName} orlando`);
+      const googleQuery = encodeURIComponent(`${restaurantName} photos orlando`);
+      
+      return `Check ${restaurantName}'s vibe and photos:
+⭐ Yelp: https://www.yelp.com/search?find_desc=${yelpQuery}
+📸 Google: https://www.google.com/search?q=${googleQuery}&tbm=isch
+
+Want similar spots or different atmosphere?`;
     }
     
     if (context.includes('outdoor') || context.includes('patio')) {
       return `${restaurantName} has outdoor seating! Want me to find their contact info or suggest other patio restaurants?`;
+    }
+    
+    if (context.includes('busy') || context.includes('crowd')) {
+      return `${restaurantName} can get busy during peak hours. Want me to suggest quieter alternatives or call-ahead info?`;
     }
     
     return `Want me to find more info about ${restaurantName} or suggest similar restaurants?`;

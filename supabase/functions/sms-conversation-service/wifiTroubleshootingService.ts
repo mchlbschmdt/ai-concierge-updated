@@ -23,12 +23,12 @@ export class WiFiTroubleshootingService {
 Did that help?`;
   }
 
-  // v3.1 Enhanced troubleshooting for repeat issues
+  // Enhanced troubleshooting for immediate issue detection
   static generateEnhancedTroubleshootingSteps(): string {
     return `Sorry it's still acting up! Try these tips:
 
 • Forget and reconnect to the network
-• Double-check password spelling (case-sensitive)
+• Double-check password spelling (case-sensitive)  
 • Move closer to the router—some areas have weaker signal
 
 Did that help?`;

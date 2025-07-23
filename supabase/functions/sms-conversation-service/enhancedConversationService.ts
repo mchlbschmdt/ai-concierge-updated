@@ -88,8 +88,14 @@ export class EnhancedConversationService {
           };
         }
 
-        // Phase 2: WiFi Troubleshooting Integration
-        const wifiTroubleshootingResponse = await this.handleWiFiTroubleshooting(conversation, message);
+        // Enhanced intent detection for food & local queries
+        const enhancedFoodResponse = await this.handleEnhancedFoodIntent(conversation, message, property, intentResult);
+        if (enhancedFoodResponse) {
+          return enhancedFoodResponse;
+        }
+
+        // Phase 2: Enhanced WiFi Troubleshooting Integration
+        const wifiTroubleshootingResponse = await this.handleEnhancedWiFiTroubleshooting(conversation, message, property);
         if (wifiTroubleshootingResponse) {
           return wifiTroubleshootingResponse;
         }
@@ -167,6 +173,198 @@ export class EnhancedConversationService {
         shouldUpdateState: false
       };
     }
+  }
+
+  // NEW: Enhanced Food Intent Detection with Filters
+  private async handleEnhancedFoodIntent(conversation: Conversation, message: string, property: Property, intentResult: any) {
+    const lowerMessage = message.toLowerCase();
+    
+    // Enhanced food keywords detection
+    const foodKeywords = [
+      'eat', 'food', 'restaurant', 'dinner', 'lunch', 'breakfast', 'hungry',
+      'bite', 'grab something', 'quick', 'kid friendly', 'family', 'good for kids',
+      'upscale', 'fancy', 'casual', 'cheap', 'expensive', 'rooftop', 'outdoor',
+      'pizza', 'seafood', 'italian', 'mexican', 'chinese', 'burger', 'steak',
+      'what\'s good', 'where to eat', 'dining', 'spot', 'place to eat',
+      'something nearby', 'close by', 'walking distance', 'drive', 'takeout'
+    ];
+    
+    const hasFood = foodKeywords.some(keyword => lowerMessage.includes(keyword));
+    
+    if (hasFood) {
+      console.log('🍽️ Enhanced food intent detected');
+      
+      // Extract filters from message
+      const filters = this.extractFoodFilters(message);
+      console.log('🔍 Food filters detected:', filters);
+      
+      // Store food preferences in memory
+      const context = conversation.conversation_context || {};
+      await this.conversationManager.updateConversationState(conversation.phone_number, {
+        conversation_context: {
+          ...context,
+          last_food_preferences: filters,
+          dining_conversation_state: 'active'
+        }
+      });
+      
+      // Use recommendation service with enhanced filters
+      return await this.recommendationService.getEnhancedRecommendations(
+        property,
+        message,
+        conversation,
+        { intent: 'ask_food_recommendations', filters, confidence: 0.9 }
+      );
+    }
+    
+    return null;
+  }
+
+  // Extract food-specific filters from message
+  private extractFoodFilters(message: string): string[] {
+    const lowerMessage = message.toLowerCase();
+    const filters: string[] = [];
+    
+    // Meal time filters
+    if (lowerMessage.includes('breakfast') || lowerMessage.includes('morning')) filters.push('breakfast');
+    if (lowerMessage.includes('lunch') || lowerMessage.includes('afternoon')) filters.push('lunch');
+    if (lowerMessage.includes('dinner') || lowerMessage.includes('evening')) filters.push('dinner');
+    if (lowerMessage.includes('late') || lowerMessage.includes('night')) filters.push('late_night');
+    
+    // Family/kid filters
+    if (lowerMessage.includes('kid') || lowerMessage.includes('family') || lowerMessage.includes('children')) {
+      filters.push('family_friendly');
+    }
+    
+    // Service type filters
+    if (lowerMessage.includes('quick') || lowerMessage.includes('fast') || lowerMessage.includes('grab')) {
+      filters.push('quick_service');
+    }
+    if (lowerMessage.includes('sit') || lowerMessage.includes('table') || lowerMessage.includes('service')) {
+      filters.push('sit_down');
+    }
+    
+    // Vibe filters
+    if (lowerMessage.includes('upscale') || lowerMessage.includes('fancy') || lowerMessage.includes('fine')) {
+      filters.push('upscale');
+    }
+    if (lowerMessage.includes('casual') || lowerMessage.includes('relaxed')) filters.push('casual');
+    if (lowerMessage.includes('rooftop') || lowerMessage.includes('view')) filters.push('rooftop');
+    if (lowerMessage.includes('outdoor') || lowerMessage.includes('patio')) filters.push('outdoor');
+    
+    // Cuisine filters
+    if (lowerMessage.includes('pizza')) filters.push('pizza');
+    if (lowerMessage.includes('seafood') || lowerMessage.includes('fish')) filters.push('seafood');
+    if (lowerMessage.includes('italian')) filters.push('italian');
+    if (lowerMessage.includes('mexican')) filters.push('mexican');
+    if (lowerMessage.includes('chinese') || lowerMessage.includes('asian')) filters.push('asian');
+    if (lowerMessage.includes('burger')) filters.push('american');
+    if (lowerMessage.includes('steak')) filters.push('steakhouse');
+    
+    return filters;
+  }
+
+  // Enhanced WiFi Troubleshooting with Host Escalation
+  private async handleEnhancedWiFiTroubleshooting(conversation: Conversation, message: string, property: Property) {
+    const context = conversation.conversation_context || {};
+    const lastMessageType = conversation.last_message_type;
+    const lowerMessage = message.toLowerCase();
+    
+    // Enhanced WiFi issue detection
+    const wifiIssueKeywords = [
+      'wifi not working', 'wifi isn\'t working', 'can\'t connect', 'won\'t connect',
+      'not connecting', 'connection failed', 'wifi down', 'internet down',
+      'no internet', 'wifi broken', 'wifi issues', 'wifi problems', 'wifi trouble',
+      'still not working', 'still broken', 'didn\'t help', 'not working'
+    ];
+    
+    const hasWiFiIssue = wifiIssueKeywords.some(keyword => lowerMessage.includes(keyword));
+    
+    // Check if we're in WiFi troubleshooting flow
+    if (ConversationMemoryManager.isInWiFiTroubleshootingFlow(context)) {
+      const troubleshootingState = ConversationMemoryManager.getWiFiTroubleshootingState(context);
+      
+      if (troubleshootingState === 'awaiting_help_response') {
+        const response = WiFiTroubleshootingService.detectTroubleshootingResponse(message);
+        
+        if (response === 'no') {
+          // Enhanced host contact offer
+          await this.conversationManager.updateConversationState(conversation.phone_number, {
+            conversation_context: {
+              ...context,
+              wifi_troubleshooting_state: 'awaiting_host_contact_response'
+            }
+          });
+          
+          return {
+            response: WiFiTroubleshootingService.generateHostContactOffer(),
+            shouldUpdateState: false
+          };
+        } else if (response === 'yes') {
+          // Clear troubleshooting state
+          const clearedContext = ConversationMemoryManager.clearWiFiTroubleshootingState(context);
+          await this.conversationManager.updateConversationState(conversation.phone_number, {
+            conversation_context: clearedContext
+          });
+          
+          return {
+            response: "Great! Glad I could help get you connected. Need anything else?",
+            shouldUpdateState: false
+          };
+        }
+      }
+      
+      if (troubleshootingState === 'awaiting_host_contact_response') {
+        const response = WiFiTroubleshootingService.detectTroubleshootingResponse(message);
+        
+        if (response === 'yes') {
+          // Notify host via emergency contact and clear troubleshooting state
+          const clearedContext = ConversationMemoryManager.clearWiFiTroubleshootingState(context);
+          await this.conversationManager.updateConversationState(conversation.phone_number, {
+            conversation_context: clearedContext
+          });
+          
+          // TODO: Implement actual host notification via emergency_contact
+          console.log('📞 Would notify host:', property.emergency_contact);
+          
+          return {
+            response: WiFiTroubleshootingService.generateHostContactedConfirmation(),
+            shouldUpdateState: false
+          };
+        } else if (response === 'no') {
+          // Clear troubleshooting state
+          const clearedContext = ConversationMemoryManager.clearWiFiTroubleshootingState(context);
+          await this.conversationManager.updateConversationState(conversation.phone_number, {
+            conversation_context: clearedContext
+          });
+          
+          return {
+            response: "No problem! Let me know if you need help with anything else.",
+            shouldUpdateState: false
+          };
+        }
+      }
+    }
+    
+    // Check if this is a new WiFi issue - enhanced detection
+    if (hasWiFiIssue || (lastMessageType === 'ask_wifi' && lowerMessage.includes('not working'))) {
+      console.log('🛠️ WiFi troubleshooting initiated');
+      
+      await this.conversationManager.updateConversationState(conversation.phone_number, {
+        conversation_context: {
+          ...context,
+          wifi_troubleshooting_state: 'awaiting_help_response'
+        }
+      });
+      
+      // Use enhanced troubleshooting steps
+      return {
+        response: WiFiTroubleshootingService.generateEnhancedTroubleshootingSteps(),
+        shouldUpdateState: false
+      };
+    }
+    
+    return null;
   }
 
   // Phase 2: WiFi Troubleshooting Integration
@@ -296,7 +494,7 @@ export class EnhancedConversationService {
     return null;
   }
 
-  // v3.1 Enhanced Property Context with distance and amenity queries
+  // Enhanced Property Context with distance, amenity, and visual queries
   private async handlePropertyContextQueries(intent: string, property: Property, conversation: Conversation, message: string): Promise<string | null> {
     const context = conversation?.conversation_context || {};
     const guestName = context?.guest_name;
@@ -304,23 +502,46 @@ export class EnhancedConversationService {
     const propertyContext = LocationService.getPropertySpecificContext(property.address);
     const lowerMessage = message.toLowerCase();
     
-    // v3.1 Distance context handling
+    // Enhanced distance context handling
     const distanceContext = LocationService.getDistanceContext(property.address, message);
     if (distanceContext) {
       return `${namePrefix}${distanceContext}`;
     }
     
-    // Water park hours
-    if (lowerMessage.includes('water park') && lowerMessage.includes('hour')) {
-      if (propertyContext.waterParkInfo) {
-        return `${namePrefix}${propertyContext.waterParkInfo}. Want wristband info or directions?\n\nOr were you referring to a different water park?`;
+    // Enhanced Disney distance queries
+    if (lowerMessage.includes('disney') && (lowerMessage.includes('far') || lowerMessage.includes('distance'))) {
+      const propertyType = LocationService.determinePropertyType(property.address);
+      if (propertyType === 'reunion_resort') {
+        return `${namePrefix}from Plentiful Views Disney, it's about a 12-min drive to Disney's main gate (approx. 7 miles).`;
+      } else if (propertyType === 'disney_area') {
+        return `${namePrefix}you're about 8-15 minutes from Disney World depending on which park you're visiting!`;
       }
     }
     
-    // Shuttle information with enhanced context
-    if (lowerMessage.includes('shuttle')) {
+    // Water park hours with enhanced context
+    if (lowerMessage.includes('water park') && (lowerMessage.includes('hour') || lowerMessage.includes('open') || lowerMessage.includes('time'))) {
+      if (propertyContext.waterParkInfo) {
+        return `${namePrefix}${propertyContext.waterParkInfo}. Want wristband info or directions?\n\nOr were you referring to a different water park?`;
+      } else {
+        return `${namePrefix}various water parks are available in the Orlando area. Would you like recommendations for specific ones nearby?`;
+      }
+    }
+    
+    // Shuttle information with enhanced context and scheduling
+    if (lowerMessage.includes('shuttle') && (lowerMessage.includes('time') || lowerMessage.includes('leave') || lowerMessage.includes('schedule'))) {
       if (propertyContext.shuttleInfo) {
         return `${namePrefix}${propertyContext.shuttleInfo}. Would you like me to check today's schedule?\n\nOr were you asking about a different shuttle?`;
+      } else {
+        return `${namePrefix}let me help you find shuttle information. Are you looking for Disney shuttles or transportation to other attractions?`;
+      }
+    }
+    
+    // Visual/vibe queries for restaurants or amenities
+    if (lowerMessage.includes('vibe') || lowerMessage.includes('atmosphere') || lowerMessage.includes('photo') || lowerMessage.includes('picture')) {
+      const lastRestaurant = ConversationMemoryManager.getLastRecommendedRestaurant(context);
+      if (lastRestaurant) {
+        const yelpQuery = encodeURIComponent(`${lastRestaurant} orlando`);
+        return `${namePrefix}check ${lastRestaurant}'s photos on Yelp: https://www.yelp.com/search?find_desc=${yelpQuery}\n\nLooking for similar vibes or different atmosphere?`;
       }
     }
     
