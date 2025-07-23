@@ -245,6 +245,57 @@ export class ConversationMemoryManager {
     return clearedContext;
   }
 
+  // NEW: Check if guest is rejecting previous recommendation
+  static isRejectionOfPreviousRecommendation(message: string, context: any): boolean {
+    const lowerMessage = message.toLowerCase();
+    const lastRestaurant = context?.last_recommended_restaurant;
+    
+    if (!lastRestaurant) return false;
+    
+    // Check for rejection patterns
+    const rejectionPatterns = [
+      'no', 'not that', 'something else', 'different', 'other',
+      'doesn\'t have', 'don\'t want', 'instead', 'rather',
+      'let\'s do', 'how about', 'what about', 'prefer'
+    ];
+    
+    // Check if message contains food type that's different from last recommendation context
+    const foodTypes = ['burger', 'pizza', 'chinese', 'mexican', 'italian', 'seafood', 'steak'];
+    const hasNewFoodType = foodTypes.some(type => lowerMessage.includes(type));
+    
+    // If they're asking for a specific food type and we just recommended something else
+    if (hasNewFoodType && context?.last_restaurant_context) {
+      const lastContextFood = context.last_restaurant_context;
+      const currentFood = foodTypes.find(type => lowerMessage.includes(type));
+      
+      if (currentFood && !lastContextFood.includes(currentFood)) {
+        return true; // They want burgers but we recommended pizza, for example
+      }
+    }
+    
+    return rejectionPatterns.some(pattern => lowerMessage.includes(pattern));
+  }
+
+  // NEW: Add restaurant to blacklist
+  static addToRejectedList(context: any, restaurantName: string): any {
+    const updatedContext = { ...context };
+    
+    if (!updatedContext.rejected_restaurants) {
+      updatedContext.rejected_restaurants = [];
+    }
+    
+    if (!updatedContext.rejected_restaurants.includes(restaurantName)) {
+      updatedContext.rejected_restaurants.push(restaurantName);
+    }
+    
+    return updatedContext;
+  }
+
+  // NEW: Get list of rejected restaurants
+  static getRejectedRestaurants(context: any): string[] {
+    return context?.rejected_restaurants || [];
+  }
+
   // Property location anchoring
   static setPropertyLocationAnchor(context: any, propertyAddress: string): any {
     const updatedContext = { ...context };

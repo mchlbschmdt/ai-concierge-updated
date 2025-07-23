@@ -18,11 +18,32 @@ export class RecommendationService {
       const timezone = conversation?.timezone || 'UTC';
       const guestName = context?.guest_name;
       
+      // NEW: Check if this is a rejection of previous recommendation
+      const isRejection = ConversationMemoryManager.isRejectionOfPreviousRecommendation(originalMessage, context);
+      if (isRejection && context?.last_recommended_restaurant) {
+        console.log('🚫 Detected rejection of previous recommendation:', context.last_recommended_restaurant);
+        
+        // Add rejected restaurant to blacklist
+        const updatedContext = ConversationMemoryManager.addToRejectedList(context, context.last_recommended_restaurant);
+        
+        // Clear the rejected restaurant from memory so we don't recommend it again
+        updatedContext.last_recommended_restaurant = null;
+        updatedContext.last_restaurant_context = null;
+        
+        // Update conversation state immediately
+        await this.conversationManager.updateConversationState(conversation.phone_number, {
+          conversation_context: updatedContext
+        });
+        
+        console.log('✅ Added to rejected list and cleared from memory');
+      }
+      
       // v3.1 Enhanced food query detection with filters
       const foodFilters = this.extractFoodFilters(originalMessage);
       const guestContext = this.extractGuestContext(originalMessage, context, conversation, intentResult);
       const requestType = this.categorizeRequest(originalMessage);
       const previousRecommendations = conversation?.last_recommendations || null;
+      const rejectedRestaurants = ConversationMemoryManager.getRejectedRestaurants(context);
       
       const memoryContext = this.getRecommendationMemoryContext(context);
       
@@ -30,15 +51,17 @@ export class RecommendationService {
       console.log('🏷️ Request type:', requestType);
       console.log('🍽️ Food filters:', foodFilters);
       console.log('📝 Previous recommendations:', previousRecommendations);
+      console.log('🚫 Rejected restaurants:', rejectedRestaurants);
       console.log('🧠 Memory context:', memoryContext);
 
       // v3.1 Enhanced payload with contextual filters and accurate distance requirements
       const enhancedPayload = {
-        prompt: `${originalMessage}\n\nIMPORTANT: Use exact GPS distance from ${propertyAddress}. Format: "Restaurant Name (X.X mi, 🚗 ~X min drive, ⭐️ X.X) — Description with vibe". ${foodFilters.length ? `Focus on: ${foodFilters.join(', ')}` : ''}`,
+        prompt: `${originalMessage}\n\nIMPORTANT: Use exact GPS distance from ${propertyAddress}. Format: "Restaurant Name (X.X mi, 🚗 ~X min drive, ⭐️ X.X) — Description with vibe". ${foodFilters.length ? `Focus on: ${foodFilters.join(', ')}` : ''}${rejectedRestaurants.length ? `\n\nDO NOT RECOMMEND: ${rejectedRestaurants.join(', ')} (guest already declined these)` : ''}`,
         propertyAddress: `${propertyName}, ${propertyAddress}`,
         guestContext: { ...guestContext, foodFilters },
         requestType: requestType,
-        previousRecommendations: previousRecommendations
+        previousRecommendations: isRejection ? null : previousRecommendations, // Don't include previous if rejecting
+        rejectedRestaurants: rejectedRestaurants
       };
 
       const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
@@ -59,16 +82,33 @@ export class RecommendationService {
         const restaurantNames = this.extractRestaurantNames(recommendationText);
         
         // v3.1 Enhanced restaurant memory and preference tracking
-        const updatedContext = {
+        let updatedContext = {
           ...context,
           lastRecommendationType: requestType,
           lastGuestContext: guestContext,
           last_food_preferences: foodFilters.length ? foodFilters : (context.last_food_preferences || [])
         };
         
-        if (restaurantNames.length > 0) {
-          updatedContext.last_recommended_restaurant = restaurantNames[0]; // Store first restaurant
-          updatedContext.last_restaurant_context = originalMessage.toLowerCase(); // Store context for follow-ups
+        // Don't overwrite if we already updated context due to rejection
+        if (!isRejection) {
+          if (restaurantNames.length > 0) {
+            updatedContext.last_recommended_restaurant = restaurantNames[0]; // Store first restaurant
+            updatedContext.last_restaurant_context = originalMessage.toLowerCase(); // Store context for follow-ups
+          }
+        } else {
+          // For rejections, merge with already updated context
+          const currentContext = await this.conversationManager.getConversation(conversation.phone_number);
+          updatedContext = {
+            ...currentContext.conversation_context,
+            lastRecommendationType: requestType,
+            lastGuestContext: guestContext,
+            last_food_preferences: foodFilters.length ? foodFilters : (context.last_food_preferences || [])
+          };
+          
+          if (restaurantNames.length > 0) {
+            updatedContext.last_recommended_restaurant = restaurantNames[0];
+            updatedContext.last_restaurant_context = originalMessage.toLowerCase();
+          }
         }
         
         // Store recommendations in travel database for future use

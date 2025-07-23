@@ -179,19 +179,25 @@ export class EnhancedConversationService {
   private async handleEnhancedFoodIntent(conversation: Conversation, message: string, property: Property, intentResult: any) {
     const lowerMessage = message.toLowerCase();
     
-    // Enhanced food keywords detection
+    // Enhanced food keywords detection including rejection/continuation patterns
     const foodKeywords = [
       'eat', 'food', 'restaurant', 'dinner', 'lunch', 'breakfast', 'hungry',
       'bite', 'grab something', 'quick', 'kid friendly', 'family', 'good for kids',
       'upscale', 'fancy', 'casual', 'cheap', 'expensive', 'rooftop', 'outdoor',
       'pizza', 'seafood', 'italian', 'mexican', 'chinese', 'burger', 'steak',
       'what\'s good', 'where to eat', 'dining', 'spot', 'place to eat',
-      'something nearby', 'close by', 'walking distance', 'drive', 'takeout'
+      'something nearby', 'close by', 'walking distance', 'drive', 'takeout',
+      // Rejection/continuation patterns
+      'let\'s do', 'how about', 'instead', 'rather', 'looking for', 'find me', 'show me'
     ];
     
     const hasFood = foodKeywords.some(keyword => lowerMessage.includes(keyword));
     
-    if (hasFood) {
+    // Also check if this is a food-specific query like "burgers" even without explicit food keywords
+    const specificFoodItems = ['burger', 'pizza', 'tacos', 'sushi', 'wings', 'bbq', 'steakhouse'];
+    const hasSpecificFood = specificFoodItems.some(item => lowerMessage.includes(item));
+    
+    if (hasFood || hasSpecificFood) {
       console.log('🍽️ Enhanced food intent detected');
       
       // Extract filters from message
@@ -258,8 +264,13 @@ export class EnhancedConversationService {
     if (lowerMessage.includes('italian')) filters.push('italian');
     if (lowerMessage.includes('mexican')) filters.push('mexican');
     if (lowerMessage.includes('chinese') || lowerMessage.includes('asian')) filters.push('asian');
-    if (lowerMessage.includes('burger')) filters.push('american');
+    if (lowerMessage.includes('burger') || lowerMessage.includes('burgers')) filters.push('american');
     if (lowerMessage.includes('steak')) filters.push('steakhouse');
+    
+    // Specific food items for better rejection detection
+    if (lowerMessage.includes('burger') || lowerMessage.includes('burgers')) filters.push('burgers');
+    if (lowerMessage.includes('wing') || lowerMessage.includes('wings')) filters.push('wings');
+    if (lowerMessage.includes('taco') || lowerMessage.includes('tacos')) filters.push('tacos');
     
     return filters;
   }
