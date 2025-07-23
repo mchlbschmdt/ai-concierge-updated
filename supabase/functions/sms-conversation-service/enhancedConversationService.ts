@@ -6,6 +6,10 @@ import { RecommendationService } from './recommendationService.ts';
 import { ResponseGenerator } from './responseGenerator.ts';
 import { MessageUtils } from './messageUtils.ts';
 import { PropertyService } from './propertyService.ts';
+import { WiFiTroubleshootingService } from './wifiTroubleshootingService.ts';
+import { MenuService } from './menuService.ts';
+import { ConversationMemoryManager } from './conversationMemoryManager.ts';
+import { LocationService } from './locationService.ts';
 import { Conversation, Property } from './types.ts';
 
 export class EnhancedConversationService {
@@ -84,6 +88,18 @@ export class EnhancedConversationService {
           };
         }
 
+        // Phase 2: WiFi Troubleshooting Integration
+        const wifiTroubleshootingResponse = await this.handleWiFiTroubleshooting(conversation, message);
+        if (wifiTroubleshootingResponse) {
+          return wifiTroubleshootingResponse;
+        }
+
+        // Phase 6: Menu and Food Query Integration
+        const menuResponse = await this.handleMenuQueries(conversation, message, property);
+        if (menuResponse) {
+          return menuResponse;
+        }
+
         // Handle recommendation intents with enhanced context
         if (this.isRecommendationIntent(intentResult.intent)) {
           return await this.recommendationService.getEnhancedRecommendations(
@@ -92,6 +108,25 @@ export class EnhancedConversationService {
             conversation,
             intentResult
           );
+        }
+
+        // Phase 4: Property Context Enhancement
+        const propertyContextResponse = await this.handlePropertyContextQueries(intentResult.intent, property, conversation, message);
+        if (propertyContextResponse) {
+          await this.conversationManager.updateConversationState(phoneNumber, {
+            last_message_type: intentResult.intent,
+            conversation_context: {
+              ...conversation.conversation_context,
+              lastIntent: intentResult.intent,
+              hasKids: intentResult.hasKids,
+              isCheckoutSoon: intentResult.isCheckoutSoon
+            }
+          });
+          
+          return {
+            response: MessageUtils.ensureSmsLimit(propertyContextResponse),
+            shouldUpdateState: false
+          };
         }
 
         // Handle property-specific intents
@@ -113,11 +148,8 @@ export class EnhancedConversationService {
           };
         }
 
-        // Fallback response for confirmed guests
-        return {
-          response: "I can help with restaurant recommendations, WiFi, parking, check-in details, and local activities. What would you like to know?",
-          shouldUpdateState: false
-        };
+        // Phase 5: Generic Response Cleanup - Better fallback
+        return await this.generateHelpfulFallback(conversation, property, intentResult.intent);
       }
 
       // Fallback - should not reach here
@@ -135,6 +167,215 @@ export class EnhancedConversationService {
         shouldUpdateState: false
       };
     }
+  }
+
+  // Phase 2: WiFi Troubleshooting Integration
+  private async handleWiFiTroubleshooting(conversation: Conversation, message: string) {
+    const context = conversation.conversation_context || {};
+    const lastMessageType = conversation.last_message_type;
+    
+    // Check if we're in WiFi troubleshooting flow
+    if (ConversationMemoryManager.isInWiFiTroubleshootingFlow(context)) {
+      const troubleshootingState = ConversationMemoryManager.getWiFiTroubleshootingState(context);
+      
+      if (troubleshootingState === 'awaiting_help_response') {
+        const response = WiFiTroubleshootingService.detectTroubleshootingResponse(message);
+        
+        if (response === 'no') {
+          // Offer host contact
+          await this.conversationManager.updateConversationState(conversation.phone_number, {
+            conversation_context: {
+              ...context,
+              wifi_troubleshooting_state: 'awaiting_host_contact_response'
+            }
+          });
+          
+          return {
+            response: WiFiTroubleshootingService.generateHostContactOffer(),
+            shouldUpdateState: false
+          };
+        } else if (response === 'yes') {
+          // Clear troubleshooting state
+          const clearedContext = ConversationMemoryManager.clearWiFiTroubleshootingState(context);
+          await this.conversationManager.updateConversationState(conversation.phone_number, {
+            conversation_context: clearedContext
+          });
+          
+          return {
+            response: "Great! Glad I could help get you connected. Need anything else?",
+            shouldUpdateState: false
+          };
+        }
+      }
+      
+      if (troubleshootingState === 'awaiting_host_contact_response') {
+        const response = WiFiTroubleshootingService.detectTroubleshootingResponse(message);
+        
+        if (response === 'yes') {
+          // Notify host and clear troubleshooting state
+          const clearedContext = ConversationMemoryManager.clearWiFiTroubleshootingState(context);
+          await this.conversationManager.updateConversationState(conversation.phone_number, {
+            conversation_context: clearedContext
+          });
+          
+          return {
+            response: WiFiTroubleshootingService.generateHostContactedConfirmation(),
+            shouldUpdateState: false
+          };
+        } else if (response === 'no') {
+          // Clear troubleshooting state
+          const clearedContext = ConversationMemoryManager.clearWiFiTroubleshootingState(context);
+          await this.conversationManager.updateConversationState(conversation.phone_number, {
+            conversation_context: clearedContext
+          });
+          
+          return {
+            response: "No problem! Let me know if you need help with anything else.",
+            shouldUpdateState: false
+          };
+        }
+      }
+    }
+    
+    // Check if this is a new WiFi issue
+    if (WiFiTroubleshootingService.detectWiFiIssue(message, lastMessageType)) {
+      await this.conversationManager.updateConversationState(conversation.phone_number, {
+        conversation_context: {
+          ...context,
+          wifi_troubleshooting_state: 'awaiting_help_response'
+        }
+      });
+      
+      return {
+        response: WiFiTroubleshootingService.generateTroubleshootingSteps(),
+        shouldUpdateState: false
+      };
+    }
+    
+    return null;
+  }
+
+  // Phase 6: Menu and Food Query Integration
+  private async handleMenuQueries(conversation: Conversation, message: string, property: Property) {
+    const context = conversation.conversation_context || {};
+    
+    // Check if this is a menu-related query
+    if (MenuService.extractMenuIntent(message)) {
+      const lastRecommendedRestaurant = ConversationMemoryManager.getLastRecommendedRestaurant(context);
+      
+      if (lastRecommendedRestaurant) {
+        const menuLink = await MenuService.getMenuLink(lastRecommendedRestaurant);
+        
+        if (menuLink) {
+          return {
+            response: `Here's the menu for ${lastRecommendedRestaurant}: ${menuLink}`,
+            shouldUpdateState: false
+          };
+        } else {
+          return {
+            response: MenuService.generateMenuResponse(lastRecommendedRestaurant, property.address),
+            shouldUpdateState: false
+          };
+        }
+      }
+    }
+    
+    // Check for specific food queries
+    const specificFoodType = MenuService.detectSpecificFoodQuery(message);
+    if (specificFoodType) {
+      const lastRecommendedRestaurant = ConversationMemoryManager.getLastRecommendedRestaurant(context);
+      
+      if (lastRecommendedRestaurant) {
+        return {
+          response: MenuService.generateSpecificFoodResponse(message, lastRecommendedRestaurant),
+          shouldUpdateState: false
+        };
+      }
+    }
+    
+    return null;
+  }
+
+  // Phase 4: Property Context Enhancement
+  private async handlePropertyContextQueries(intent: string, property: Property, conversation: Conversation, message: string): Promise<string | null> {
+    const context = conversation?.conversation_context || {};
+    const guestName = context?.guest_name;
+    const namePrefix = guestName ? `${guestName}, ` : '';
+    const propertyContext = LocationService.getPropertySpecificContext(property.address);
+    
+    // Water park hours
+    if (message.toLowerCase().includes('water park') && message.toLowerCase().includes('hour')) {
+      if (propertyContext.waterParkInfo) {
+        return `${namePrefix}${propertyContext.waterParkInfo}. Want wristband info or directions?\n\nOr were you referring to a different water park?`;
+      }
+    }
+    
+    // Shuttle information
+    if (message.toLowerCase().includes('shuttle')) {
+      if (propertyContext.shuttleInfo) {
+        return `${namePrefix}${propertyContext.shuttleInfo}. Would you like to reserve a spot or get return times?\n\nOr were you asking about a different shuttle?`;
+      }
+    }
+    
+    return null;
+  }
+
+  // Phase 5: Generic Response Cleanup
+  private async generateHelpfulFallback(conversation: Conversation, property: Property, intent?: string) {
+    const context = conversation.conversation_context || {};
+    const guestName = context?.guest_name;
+    const namePrefix = guestName ? `${guestName}, ` : '';
+    const propertyType = LocationService.determinePropertyType(property.address);
+    
+    // Context-aware fallbacks based on conversation history
+    if (intent === 'ask_food_recommendations' || context?.dining_conversation_state) {
+      return {
+        response: `${namePrefix}want help with a different restaurant, specific cuisine, or dining vibe?`,
+        shouldUpdateState: false
+      };
+    }
+    
+    if (intent === 'ask_wifi' || context?.wifi_troubleshooting_state) {
+      return {
+        response: `${namePrefix}still having WiFi trouble, or can I help with something else like checkout time or local recommendations?`,
+        shouldUpdateState: false
+      };
+    }
+    
+    if (intent === 'ask_amenity' || intent === 'amenity_request') {
+      return {
+        response: `${namePrefix}want info about other amenities, or help with dining and local recommendations?`,
+        shouldUpdateState: false
+      };
+    }
+    
+    if (intent === 'ask_activities') {
+      return {
+        response: `${namePrefix}want more activity ideas, restaurant recommendations, or property info?`,
+        shouldUpdateState: false
+      };
+    }
+    
+    // Property-specific helpful suggestions
+    if (propertyType === 'reunion_resort') {
+      return {
+        response: `${namePrefix}I can help with:\n• Restaurant recommendations near Reunion\n• Water park hours and shuttle times\n• WiFi, parking, or checkout details\n• Local activities and attractions\n\nWhat would be most helpful?`,
+        shouldUpdateState: false
+      };
+    }
+    
+    if (propertyType === 'disney_area') {
+      return {
+        response: `${namePrefix}I can help with:\n• Disney dining and park recommendations\n• Shuttle schedules and transportation\n• WiFi, parking, or property details\n• Local activities beyond the parks\n\nWhat can I help you with?`,
+        shouldUpdateState: false
+      };
+    }
+    
+    // General helpful fallback
+    return {
+      response: `${namePrefix}I can help with:\n• Restaurant and dining recommendations\n• WiFi, parking, or checkout details\n• Local activities and attractions\n• Property amenities and services\n\nWhat would be most helpful right now?`,
+      shouldUpdateState: false
+    };
   }
 
   // NEW: Handle property ID input
@@ -184,7 +425,7 @@ export class EnhancedConversationService {
     }
   }
 
-  // NEW: Handle confirmation
+  // Enhanced confirmation with personalized welcome message
   private async handleConfirmation(conversation: Conversation, message: string) {
     console.log('✅ Handling confirmation:', message);
     
@@ -199,11 +440,21 @@ export class EnhancedConversationService {
         conversation_state: 'confirmed'
       });
 
-      const greeting = ResponseGenerator.getTimeAwareGreeting(conversation?.timezone || 'UTC');
-      const response = `${greeting}! I'm your AI concierge. I can help with WiFi, parking, directions, and local recommendations. What do you need?`;
+      // Enhanced welcome message with property details
+      const context = conversation.conversation_context || {};
+      const pendingProperty = context.pending_property;
+      
+      let welcomeMessage;
+      if (pendingProperty?.property_name && pendingProperty?.address) {
+        welcomeMessage = `Welcome to ${pendingProperty.property_name} at ${pendingProperty.address}! I'm your AI concierge and I'm here to help with any questions about your stay. How may I help you today?`;
+      } else {
+        // Fallback to generic message
+        const greeting = ResponseGenerator.getTimeAwareGreeting(conversation?.timezone || 'UTC');
+        welcomeMessage = `${greeting}! I'm your AI concierge. I can help with WiFi, parking, directions, and local recommendations. What do you need?`;
+      }
       
       return {
-        response: MessageUtils.ensureSmsLimit(response),
+        response: MessageUtils.ensureSmsLimit(welcomeMessage),
         shouldUpdateState: false
       };
     } else if (isNo) {

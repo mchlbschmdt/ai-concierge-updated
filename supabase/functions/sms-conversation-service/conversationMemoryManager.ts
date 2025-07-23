@@ -1,3 +1,4 @@
+
 export interface ConversationMemory {
   last_intent?: string;
   recent_intents?: string[];
@@ -8,6 +9,8 @@ export interface ConversationMemory {
   guest_name?: string;
   guest_preferences?: GuestPreferences;
   global_recommendation_blacklist?: string[]; // Persistent across resets
+  last_recommended_restaurant?: string; // Phase 6: Track for menu queries
+  last_food_query_type?: string; // Phase 6: Track food preferences
 }
 
 export interface GuestPreferences {
@@ -78,17 +81,17 @@ export class ConversationMemoryManager {
       };
     }
 
-    // NEW: Track last recommended restaurant for menu requests
+    // Phase 6: Track last recommended restaurant for menu requests
     if (intent === 'ask_food_recommendations' && additionalData?.restaurantName) {
       updatedContext.last_recommended_restaurant = additionalData.restaurantName;
     }
 
-    // NEW: Track last food query type
+    // Phase 6: Track last food query type
     if (intent === 'ask_food_recommendations' && additionalData?.foodType) {
       updatedContext.last_food_query_type = additionalData.foodType;
     }
 
-    // NEW: Track amenity requests
+    // Track amenity requests
     if (intent === 'ask_amenity' && additionalData?.amenityType) {
       updatedContext.last_amenity_request = {
         type: additionalData.amenityType,
@@ -96,7 +99,7 @@ export class ConversationMemoryManager {
       };
     }
 
-    // NEW: Track WiFi troubleshooting state
+    // Phase 2: Track WiFi troubleshooting state
     if (intent === 'wifi_troubleshooting') {
       updatedContext.wifi_troubleshooting_state = additionalData?.state || 'started';
       updatedContext.wifi_issue_timestamp = now;
@@ -166,27 +169,27 @@ export class ConversationMemoryManager {
     return `Depth: ${depth}, Last: ${lastIntent}, Recent: ${recentIntents.slice(0, 3).join(', ')}`;
   }
 
-  // NEW: Get last recommended restaurant
+  // Phase 6: Get last recommended restaurant
   static getLastRecommendedRestaurant(context: any): string | null {
     return context?.last_recommended_restaurant || null;
   }
 
-  // NEW: Get last food query type
+  // Phase 6: Get last food query type
   static getLastFoodQueryType(context: any): string | null {
     return context?.last_food_query_type || null;
   }
 
-  // NEW: Check if user is in WiFi troubleshooting flow
+  // Phase 2: Check if user is in WiFi troubleshooting flow
   static isInWiFiTroubleshootingFlow(context: any): boolean {
     return context?.wifi_troubleshooting_state !== null && context?.wifi_troubleshooting_state !== undefined;
   }
 
-  // NEW: Get WiFi troubleshooting state
+  // Phase 2: Get WiFi troubleshooting state
   static getWiFiTroubleshootingState(context: any): string | null {
     return context?.wifi_troubleshooting_state || null;
   }
 
-  // NEW: Clear WiFi troubleshooting state
+  // Phase 2: Clear WiFi troubleshooting state
   static clearWiFiTroubleshootingState(context: any): any {
     const updatedContext = { ...context };
     delete updatedContext.wifi_troubleshooting_state;
@@ -206,7 +209,7 @@ export class ConversationMemoryManager {
     return recommendationIntents.includes(intent);
   }
 
-  // NEW: Enhanced memory clearing for fresh starts
+  // Enhanced memory clearing for fresh starts
   static clearRecommendationMemory(context: any): any {
     const clearedContext = { ...context };
     
@@ -226,7 +229,7 @@ export class ConversationMemoryManager {
     return clearedContext;
   }
 
-  // NEW: Property location anchoring
+  // Property location anchoring
   static setPropertyLocationAnchor(context: any, propertyAddress: string): any {
     const updatedContext = { ...context };
     updatedContext.property_location_anchor = propertyAddress;
@@ -234,7 +237,7 @@ export class ConversationMemoryManager {
     return updatedContext;
   }
 
-  // NEW: Get property location anchor
+  // Get property location anchor
   static getPropertyLocationAnchor(context: any): string | null {
     return context?.property_location_anchor || null;
   }

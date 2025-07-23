@@ -2,6 +2,8 @@
 import { Conversation, Property } from './types.ts';
 import { ResponseGenerator } from './responseGenerator.ts';
 import { MessageUtils } from './messageUtils.ts';
+import { LocationService } from './locationService.ts';
+import { ConversationMemoryManager } from './conversationMemoryManager.ts';
 
 export class RecommendationService {
   constructor(private supabase: any, private conversationManager: any) {}
@@ -32,9 +34,9 @@ export class RecommendationService {
       console.log('📝 Previous recommendations:', previousRecommendations);
       console.log('🧠 Memory context:', memoryContext);
 
-      // Enhanced payload for proximity-based recommendations
+      // Phase 3: Enhanced payload with distance and rating requirements
       const enhancedPayload = {
-        prompt: originalMessage,
+        prompt: `${originalMessage}\n\nIMPORTANT: Include real distance calculations, star ratings, and vibe descriptions for each recommendation. Use format: "Restaurant Name (X.X mi, 🚗 ~X min drive, ⭐️ X.X) — Description with vibe"`,
         propertyAddress: `${propertyName}, ${propertyAddress}`,
         guestContext: guestContext,
         requestType: requestType,
@@ -54,16 +56,27 @@ export class RecommendationService {
         const data = await response.json();
         console.log('✅ Enhanced recommendations received');
         
+        // Phase 3: Extract restaurant names for menu context
+        const recommendationText = data.recommendation;
+        const restaurantNames = this.extractRestaurantNames(recommendationText);
+        
+        // Store last recommended restaurant for menu queries
+        const updatedContext = {
+          ...context,
+          lastRecommendationType: requestType,
+          lastGuestContext: guestContext
+        };
+        
+        if (restaurantNames.length > 0) {
+          updatedContext.last_recommended_restaurant = restaurantNames[0]; // Store first restaurant
+        }
+        
         // Store recommendations in travel database for future use
         await this.storeTravelRecommendation(propertyAddress, requestType, data.recommendation);
         
         await this.conversationManager.updateConversationState(conversation.phone_number, {
           last_recommendations: data.recommendation,
-          conversation_context: {
-            ...context,
-            lastRecommendationType: requestType,
-            lastGuestContext: guestContext
-          }
+          conversation_context: updatedContext
         });
         
         return {
@@ -76,11 +89,38 @@ export class RecommendationService {
     } catch (error) {
       console.error('❌ Error getting enhanced recommendations:', error);
       
+      // Phase 5: Better error fallback
+      const context = conversation?.conversation_context || {};
+      const guestName = context?.guest_name;
+      const namePrefix = guestName ? `${guestName}, ` : '';
+      
       return {
-        response: "Having trouble with recommendations right now. Try again soon or ask about WiFi, parking, or check-in details.",
+        response: `${namePrefix}having trouble with recommendations right now. Can I help with WiFi, parking, or property details instead?`,
         shouldUpdateState: false
       };
     }
+  }
+
+  // Phase 3: Extract restaurant names from recommendations
+  private extractRestaurantNames(recommendationText: string): string[] {
+    const restaurants = [];
+    const lines = recommendationText.split('\n');
+    
+    for (const line of lines) {
+      // Look for restaurant names in bold format or before parentheses
+      const boldMatch = line.match(/\*\*([^*]+)\*\*/);
+      if (boldMatch) {
+        restaurants.push(boldMatch[1].trim());
+      } else {
+        // Look for restaurant names before distance/rating info
+        const nameMatch = line.match(/^([^(]+)\s*\(/);
+        if (nameMatch) {
+          restaurants.push(nameMatch[1].trim());
+        }
+      }
+    }
+    
+    return restaurants;
   }
 
   private getSmartFollowUpQuestion(message: string, intentResult?: any): string {
@@ -197,7 +237,7 @@ export class RecommendationService {
 
 CRITICAL PROXIMITY FOCUS: Only recommend places within 5 miles of ${propertyAddress}. Prioritize closest options.
 
-Response must be under 160 characters for SMS. Be warm and conversational. Give 3 fresh recommendations with distances.
+Response must be under 160 characters for SMS. Be warm and conversational. Give 3 fresh recommendations with distances and star ratings using format: "Name (X.X mi, ⭐️ X.X) — Description"
 
 ${contextNote ? 'Reference previous interests naturally if relevant.' : ''}
 ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}`;
@@ -230,8 +270,14 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
       }
     } catch (error) {
       console.error('Error getting recommendations:', error);
+      
+      // Phase 5: Better error fallback
+      const context = conversation?.conversation_context || {};
+      const guestName = context?.guest_name;
+      const namePrefix = guestName ? `${guestName}, ` : '';
+      
       return {
-        response: "Having trouble with recommendations. Try asking about WiFi, parking, or check-in details.",
+        response: `${namePrefix}having trouble with recommendations. Can I help with WiFi, parking, or property details instead?`,
         shouldUpdateState: false
       };
     }
@@ -276,20 +322,28 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
   }
 
   private categorizeRequest(message: string): string {
-    const keywords = [
-      'wifi', 'wi-fi', 'internet', 'password', 'network',
-      'parking', 'park', 'car', 'garage',
-      'check in', 'check out', 'checkin', 'checkout',
-      'beach', 'restaurant', 'food', 'eat', 'dining', 'drink', 'bar',
-      'things to do', 'attractions', 'activities', 'directions'
-    ];
-
-    for (const keyword of keywords) {
-      if (message.toLowerCase().includes(keyword)) {
-        return keyword;
-      }
+    const lowerMessage = message.toLowerCase();
+    
+    if (lowerMessage.includes('food') || lowerMessage.includes('restaurant') || lowerMessage.includes('eat') || lowerMessage.includes('dining')) {
+      return 'food_recommendations';
     }
-
+    
+    if (lowerMessage.includes('activity') || lowerMessage.includes('things to do') || lowerMessage.includes('attractions')) {
+      return 'activities';
+    }
+    
+    if (lowerMessage.includes('grocery') || lowerMessage.includes('shopping')) {
+      return 'grocery_stores';
+    }
+    
+    if (lowerMessage.includes('wifi') || lowerMessage.includes('internet')) {
+      return 'wifi';
+    }
+    
+    if (lowerMessage.includes('parking')) {
+      return 'parking';
+    }
+    
     return 'general';
   }
 }

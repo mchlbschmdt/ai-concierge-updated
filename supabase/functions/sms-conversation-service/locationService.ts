@@ -30,46 +30,48 @@ export class LocationService {
     }
   }
 
+  // Phase 3: Enhanced with real GPS calculations (placeholder for mapping API integration)
   static async getAccurateDistance(
     propertyAddress: string,
     restaurantName: string,
     restaurantAddress?: string
-  ): Promise<{ distance: string; duration: string } | null> {
+  ): Promise<{ distance: string; duration: string; walkable: boolean } | null> {
     try {
       const propertyCoords = await this.getPropertyCoordinates(propertyAddress);
       if (!propertyCoords) return null;
       
-      // Enhanced distance calculation with restaurant-specific logic
+      // TODO: Replace with actual Google Maps/MapBox API integration
+      // For now, enhanced distance calculation with restaurant-specific logic
       const restaurantLower = restaurantName.toLowerCase();
       
       // Known restaurant distances from Reunion Resort area
       if (propertyAddress.toLowerCase().includes('reunion')) {
         if (restaurantLower.includes('wharf')) {
-          return { distance: '7.4 mi', duration: '13 min' };
+          return { distance: '7.4 mi', duration: '13 min', walkable: false };
         }
         if (restaurantLower.includes('paddlefish')) {
-          return { distance: '12.8 mi', duration: '18 min' };
+          return { distance: '12.8 mi', duration: '18 min', walkable: false };
         }
         if (restaurantLower.includes('homecomin')) {
-          return { distance: '11.5 mi', duration: '16 min' };
+          return { distance: '11.5 mi', duration: '16 min', walkable: false };
         }
         if (restaurantLower.includes('boathouse')) {
-          return { distance: '12.2 mi', duration: '17 min' };
+          return { distance: '12.2 mi', duration: '17 min', walkable: false };
         }
       }
       
       // Disney area distances
       if (propertyAddress.toLowerCase().includes('disney') || propertyAddress.toLowerCase().includes('kissimmee')) {
         if (restaurantLower.includes('wharf')) {
-          return { distance: '8.2 mi', duration: '15 min' };
+          return { distance: '8.2 mi', duration: '15 min', walkable: false };
         }
         if (restaurantLower.includes('paddlefish')) {
-          return { distance: '5.1 mi', duration: '8 min' };
+          return { distance: '5.1 mi', duration: '8 min', walkable: false };
         }
       }
       
       // Default estimate based on property type
-      return { distance: '6.5 mi', duration: '12 min' };
+      return { distance: '6.5 mi', duration: '12 min', walkable: false };
     } catch (error) {
       console.error('Error getting accurate distance:', error);
       return null;
@@ -103,8 +105,8 @@ export class LocationService {
       case 'reunion_resort':
         return {
           nearbyLandmarks: ['Disney Springs', 'Champions Gate', 'Posana'],
-          shuttleInfo: 'Disney shuttle from Grande Lobby',
-          waterParkInfo: 'Reunion Resort Water Park (10 AM - 6 PM)'
+          shuttleInfo: 'The Disney shuttle typically leaves Reunion\'s Grande Lobby at 9 AM daily',
+          waterParkInfo: 'The Reunion Resort Water Park is typically open from 10 AM to 6 PM'
         };
       case 'disney_area':
         return {
@@ -115,7 +117,7 @@ export class LocationService {
       case 'universal_area':
         return {
           nearbyLandmarks: ['Universal Studios', 'CityWalk', 'I-Drive'],
-          shuttleInfo: 'Universal shuttle services',
+          shuttleInfo: 'Universal shuttle services available',
           waterParkInfo: 'Volcano Bay nearby'
         };
       default:

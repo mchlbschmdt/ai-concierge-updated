@@ -4,8 +4,7 @@ export class MenuService {
     const menuKeywords = [
       'menu', 'what do they have', 'what food', 'food options', 'what dishes',
       'what can i order', 'what do they serve', 'food menu', 'dishes', 'meals',
-      'do they have', 'any vegan', 'vegetarian options', 'gluten free',
-      'pizza', 'burger', 'seafood', 'italian', 'mexican', 'chinese'
+      'do they have', 'any vegan', 'vegetarian options', 'gluten free'
     ];
     
     const lowerMessage = message.toLowerCase();
@@ -60,7 +59,7 @@ Want recommendations for a specific cuisine or dietary need?`;
     }
     
     if (lowerMessage.includes('vegan') || lowerMessage.includes('vegetarian')) {
-      return `${restaurantName} has vegetarian options! For specific vegan choices, I'd recommend calling them at their number or checking their online menu. Want me to find other vegan-friendly spots nearby?`;
+      return `${restaurantName} has vegetarian options! For specific vegan choices, I'd recommend calling them or checking their online menu. Want me to find other vegan-friendly spots nearby?`;
     }
     
     if (lowerMessage.includes('gluten free')) {

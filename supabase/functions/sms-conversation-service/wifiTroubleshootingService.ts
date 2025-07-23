@@ -1,12 +1,12 @@
 
 export class WiFiTroubleshootingService {
   static detectWiFiIssue(message: string, lastMessageType: string): boolean {
-    if (lastMessageType !== 'wifi') return false;
+    if (lastMessageType !== 'ask_wifi') return false;
     
     const issueKeywords = [
       'not working', 'doesn\'t work', 'can\'t connect', 'won\'t connect',
       'not connecting', 'connection failed', 'wifi down', 'internet down',
-      'no internet', 'broken', 'issues', 'problems', 'trouble'
+      'no internet', 'broken', 'issues', 'problems', 'trouble', 'help'
     ];
     
     const lowerMessage = message.toLowerCase();
@@ -37,7 +37,7 @@ Did that help?`;
     if (['yes', 'y', 'yeah', 'yep', 'sure', 'okay', 'ok', 'please'].includes(lowerMessage)) {
       return 'yes';
     }
-    if (['no', 'n', 'nope', 'still not working', 'still broken', 'didn\'t help'].includes(lowerMessage)) {
+    if (['no', 'n', 'nope', 'still not working', 'still broken', 'didn\'t help', 'not working'].includes(lowerMessage)) {
       return 'no';
     }
     
