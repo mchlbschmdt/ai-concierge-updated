@@ -9,6 +9,8 @@ import { WiFiTroubleshootingService } from './wifiTroubleshootingService.ts';
 import { MenuService } from './menuService.ts';
 import { ConversationMemoryManager } from './conversationMemoryManager.ts';
 import { LocationService } from './locationService.ts';
+import { ConversationContextTracker } from './conversationContextTracker.ts';
+import { ConversationalResponseGenerator } from './conversationalResponseGenerator.ts';
 import { Conversation, Property } from './types.ts';
 
 export class EnhancedConversationService {
@@ -24,7 +26,7 @@ export class EnhancedConversationService {
 
   async processMessage(phoneNumber: string, message: string) {
     try {
-      console.log('🚀 Enhanced Conversation Service V2.2 - Processing:', { phoneNumber, message });
+      console.log('🚀 Enhanced Conversation Service V2.3 - Processing:', { phoneNumber, message });
 
       // Get or create conversation
       let conversation = await this.conversationManager.getOrCreateConversation(phoneNumber);
@@ -87,6 +89,16 @@ export class EnhancedConversationService {
           };
         }
 
+        // ✅ NEW: Check for follow-up intents FIRST before processing new intents
+        const conversationFlow = conversation.conversation_context?.conversation_flow;
+        if (conversationFlow) {
+          const followUpIntent = ConversationContextTracker.detectFollowUpIntent(message, conversationFlow);
+          if (followUpIntent) {
+            console.log('🔄 Follow-up intent detected:', followUpIntent);
+            return await this.handleFollowUpIntent(followUpIntent, conversation, message, property);
+          }
+        }
+
         // Enhanced intent detection for food & local queries
         const enhancedFoodResponse = await this.handleEnhancedFoodIntent(conversation, message, property, intentResult);
         if (enhancedFoodResponse) {
@@ -107,54 +119,23 @@ export class EnhancedConversationService {
 
         // Handle recommendation intents with enhanced context
         if (this.isRecommendationIntent(intentResult.intent)) {
-          return await this.recommendationService.getEnhancedRecommendations(
-            property, 
-            message, 
-            conversation,
-            intentResult
-          );
+          return await this.handleRecommendationWithContext(intentResult.intent, property, message, conversation);
         }
 
         // Phase 4: Property Context Enhancement
         const propertyContextResponse = await this.handlePropertyContextQueries(intentResult.intent, property, conversation, message);
         if (propertyContextResponse) {
-          await this.conversationManager.updateConversationState(phoneNumber, {
-            last_message_type: intentResult.intent,
-            conversation_context: {
-              ...conversation.conversation_context,
-              lastIntent: intentResult.intent,
-              hasKids: intentResult.hasKids,
-              isCheckoutSoon: intentResult.isCheckoutSoon
-            }
-          });
-          
-          return {
-            response: MessageUtils.ensureSmsLimit(propertyContextResponse),
-            shouldUpdateState: false
-          };
+          return await this.updateConversationAndRespond(phoneNumber, intentResult.intent, propertyContextResponse, conversation);
         }
 
-        // Handle property-specific intents
-        const propertyResponse = await this.handlePropertyIntent(intentResult.intent, property, conversation);
+        // Handle property-specific intents with conversational context
+        const propertyResponse = await this.handlePropertyIntentWithContext(intentResult.intent, property, conversation, message);
         if (propertyResponse) {
-          await this.conversationManager.updateConversationState(phoneNumber, {
-            last_message_type: intentResult.intent,
-            conversation_context: {
-              ...conversation.conversation_context,
-              lastIntent: intentResult.intent,
-              hasKids: intentResult.hasKids,
-              isCheckoutSoon: intentResult.isCheckoutSoon
-            }
-          });
-          
-          return {
-            response: MessageUtils.ensureSmsLimit(propertyResponse),
-            shouldUpdateState: false
-          };
+          return await this.updateConversationAndRespond(phoneNumber, intentResult.intent, propertyResponse, conversation);
         }
 
-        // Phase 5: Generic Response Cleanup - Better fallback
-        return await this.generateHelpfulFallback(conversation, property, intentResult.intent);
+        // Phase 5: Enhanced fallback with conversation context
+        return await this.generateContextualFallback(conversation, property, intentResult.intent, message);
       }
 
       // Fallback - should not reach here
@@ -172,6 +153,167 @@ export class EnhancedConversationService {
         shouldUpdateState: false
       };
     }
+  }
+
+  // ✅ NEW: Handle follow-up intents with proper context
+  private async handleFollowUpIntent(followUpIntent: string, conversation: Conversation, message: string, property: Property) {
+    console.log('🔄 Processing follow-up intent:', followUpIntent);
+    
+    const context = conversation.conversation_context || {};
+    const conversationFlow = context.conversation_flow || {};
+    
+    // Generate contextual response using ConversationalResponseGenerator
+    const response = ConversationalResponseGenerator.generateContextualResponse(
+      followUpIntent,
+      conversationFlow,
+      property,
+      message,
+      context.guest_name
+    );
+    
+    // Update conversation flow with follow-up
+    const updatedFlow = ConversationContextTracker.updateConversationFlow(
+      conversationFlow,
+      followUpIntent,
+      message,
+      response
+    );
+    
+    // Update conversation state
+    await this.conversationManager.updateConversationState(conversation.phone_number, {
+      conversation_context: {
+        ...context,
+        conversation_flow: updatedFlow
+      },
+      last_message_type: followUpIntent
+    });
+    
+    return {
+      response: MessageUtils.ensureSmsLimit(response),
+      shouldUpdateState: false
+    };
+  }
+
+  // ✅ NEW: Handle recommendations with full conversation context
+  private async handleRecommendationWithContext(intent: string, property: Property, message: string, conversation: Conversation) {
+    console.log('🎯 Processing recommendation with context:', intent);
+    
+    const context = conversation.conversation_context || {};
+    
+    // Get recommendation response
+    const recommendationResponse = await this.recommendationService.getEnhancedRecommendations(
+      property,
+      message,
+      conversation,
+      { intent, confidence: 0.9 }
+    );
+    
+    // Update conversation flow after recommendation
+    const conversationFlow = context.conversation_flow || {};
+    const updatedFlow = ConversationContextTracker.updateConversationFlow(
+      conversationFlow,
+      intent,
+      message,
+      recommendationResponse.response
+    );
+    
+    // Update conversation state with flow tracking
+    await this.conversationManager.updateConversationState(conversation.phone_number, {
+      conversation_context: {
+        ...context,
+        conversation_flow: updatedFlow
+      },
+      last_message_type: intent,
+      last_recommendations: recommendationResponse.response
+    });
+    
+    return recommendationResponse;
+  }
+
+  // ✅ NEW: Handle property intents with conversational context
+  private async handlePropertyIntentWithContext(intent: string, property: Property, conversation: Conversation, message: string): Promise<string | null> {
+    const context = conversation?.conversation_context || {};
+    const conversationFlow = context.conversation_flow || {};
+    
+    // Use ConversationalResponseGenerator for contextual responses
+    const response = ConversationalResponseGenerator.generateContextualResponse(
+      intent,
+      conversationFlow,
+      property,
+      message,
+      context.guest_name
+    );
+    
+    // Check if this is a special signal to use recommendation service
+    if (response === 'USE_RECOMMENDATION_SERVICE') {
+      return await this.handleRecommendationWithContext(intent, property, message, conversation);
+    }
+    
+    return response;
+  }
+
+  // ✅ NEW: Update conversation and respond with context tracking
+  private async updateConversationAndRespond(phoneNumber: string, intent: string, response: string, conversation: Conversation) {
+    const context = conversation.conversation_context || {};
+    const conversationFlow = context.conversation_flow || {};
+    
+    // Update conversation flow
+    const updatedFlow = ConversationContextTracker.updateConversationFlow(
+      conversationFlow,
+      intent,
+      '',
+      response
+    );
+    
+    await this.conversationManager.updateConversationState(phoneNumber, {
+      last_message_type: intent,
+      conversation_context: {
+        ...context,
+        conversation_flow: updatedFlow,
+        lastIntent: intent
+      }
+    });
+    
+    return {
+      response: MessageUtils.ensureSmsLimit(response),
+      shouldUpdateState: false
+    };
+  }
+
+  // ✅ NEW: Enhanced contextual fallback
+  private async generateContextualFallback(conversation: Conversation, property: Property, intent?: string, message?: string) {
+    const context = conversation.conversation_context || {};
+    const conversationFlow = context.conversation_flow || {};
+    
+    // Use ConversationalResponseGenerator for contextual fallback
+    const response = ConversationalResponseGenerator.generateContextualResponse(
+      intent || 'general_inquiry',
+      conversationFlow,
+      property,
+      message || '',
+      context.guest_name
+    );
+    
+    // Update conversation flow for fallback
+    const updatedFlow = ConversationContextTracker.updateConversationFlow(
+      conversationFlow,
+      intent || 'general_inquiry',
+      message || '',
+      response
+    );
+    
+    await this.conversationManager.updateConversationState(conversation.phone_number, {
+      conversation_context: {
+        ...context,
+        conversation_flow: updatedFlow
+      },
+      last_message_type: intent || 'general_inquiry'
+    });
+    
+    return {
+      response: MessageUtils.ensureSmsLimit(response),
+      shouldUpdateState: false
+    };
   }
 
   // ENHANCED: Better food intent detection with improved logging
@@ -200,12 +342,7 @@ export class EnhancedConversationService {
       }
       
       // Continue with recommendation service
-      return await this.recommendationService.getEnhancedRecommendations(
-        property,
-        message,
-        conversation,
-        { intent: 'ask_food_recommendations', filters, confidence: 0.95 }
-      );
+      return await this.handleRecommendationWithContext('ask_food_recommendations', property, message, conversation);
     }
     
     // Enhanced food keywords detection including rejection/continuation patterns
@@ -257,12 +394,7 @@ export class EnhancedConversationService {
       });
       
       // Use recommendation service with enhanced filters
-      return await this.recommendationService.getEnhancedRecommendations(
-        property,
-        message,
-        conversation,
-        { intent: 'ask_food_recommendations', filters, confidence: 0.9 }
-      );
+      return await this.handleRecommendationWithContext('ask_food_recommendations', property, message, conversation);
     }
     
     console.log('❌ No food intent detected for message:', lowerMessage);
@@ -423,92 +555,6 @@ export class EnhancedConversationService {
     return null;
   }
 
-  // Phase 2: WiFi Troubleshooting Integration
-  private async handleWiFiTroubleshooting(conversation: Conversation, message: string) {
-    const context = conversation.conversation_context || {};
-    const lastMessageType = conversation.last_message_type;
-    
-    // Check if we're in WiFi troubleshooting flow
-    if (ConversationMemoryManager.isInWiFiTroubleshootingFlow(context)) {
-      const troubleshootingState = ConversationMemoryManager.getWiFiTroubleshootingState(context);
-      
-      if (troubleshootingState === 'awaiting_help_response') {
-        const response = WiFiTroubleshootingService.detectTroubleshootingResponse(message);
-        
-        if (response === 'no') {
-          // Offer host contact
-          await this.conversationManager.updateConversationState(conversation.phone_number, {
-            conversation_context: {
-              ...context,
-              wifi_troubleshooting_state: 'awaiting_host_contact_response'
-            }
-          });
-          
-          return {
-            response: WiFiTroubleshootingService.generateHostContactOffer(),
-            shouldUpdateState: false
-          };
-        } else if (response === 'yes') {
-          // Clear troubleshooting state
-          const clearedContext = ConversationMemoryManager.clearWiFiTroubleshootingState(context);
-          await this.conversationManager.updateConversationState(conversation.phone_number, {
-            conversation_context: clearedContext
-          });
-          
-          return {
-            response: "Great! Glad I could help get you connected. Need anything else?",
-            shouldUpdateState: false
-          };
-        }
-      }
-      
-      if (troubleshootingState === 'awaiting_host_contact_response') {
-        const response = WiFiTroubleshootingService.detectTroubleshootingResponse(message);
-        
-        if (response === 'yes') {
-          // Notify host and clear troubleshooting state
-          const clearedContext = ConversationMemoryManager.clearWiFiTroubleshootingState(context);
-          await this.conversationManager.updateConversationState(conversation.phone_number, {
-            conversation_context: clearedContext
-          });
-          
-          return {
-            response: WiFiTroubleshootingService.generateHostContactedConfirmation(),
-            shouldUpdateState: false
-          };
-        } else if (response === 'no') {
-          // Clear troubleshooting state
-          const clearedContext = ConversationMemoryManager.clearWiFiTroubleshootingState(context);
-          await this.conversationManager.updateConversationState(conversation.phone_number, {
-            conversation_context: clearedContext
-          });
-          
-          return {
-            response: "No problem! Let me know if you need help with anything else.",
-            shouldUpdateState: false
-          };
-        }
-      }
-    }
-    
-    // Check if this is a new WiFi issue
-    if (WiFiTroubleshootingService.detectWiFiIssue(message, lastMessageType)) {
-      await this.conversationManager.updateConversationState(conversation.phone_number, {
-        conversation_context: {
-          ...context,
-          wifi_troubleshooting_state: 'awaiting_help_response'
-        }
-      });
-      
-      return {
-        response: WiFiTroubleshootingService.generateTroubleshootingSteps(),
-        shouldUpdateState: false
-      };
-    }
-    
-    return null;
-  }
-
   // Phase 6: Menu and Food Query Integration
   private async handleMenuQueries(conversation: Conversation, message: string, property: Property) {
     const context = conversation.conversation_context || {};
@@ -602,72 +648,6 @@ export class EnhancedConversationService {
     }
     
     return null;
-  }
-
-  // Phase 5: Generic Response Cleanup
-  private async generateHelpfulFallback(conversation: Conversation, property: Property, intent?: string) {
-    const context = conversation.conversation_context || {};
-    const guestName = context?.guest_name;
-    const namePrefix = guestName ? `${guestName}, ` : '';
-    const propertyType = LocationService.determinePropertyType(property.address);
-    
-    // v3.1 Enhanced context-aware fallbacks
-    if (intent === 'ask_food_recommendations' || context?.dining_conversation_state) {
-      const lastPrefs = context?.last_food_preferences;
-      const prefContext = lastPrefs?.length ? ` (${lastPrefs.join(', ')})` : '';
-      return {
-        response: `${namePrefix}want help with a different restaurant${prefContext}, specific cuisine, or dining vibe?`,
-        shouldUpdateState: false
-      };
-    }
-    
-    if (intent === 'ask_wifi' || context?.wifi_troubleshooting_state) {
-      return {
-        response: `${namePrefix}let me make sure I get this right—were you asking about the WiFi, directions, or something else?`,
-        shouldUpdateState: false
-      };
-    }
-    
-    if (intent === 'ask_amenity' || intent === 'amenity_request') {
-      // Check if we're in an active dining conversation
-      if (context?.dining_conversation_state === 'active') {
-        console.log('🍽️ Routing amenity request to food recommendations due to active dining state');
-        return await this.handleEnhancedFoodIntent(conversation, message, property, { intent: 'ask_food_recommendations' });
-      }
-      
-      return {
-        response: `${namePrefix}want info about other amenities, or help with dining and local recommendations?`,
-        shouldUpdateState: false
-      };
-    }
-    
-    if (intent === 'ask_activities') {
-      return {
-        response: `${namePrefix}want more activity ideas, restaurant recommendations, or property info?`,
-        shouldUpdateState: false
-      };
-    }
-    
-    // Property-specific helpful suggestions
-    if (propertyType === 'reunion_resort') {
-      return {
-        response: `${namePrefix}I can help with:\n• Restaurant recommendations near Reunion\n• Water park hours and shuttle times\n• WiFi, parking, or checkout details\n• Local activities and attractions\n\nWhat would be most helpful?`,
-        shouldUpdateState: false
-      };
-    }
-    
-    if (propertyType === 'disney_area') {
-      return {
-        response: `${namePrefix}I can help with:\n• Disney dining and park recommendations\n• Shuttle schedules and transportation\n• WiFi, parking, or property details\n• Local activities beyond the parks\n\nWhat can I help you with?`,
-        shouldUpdateState: false
-      };
-    }
-    
-    // General helpful fallback
-    return {
-      response: `${namePrefix}I can help with:\n• Restaurant and dining recommendations\n• WiFi, parking, or checkout details\n• Local activities and attractions\n• Property amenities and services\n\nWhat would be most helpful right now?`,
-      shouldUpdateState: false
-    };
   }
 
   // NEW: Handle property ID input
@@ -778,49 +758,5 @@ export class EnhancedConversationService {
       'ask_activities',
       'ask_grocery_stores'
     ].includes(intent);
-  }
-
-  private async handlePropertyIntent(intent: string, property: Property, conversation: Conversation): Promise<string | null> {
-    const context = conversation?.conversation_context || {};
-    const guestName = context?.guest_name;
-    const namePrefix = guestName ? `${guestName}, ` : '';
-
-    switch (intent) {
-      case 'ask_checkin_time':
-        const checkInTime = property?.check_in_time || '4:00 PM';
-        return `${namePrefix}check-in is at ${checkInTime}. Looking forward to your arrival!`;
-      
-      case 'ask_checkout_time':
-        const checkOutTime = property?.check_out_time || '11:00 AM';
-        return `${namePrefix}check-out is at ${checkOutTime}. Need help planning your departure?`;
-      
-      case 'ask_wifi':
-        if (property?.wifi_name && property?.wifi_password) {
-          return `${namePrefix}WiFi: ${property.wifi_name}\nPassword: ${property.wifi_password}`;
-        }
-        return `${namePrefix}WiFi details should be in your check-in instructions. Let me know if you need help finding them!`;
-
-      case 'ask_emergency_contact':
-        const contact = property?.emergency_contact;
-        if (contact) {
-          return `${namePrefix}you can reach the property at ${contact} for any questions or assistance!`;
-        }
-        return `${namePrefix}let me get you the property contact information.`;
-      
-      case 'ask_parking':
-        const parking = property?.parking_instructions;
-        if (parking) {
-          return `${namePrefix}parking info: ${parking}`;
-        }
-        // Provide helpful default parking guidance
-        return `${namePrefix}parking is typically available at the property. Check your check-in email for specific details, or I can help you contact the property for parking information. Need anything else?`;
-
-      case 'greeting':
-        const greeting = ResponseGenerator.getTimeAwareGreeting(conversation?.timezone || 'UTC');
-        return `${greeting}${guestName ? `, ${guestName}` : ''}! I can help with dining recommendations, WiFi, parking, or local activities. What interests you?`;
-      
-      default:
-        return null;
-    }
   }
 }
