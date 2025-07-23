@@ -629,6 +629,12 @@ export class EnhancedConversationService {
     }
     
     if (intent === 'ask_amenity' || intent === 'amenity_request') {
+      // Check if we're in an active dining conversation
+      if (context?.dining_conversation_state === 'active') {
+        console.log('🍽️ Routing amenity request to food recommendations due to active dining state');
+        return await this.handleEnhancedFoodIntent(conversation, message, property, { intent: 'ask_food_recommendations' });
+      }
+      
       return {
         response: `${namePrefix}want info about other amenities, or help with dining and local recommendations?`,
         shouldUpdateState: false

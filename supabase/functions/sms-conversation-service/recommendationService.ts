@@ -98,10 +98,9 @@ export class RecommendationService {
             updatedContext.last_restaurant_context = originalMessage.toLowerCase();
           }
         } else {
-          // For rejections, merge with already updated context
-          const currentContext = await this.conversationManager.getConversation(conversation.phone_number);
+          // For rejections, use existing conversation context
           updatedContext = {
-            ...currentContext.conversation_context,
+            ...context,
             lastRecommendationType: requestType,
             lastGuestContext: guestContext,
             last_food_preferences: foodFilters.length ? foodFilters : (context.last_food_preferences || [])
