@@ -121,14 +121,17 @@ export class ConversationContextTracker {
     return suggestions[intent] || [];
   }
 
-  private static determineAwaitingFollowUp(intent: string, response: string): string | undefined {
+  private static determineAwaitingFollowUp(intent: string, response: string | any): string | undefined {
+    // Ensure response is a string before processing
+    const responseText = typeof response === 'string' ? response : JSON.stringify(response);
+    
     // If response mentions contacting someone, expect follow-up about contact details
-    if (response.toLowerCase().includes('contact') && !response.includes('phone') && !response.includes('@')) {
+    if (responseText.toLowerCase().includes('contact') && !responseText.includes('phone') && !responseText.includes('@')) {
       return 'contact_details';
     }
 
     // If response mentions a location without specific directions
-    if ((response.includes('restaurant') || response.includes('store')) && !response.includes('address')) {
+    if ((responseText.includes('restaurant') || responseText.includes('store')) && !responseText.includes('address')) {
       return 'location_details';
     }
 
