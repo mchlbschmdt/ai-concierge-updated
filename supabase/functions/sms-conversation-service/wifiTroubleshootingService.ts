@@ -23,6 +23,17 @@ export class WiFiTroubleshootingService {
 Did that help?`;
   }
 
+  // v3.1 Enhanced troubleshooting for repeat issues
+  static generateEnhancedTroubleshootingSteps(): string {
+    return `Sorry it's still acting up! Try these tips:
+
+• Forget and reconnect to the network
+• Double-check password spelling (case-sensitive)
+• Move closer to the router—some areas have weaker signal
+
+Did that help?`;
+  }
+
   static generateHostContactOffer(): string {
     return `Would you like me to contact your host to help with this?`;
   }

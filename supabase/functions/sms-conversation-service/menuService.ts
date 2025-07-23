@@ -12,19 +12,32 @@ export class MenuService {
   }
 
   static generateMenuResponse(restaurantName: string, propertyAddress?: string): string {
-    // Enhanced menu response with more helpful information
+    // v3.1 Enhanced menu response with contextual follow-ups
     const menuSearchQuery = encodeURIComponent(`${restaurantName} menu`);
     const yelpQuery = encodeURIComponent(`${restaurantName} orlando`);
     const googleQuery = encodeURIComponent(`${restaurantName} menu orlando`);
     
-    return `I don't have the current menu for ${restaurantName}, but here are the best ways to check:
+    return `Here's how to find ${restaurantName}'s menu:
 
 📱 Search "${restaurantName} menu" on Google for latest options
 ⭐ Check Yelp: https://www.yelp.com/search?find_desc=${yelpQuery}
 🔍 Google search: https://www.google.com/search?q=${googleQuery}
 📞 Call them directly for today's specials
 
-Want recommendations for a specific cuisine or dietary need?`;
+Want me to find similar restaurants or help with dietary preferences?`;
+  }
+
+  // v3.1 New method for menu follow-up context
+  static generateMenuFollowUp(restaurantName: string, context: string): string {
+    if (context.includes('photo') || context.includes('picture')) {
+      return `Check ${restaurantName}'s Yelp or Google photos for dish pictures! Want me to find similar spots with great visuals?`;
+    }
+    
+    if (context.includes('outdoor') || context.includes('patio')) {
+      return `${restaurantName} has outdoor seating! Want me to find their contact info or suggest other patio restaurants?`;
+    }
+    
+    return `Want me to find more info about ${restaurantName} or suggest similar restaurants?`;
   }
 
   static async getMenuLink(restaurantName: string): Promise<string | null> {

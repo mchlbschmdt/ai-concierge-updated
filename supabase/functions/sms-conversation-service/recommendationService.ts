@@ -18,11 +18,8 @@ export class RecommendationService {
       const timezone = conversation?.timezone || 'UTC';
       const guestName = context?.guest_name;
       
-      const greeting = ResponseGenerator.getTimeAwareGreeting(timezone);
-      const personalizedGreeting = ResponseGenerator.getPersonalizedFoodGreeting(originalMessage, greeting, guestName);
-      const clarifyingQuestion = this.getSmartFollowUpQuestion(originalMessage, intentResult);
-      const helpfulOffer = ResponseGenerator.getHelpfulOffer(this.categorizeRequest(originalMessage));
-      
+      // v3.1 Enhanced food query detection with filters
+      const foodFilters = this.extractFoodFilters(originalMessage);
       const guestContext = this.extractGuestContext(originalMessage, context, conversation, intentResult);
       const requestType = this.categorizeRequest(originalMessage);
       const previousRecommendations = conversation?.last_recommendations || null;
@@ -31,14 +28,15 @@ export class RecommendationService {
       
       console.log('📍 Guest context extracted:', guestContext);
       console.log('🏷️ Request type:', requestType);
+      console.log('🍽️ Food filters:', foodFilters);
       console.log('📝 Previous recommendations:', previousRecommendations);
       console.log('🧠 Memory context:', memoryContext);
 
-      // Phase 3: Enhanced payload with distance and rating requirements
+      // v3.1 Enhanced payload with contextual filters and accurate distance requirements
       const enhancedPayload = {
-        prompt: `${originalMessage}\n\nIMPORTANT: Include real distance calculations, star ratings, and vibe descriptions for each recommendation. Use format: "Restaurant Name (X.X mi, 🚗 ~X min drive, ⭐️ X.X) — Description with vibe"`,
+        prompt: `${originalMessage}\n\nIMPORTANT: Use exact GPS distance from ${propertyAddress}. Format: "Restaurant Name (X.X mi, 🚗 ~X min drive, ⭐️ X.X) — Description with vibe". ${foodFilters.length ? `Focus on: ${foodFilters.join(', ')}` : ''}`,
         propertyAddress: `${propertyName}, ${propertyAddress}`,
-        guestContext: guestContext,
+        guestContext: { ...guestContext, foodFilters },
         requestType: requestType,
         previousRecommendations: previousRecommendations
       };
@@ -60,15 +58,17 @@ export class RecommendationService {
         const recommendationText = data.recommendation;
         const restaurantNames = this.extractRestaurantNames(recommendationText);
         
-        // Store last recommended restaurant for menu queries
+        // v3.1 Enhanced restaurant memory and preference tracking
         const updatedContext = {
           ...context,
           lastRecommendationType: requestType,
-          lastGuestContext: guestContext
+          lastGuestContext: guestContext,
+          last_food_preferences: foodFilters.length ? foodFilters : (context.last_food_preferences || [])
         };
         
         if (restaurantNames.length > 0) {
           updatedContext.last_recommended_restaurant = restaurantNames[0]; // Store first restaurant
+          updatedContext.last_restaurant_context = originalMessage.toLowerCase(); // Store context for follow-ups
         }
         
         // Store recommendations in travel database for future use
@@ -89,13 +89,13 @@ export class RecommendationService {
     } catch (error) {
       console.error('❌ Error getting enhanced recommendations:', error);
       
-      // Phase 5: Better error fallback
+      // v3.1 Context-aware error fallback
       const context = conversation?.conversation_context || {};
       const guestName = context?.guest_name;
       const namePrefix = guestName ? `${guestName}, ` : '';
       
       return {
-        response: `${namePrefix}having trouble with recommendations right now. Can I help with WiFi, parking, or property details instead?`,
+        response: `${namePrefix}let me make sure I get this right—were you asking about dining options, or something else like WiFi or directions?`,
         shouldUpdateState: false
       };
     }
@@ -271,13 +271,13 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
     } catch (error) {
       console.error('Error getting recommendations:', error);
       
-      // Phase 5: Better error fallback
+      // v3.1 Context-aware error fallback for contextual recommendations
       const context = conversation?.conversation_context || {};
       const guestName = context?.guest_name;
       const namePrefix = guestName ? `${guestName}, ` : '';
       
       return {
-        response: `${namePrefix}having trouble with recommendations. Can I help with WiFi, parking, or property details instead?`,
+        response: `${namePrefix}let me make sure I understand—were you looking for restaurants, activities, or something else?`,
         shouldUpdateState: false
       };
     }
@@ -293,6 +293,37 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
     }
     
     return '';
+  }
+
+  // v3.1 Enhanced food filter extraction
+  private extractFoodFilters(message: string): string[] {
+    const filters = [];
+    const lowerMessage = message.toLowerCase();
+    
+    // Dining time filters
+    if (lowerMessage.includes('lunch')) filters.push('lunch');
+    if (lowerMessage.includes('dinner')) filters.push('dinner');
+    if (lowerMessage.includes('late night') || lowerMessage.includes('late-night')) filters.push('late night');
+    if (lowerMessage.includes('breakfast') || lowerMessage.includes('brunch')) filters.push('breakfast/brunch');
+    
+    // Family/speed filters
+    if (lowerMessage.includes('kid') || lowerMessage.includes('family')) filters.push('kid-friendly');
+    if (lowerMessage.includes('fast') || lowerMessage.includes('quick')) filters.push('quick service');
+    
+    // Atmosphere filters
+    if (lowerMessage.includes('rooftop')) filters.push('rooftop');
+    if (lowerMessage.includes('upscale') || lowerMessage.includes('fancy') || lowerMessage.includes('fine dining')) filters.push('upscale');
+    if (lowerMessage.includes('casual')) filters.push('casual');
+    if (lowerMessage.includes('outdoor') || lowerMessage.includes('patio')) filters.push('outdoor seating');
+    
+    // Cuisine filters
+    if (lowerMessage.includes('pizza')) filters.push('pizza');
+    if (lowerMessage.includes('seafood')) filters.push('seafood');
+    if (lowerMessage.includes('italian')) filters.push('italian');
+    if (lowerMessage.includes('mexican')) filters.push('mexican');
+    if (lowerMessage.includes('asian')) filters.push('asian');
+    
+    return filters;
   }
 
   private extractGuestContext(message: string, context: any, conversation: Conversation, intentResult?: any): any {

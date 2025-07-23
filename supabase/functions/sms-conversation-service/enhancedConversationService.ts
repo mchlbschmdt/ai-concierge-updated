@@ -296,24 +296,31 @@ export class EnhancedConversationService {
     return null;
   }
 
-  // Phase 4: Property Context Enhancement
+  // v3.1 Enhanced Property Context with distance and amenity queries
   private async handlePropertyContextQueries(intent: string, property: Property, conversation: Conversation, message: string): Promise<string | null> {
     const context = conversation?.conversation_context || {};
     const guestName = context?.guest_name;
     const namePrefix = guestName ? `${guestName}, ` : '';
     const propertyContext = LocationService.getPropertySpecificContext(property.address);
+    const lowerMessage = message.toLowerCase();
+    
+    // v3.1 Distance context handling
+    const distanceContext = LocationService.getDistanceContext(property.address, message);
+    if (distanceContext) {
+      return `${namePrefix}${distanceContext}`;
+    }
     
     // Water park hours
-    if (message.toLowerCase().includes('water park') && message.toLowerCase().includes('hour')) {
+    if (lowerMessage.includes('water park') && lowerMessage.includes('hour')) {
       if (propertyContext.waterParkInfo) {
         return `${namePrefix}${propertyContext.waterParkInfo}. Want wristband info or directions?\n\nOr were you referring to a different water park?`;
       }
     }
     
-    // Shuttle information
-    if (message.toLowerCase().includes('shuttle')) {
+    // Shuttle information with enhanced context
+    if (lowerMessage.includes('shuttle')) {
       if (propertyContext.shuttleInfo) {
-        return `${namePrefix}${propertyContext.shuttleInfo}. Would you like to reserve a spot or get return times?\n\nOr were you asking about a different shuttle?`;
+        return `${namePrefix}${propertyContext.shuttleInfo}. Would you like me to check today's schedule?\n\nOr were you asking about a different shuttle?`;
       }
     }
     
@@ -327,17 +334,19 @@ export class EnhancedConversationService {
     const namePrefix = guestName ? `${guestName}, ` : '';
     const propertyType = LocationService.determinePropertyType(property.address);
     
-    // Context-aware fallbacks based on conversation history
+    // v3.1 Enhanced context-aware fallbacks
     if (intent === 'ask_food_recommendations' || context?.dining_conversation_state) {
+      const lastPrefs = context?.last_food_preferences;
+      const prefContext = lastPrefs?.length ? ` (${lastPrefs.join(', ')})` : '';
       return {
-        response: `${namePrefix}want help with a different restaurant, specific cuisine, or dining vibe?`,
+        response: `${namePrefix}want help with a different restaurant${prefContext}, specific cuisine, or dining vibe?`,
         shouldUpdateState: false
       };
     }
     
     if (intent === 'ask_wifi' || context?.wifi_troubleshooting_state) {
       return {
-        response: `${namePrefix}still having WiFi trouble, or can I help with something else like checkout time or local recommendations?`,
+        response: `${namePrefix}let me make sure I get this right—were you asking about the WiFi, directions, or something else?`,
         shouldUpdateState: false
       };
     }
