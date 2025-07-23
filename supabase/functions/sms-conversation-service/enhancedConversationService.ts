@@ -812,7 +812,8 @@ export class EnhancedConversationService {
         if (parking) {
           return `${namePrefix}parking info: ${parking}`;
         }
-        return `${namePrefix}parking details should be in your check-in instructions. Need help finding specific information?`;
+        // Provide helpful default parking guidance
+        return `${namePrefix}parking is typically available at the property. Check your check-in email for specific details, or I can help you contact the property for parking information. Need anything else?`;
 
       case 'greeting':
         const greeting = ResponseGenerator.getTimeAwareGreeting(conversation?.timezone || 'UTC');

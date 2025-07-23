@@ -178,6 +178,15 @@ export class IntentRecognitionService {
   }
 
   private static detectSingleIntent(message: string): { intent: string; confidence: number } {
+    // Location/nearby requests - HIGHEST PRIORITY to avoid misclassification  
+    if (this.matchesKeywords(message, [
+      'nearby', 'near me', 'close to', 'around', 'local', 'in the area', 'close by',
+      'near my destination', 'near here', 'within walking distance', 'walking distance',
+      'around here', 'in this area', 'end destination', 'destination'
+    ])) {
+      return { intent: 'ask_food_recommendations', confidence: 0.95 };
+    }
+
     // Enhanced recommendation detection - HIGHEST PRIORITY for user engagement
     if (this.matchesKeywords(message, [
       'food', 'restaurant', 'eat', 'dining', 'hungry', 'meal', 'lunch', 'dinner', 'breakfast',
@@ -238,8 +247,9 @@ export class IntentRecognitionService {
       return { intent: 'ask_wifi', confidence: 0.9 };
     }
 
-    // Parking
-    if (this.matchesKeywords(message, ['parking', 'park', 'car', 'vehicle', 'garage'])) {
+    // Parking - be more specific to avoid false positives with "park" in other contexts
+    if (this.matchesKeywords(message, ['parking spot', 'parking lot', 'parking space', 'where to park', 'car park', 'parking garage', 'parking area', 'parking information']) ||
+        (this.matchesKeywords(message, ['parking']) && !this.matchesKeywords(message, ['nearby', 'near', 'around', 'close to', 'destination', 'location']))) {
       return { intent: 'ask_parking', confidence: 0.9 };
     }
 
