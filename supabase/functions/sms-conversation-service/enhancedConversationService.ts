@@ -1,4 +1,3 @@
-
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { ConversationManager } from './conversationManager.ts';
 import { IntentRecognitionService } from './intentRecognitionService.ts';
@@ -175,7 +174,7 @@ export class EnhancedConversationService {
     }
   }
 
-  // NEW: Enhanced Food Intent Detection with Filters
+  // ENHANCED: Better food intent detection with improved logging
   private async handleEnhancedFoodIntent(conversation: Conversation, message: string, property: Property, intentResult: any) {
     const lowerMessage = message.toLowerCase();
     
@@ -184,21 +183,33 @@ export class EnhancedConversationService {
       'eat', 'food', 'restaurant', 'dinner', 'lunch', 'breakfast', 'hungry',
       'bite', 'grab something', 'quick', 'kid friendly', 'family', 'good for kids',
       'upscale', 'fancy', 'casual', 'cheap', 'expensive', 'rooftop', 'outdoor',
-      'pizza', 'seafood', 'italian', 'mexican', 'chinese', 'burger', 'steak',
+      'pizza', 'seafood', 'italian', 'mexican', 'chinese', 'burger', 'burgers', 'steak',
       'what\'s good', 'where to eat', 'dining', 'spot', 'place to eat',
       'something nearby', 'close by', 'walking distance', 'drive', 'takeout',
-      // Rejection/continuation patterns
-      'let\'s do', 'how about', 'instead', 'rather', 'looking for', 'find me', 'show me'
+      // Enhanced rejection/continuation patterns
+      'let\'s do', 'how about', 'instead', 'rather', 'looking for', 'find me', 'show me',
+      'give me', 'want', 'need', 'local', 'options', 'recommendations'
     ];
     
     const hasFood = foodKeywords.some(keyword => lowerMessage.includes(keyword));
     
-    // Also check if this is a food-specific query like "burgers" even without explicit food keywords
-    const specificFoodItems = ['burger', 'pizza', 'tacos', 'sushi', 'wings', 'bbq', 'steakhouse'];
+    // Enhanced specific food detection
+    const specificFoodItems = [
+      'burger', 'burgers', 'pizza', 'tacos', 'sushi', 'wings', 'bbq', 'steakhouse',
+      'seafood', 'italian', 'mexican', 'chinese', 'asian', 'american'
+    ];
     const hasSpecificFood = specificFoodItems.some(item => lowerMessage.includes(item));
     
+    console.log('🔍 Food intent analysis:', {
+      message: lowerMessage,
+      hasFood,
+      hasSpecificFood,
+      matchedKeywords: foodKeywords.filter(keyword => lowerMessage.includes(keyword)),
+      matchedFoodItems: specificFoodItems.filter(item => lowerMessage.includes(item))
+    });
+    
     if (hasFood || hasSpecificFood) {
-      console.log('🍽️ Enhanced food intent detected');
+      console.log('🍽️ Enhanced food intent detected - routing to recommendation service');
       
       // Extract filters from message
       const filters = this.extractFoodFilters(message);
@@ -223,10 +234,11 @@ export class EnhancedConversationService {
       );
     }
     
+    console.log('❌ No food intent detected for message:', lowerMessage);
     return null;
   }
 
-  // Extract food-specific filters from message
+  // ENHANCED: Better food filter extraction matching the RecommendationService
   private extractFoodFilters(message: string): string[] {
     const lowerMessage = message.toLowerCase();
     const filters: string[] = [];
@@ -258,19 +270,21 @@ export class EnhancedConversationService {
     if (lowerMessage.includes('rooftop') || lowerMessage.includes('view')) filters.push('rooftop');
     if (lowerMessage.includes('outdoor') || lowerMessage.includes('patio')) filters.push('outdoor');
     
-    // Cuisine filters
+    // ENHANCED: Better cuisine and food item detection
+    if (lowerMessage.includes('burger') || lowerMessage.includes('burgers')) {
+      filters.push('burgers');
+      filters.push('american');
+    }
     if (lowerMessage.includes('pizza')) filters.push('pizza');
     if (lowerMessage.includes('seafood') || lowerMessage.includes('fish')) filters.push('seafood');
     if (lowerMessage.includes('italian')) filters.push('italian');
     if (lowerMessage.includes('mexican')) filters.push('mexican');
     if (lowerMessage.includes('chinese') || lowerMessage.includes('asian')) filters.push('asian');
-    if (lowerMessage.includes('burger') || lowerMessage.includes('burgers')) filters.push('american');
     if (lowerMessage.includes('steak')) filters.push('steakhouse');
-    
-    // Specific food items for better rejection detection
-    if (lowerMessage.includes('burger') || lowerMessage.includes('burgers')) filters.push('burgers');
     if (lowerMessage.includes('wing') || lowerMessage.includes('wings')) filters.push('wings');
     if (lowerMessage.includes('taco') || lowerMessage.includes('tacos')) filters.push('tacos');
+    
+    console.log('🔍 Enhanced food filters extracted:', filters);
     
     return filters;
   }
@@ -283,10 +297,10 @@ export class EnhancedConversationService {
     
     // Enhanced WiFi issue detection
     const wifiIssueKeywords = [
-      'wifi not working', 'wifi isn\'t working', 'can\'t connect', 'won\'t connect',
+      'wifi not working', 'wifi isn\'t working', 'can't connect', 'won't connect',
       'not connecting', 'connection failed', 'wifi down', 'internet down',
       'no internet', 'wifi broken', 'wifi issues', 'wifi problems', 'wifi trouble',
-      'still not working', 'still broken', 'didn\'t help', 'not working'
+      'still not working', 'still broken', 'didn't help', 'not working'
     ];
     
     const hasWiFiIssue = wifiIssueKeywords.some(keyword => lowerMessage.includes(keyword));

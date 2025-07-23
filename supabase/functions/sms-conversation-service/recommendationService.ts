@@ -38,7 +38,7 @@ export class RecommendationService {
         console.log('✅ Added to rejected list and cleared from memory');
       }
       
-      // v3.1 Enhanced food query detection with filters
+      // Enhanced food query detection with improved filters
       const foodFilters = this.extractFoodFilters(originalMessage);
       const guestContext = this.extractGuestContext(originalMessage, context, conversation, intentResult);
       const requestType = this.categorizeRequest(originalMessage);
@@ -49,20 +49,22 @@ export class RecommendationService {
       
       console.log('📍 Guest context extracted:', guestContext);
       console.log('🏷️ Request type:', requestType);
-      console.log('🍽️ Food filters:', foodFilters);
+      console.log('🍽️ Food filters detected:', foodFilters);
       console.log('📝 Previous recommendations:', previousRecommendations);
       console.log('🚫 Rejected restaurants:', rejectedRestaurants);
       console.log('🧠 Memory context:', memoryContext);
 
-      // v3.1 Enhanced payload with contextual filters and accurate distance requirements
+      // Enhanced payload with better rejection handling and food-specific instructions
       const enhancedPayload = {
-        prompt: `${originalMessage}\n\nIMPORTANT: Use exact GPS distance from ${propertyAddress}. Format: "Restaurant Name (X.X mi, 🚗 ~X min drive, ⭐️ X.X) — Description with vibe". ${foodFilters.length ? `Focus on: ${foodFilters.join(', ')}` : ''}${rejectedRestaurants.length ? `\n\nDO NOT RECOMMEND: ${rejectedRestaurants.join(', ')} (guest already declined these)` : ''}`,
+        prompt: this.buildEnhancedPrompt(originalMessage, propertyAddress, foodFilters, rejectedRestaurants, isRejection),
         propertyAddress: `${propertyName}, ${propertyAddress}`,
         guestContext: { ...guestContext, foodFilters },
         requestType: requestType,
-        previousRecommendations: isRejection ? null : previousRecommendations, // Don't include previous if rejecting
+        previousRecommendations: isRejection ? null : previousRecommendations,
         rejectedRestaurants: rejectedRestaurants
       };
+
+      console.log('🔄 Enhanced payload being sent to OpenAI:', enhancedPayload);
 
       const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
         method: 'POST',
@@ -77,11 +79,11 @@ export class RecommendationService {
         const data = await response.json();
         console.log('✅ Enhanced recommendations received');
         
-        // Phase 3: Extract restaurant names for menu context
+        // Extract restaurant names for menu context
         const recommendationText = data.recommendation;
         const restaurantNames = this.extractRestaurantNames(recommendationText);
         
-        // v3.1 Enhanced restaurant memory and preference tracking
+        // Enhanced restaurant memory and preference tracking
         let updatedContext = {
           ...context,
           lastRecommendationType: requestType,
@@ -92,8 +94,8 @@ export class RecommendationService {
         // Don't overwrite if we already updated context due to rejection
         if (!isRejection) {
           if (restaurantNames.length > 0) {
-            updatedContext.last_recommended_restaurant = restaurantNames[0]; // Store first restaurant
-            updatedContext.last_restaurant_context = originalMessage.toLowerCase(); // Store context for follow-ups
+            updatedContext.last_recommended_restaurant = restaurantNames[0];
+            updatedContext.last_restaurant_context = originalMessage.toLowerCase();
           }
         } else {
           // For rejections, merge with already updated context
@@ -129,7 +131,7 @@ export class RecommendationService {
     } catch (error) {
       console.error('❌ Error getting enhanced recommendations:', error);
       
-      // v3.1 Context-aware error fallback
+      // Context-aware error fallback
       const context = conversation?.conversation_context || {};
       const guestName = context?.guest_name;
       const namePrefix = guestName ? `${guestName}, ` : '';
@@ -141,7 +143,32 @@ export class RecommendationService {
     }
   }
 
-  // Phase 3: Extract restaurant names from recommendations
+  // NEW: Build enhanced prompt with better rejection handling
+  private buildEnhancedPrompt(originalMessage: string, propertyAddress: string, foodFilters: string[], rejectedRestaurants: string[], isRejection: boolean): string {
+    let prompt = `${originalMessage}\n\n`;
+    
+    // Add specific instructions for rejections
+    if (isRejection && rejectedRestaurants.length > 0) {
+      prompt += `IMPORTANT: Guest rejected these restaurants - DO NOT recommend them again: ${rejectedRestaurants.join(', ')}\n\n`;
+    }
+    
+    // Add food filter instructions
+    if (foodFilters.length > 0) {
+      prompt += `GUEST WANTS: ${foodFilters.join(', ')} - Focus recommendations on these specific preferences.\n\n`;
+    }
+    
+    // Add general formatting instructions
+    prompt += `Use exact GPS distance from ${propertyAddress}. Format: "Restaurant Name (X.X mi, 🚗 ~X min drive, ⭐️ X.X) — Description with vibe".`;
+    
+    // Add rejection list if applicable
+    if (rejectedRestaurants.length > 0) {
+      prompt += `\n\nDO NOT RECOMMEND: ${rejectedRestaurants.join(', ')} (guest already declined these)`;
+    }
+    
+    return prompt;
+  }
+
+  // Extract restaurant names from recommendations
   private extractRestaurantNames(recommendationText: string): string[] {
     const restaurants = [];
     const lines = recommendationText.split('\n');
@@ -409,7 +436,7 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
     return '';
   }
 
-  // v3.1 Enhanced food filter extraction
+  // ENHANCED: Better food filter extraction with improved burger detection
   private extractFoodFilters(message: string): string[] {
     const filters = [];
     const lowerMessage = message.toLowerCase();
@@ -430,12 +457,21 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
     if (lowerMessage.includes('casual')) filters.push('casual');
     if (lowerMessage.includes('outdoor') || lowerMessage.includes('patio')) filters.push('outdoor seating');
     
-    // Cuisine filters
+    // ENHANCED: Better cuisine and food item detection
+    if (lowerMessage.includes('burger') || lowerMessage.includes('burgers')) {
+      filters.push('burgers');
+      filters.push('american');
+    }
     if (lowerMessage.includes('pizza')) filters.push('pizza');
     if (lowerMessage.includes('seafood')) filters.push('seafood');
     if (lowerMessage.includes('italian')) filters.push('italian');
     if (lowerMessage.includes('mexican')) filters.push('mexican');
-    if (lowerMessage.includes('asian')) filters.push('asian');
+    if (lowerMessage.includes('asian') || lowerMessage.includes('chinese')) filters.push('asian');
+    if (lowerMessage.includes('steak')) filters.push('steakhouse');
+    if (lowerMessage.includes('wing') || lowerMessage.includes('wings')) filters.push('wings');
+    if (lowerMessage.includes('taco') || lowerMessage.includes('tacos')) filters.push('tacos');
+    
+    console.log('🔍 Food filters extracted from message:', lowerMessage, '→', filters);
     
     return filters;
   }
@@ -466,10 +502,21 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
     return days[new Date().getDay()];
   }
 
+  // ENHANCED: Better request categorization for food queries
   private categorizeRequest(message: string): string {
     const lowerMessage = message.toLowerCase();
     
-    if (lowerMessage.includes('food') || lowerMessage.includes('restaurant') || lowerMessage.includes('eat') || lowerMessage.includes('dining')) {
+    // Enhanced food detection keywords
+    const foodKeywords = [
+      'food', 'restaurant', 'eat', 'dining', 'hungry', 'meal', 'lunch', 'dinner', 'breakfast',
+      'burger', 'burgers', 'pizza', 'seafood', 'italian', 'mexican', 'chinese', 'steak',
+      'bite', 'grab something', 'quick', 'casual', 'upscale', 'fancy', 'rooftop',
+      'what\'s good', 'where to eat', 'spot', 'place to eat', 'good food'
+    ];
+    
+    // Check for food-related terms
+    if (foodKeywords.some(keyword => lowerMessage.includes(keyword))) {
+      console.log('🍽️ Categorized as food_recommendations due to keywords');
       return 'food_recommendations';
     }
     
@@ -489,6 +536,7 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
       return 'parking';
     }
     
+    console.log('🏷️ Categorized as general for message:', lowerMessage);
     return 'general';
   }
 }
