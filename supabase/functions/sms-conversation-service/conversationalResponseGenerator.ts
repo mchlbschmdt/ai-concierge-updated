@@ -104,8 +104,27 @@ export class ConversationalResponseGenerator {
         break;
     }
 
-    // Generic follow-up fallback
-    return `${namePrefix}I'd be happy to help with more details! What specific information do you need?`;
+    // Smart follow-up fallback based on previous context
+    const lastTopic = conversationFlow.currentTopic?.intent || baseIntent;
+    
+    // Use recommendation service for food/location follow-ups
+    if (lastTopic.includes('food') || lowerMessage.includes('restaurant') || lowerMessage.includes('eat')) {
+      return 'USE_RECOMMENDATION_SERVICE';
+    }
+    
+    // Provide contextual help based on last topic
+    switch (lastTopic) {
+      case 'ask_amenity':
+        return `${namePrefix}I can help with more amenity details. Are you asking about pool hours, gym access, or something else?`;
+      case 'ask_wifi':
+        return `${namePrefix}For WiFi issues, try restarting your device or forgetting/reconnecting to the network. Need the contact info for tech support?`;
+      case 'ask_parking':
+        return `${namePrefix}I can provide exact parking locations or help you contact the property for specific spot info. What would help?`;
+      case 'ask_checkin_time':
+        return `${namePrefix}For check-in questions, I can share early arrival options or property contact details. What do you need?`;
+      default:
+        return `${namePrefix}I'd be happy to provide more specific details. Could you clarify what information you're looking for?`;
+    }
   }
 
   private static isContextualReference(message: string): boolean {
