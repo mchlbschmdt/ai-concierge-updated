@@ -82,10 +82,17 @@ export class ConversationContextTracker {
   }
 
   private static isGenericFollowUp(message: string): boolean {
+    // Only catch truly vague/generic follow-ups, not specific questions
     const genericFollowUps = [
-      'who do i contact', 'how do i', 'where exactly', 'what about',
-      'can you help', 'more info', 'tell me more', 'how', 'where', 'when'
+      'what about', 'tell me more', 'more info', 'anything else',
+      'what else', 'can you help', 'help me', 'and what about'
     ];
+    
+    // Don't treat specific questions as generic follow-ups
+    const specificQuestionWords = ['where do i', 'how do i', 'what is', 'when is', 'who is'];
+    if (specificQuestionWords.some(phrase => message.includes(phrase))) {
+      return false;
+    }
     
     return genericFollowUps.some(phrase => message.includes(phrase));
   }
