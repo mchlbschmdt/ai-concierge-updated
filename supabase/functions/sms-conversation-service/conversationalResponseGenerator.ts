@@ -59,6 +59,11 @@ export class ConversationalResponseGenerator {
     const baseIntent = intent.replace('_followup', '').replace('_generic_followup', '');
     const lowerMessage = message.toLowerCase();
 
+    // Handle contextual references like "that restaurant", "there", "it", etc.
+    if (this.isContextualReference(lowerMessage)) {
+      return this.handleContextualReference(lowerMessage, conversationFlow, namePrefix, property);
+    }
+
     switch (baseIntent) {
       case 'ask_checkin_time':
         if (lowerMessage.includes('early') || lowerMessage.includes('before')) {
@@ -101,6 +106,57 @@ export class ConversationalResponseGenerator {
 
     // Generic follow-up fallback
     return `${namePrefix}I'd be happy to help with more details! What specific information do you need?`;
+  }
+
+  private static isContextualReference(message: string): boolean {
+    const contextualWords = [
+      'that', 'there', 'it', 'they', 'them', 'the restaurant', 'the place',
+      'how far', 'distance from', 'near disney', 'from epcot', 'from magic kingdom',
+      'from animal kingdom', 'from hollywood studios', 'close to disney'
+    ];
+    
+    return contextualWords.some(word => message.includes(word));
+  }
+
+  private static handleContextualReference(
+    message: string, 
+    conversationFlow: ConversationFlow, 
+    namePrefix: string,
+    property: any
+  ): string {
+    const lastTopic = conversationFlow.currentTopic;
+    const lastRecommendations = conversationFlow.lastSpecificResponse;
+    
+    // Check if they're asking about distance from Disney parks
+    if (message.includes('disney') || message.includes('epcot') || message.includes('magic kingdom') || 
+        message.includes('animal kingdom') || message.includes('hollywood studios')) {
+      
+      if (lastTopic?.intent === 'ask_food_recommendations' && lastRecommendations) {
+        // Extract restaurant name from last recommendation if possible
+        const restaurantMatch = lastRecommendations.match(/(\w+['']?\w*(?:\s+\w+)*?)(?:\s+\(|,|\s+is)/);
+        const restaurantName = restaurantMatch ? restaurantMatch[1] : 'the restaurant I recommended';
+        
+        // Provide distance context based on property location
+        const propertyAddress = property?.address || '';
+        if (propertyAddress.toLowerCase().includes('reunion') || propertyAddress.toLowerCase().includes('kissimmee')) {
+          return `${namePrefix}${restaurantName} is about 12-15 minutes from Disney parks, similar to your property location. It's an easy drive to any of the parks!`;
+        } else if (propertyAddress.toLowerCase().includes('orlando')) {
+          return `${namePrefix}${restaurantName} is typically 8-15 minutes from Disney parks depending on traffic and which park you're visiting. Want specific directions?`;
+        } else {
+          return `${namePrefix}${restaurantName} is in the Disney area, so it should be close to all the parks. Would you like specific directions to the restaurant or a particular park?`;
+        }
+      }
+    }
+    
+    // Handle other contextual references
+    if ((message.includes('that') || message.includes('there') || message.includes('it')) && lastRecommendations) {
+      if (lastTopic?.intent === 'ask_food_recommendations') {
+        return `${namePrefix}I can give you more details about the restaurant I recommended! What specifically would you like to know - directions, hours, or something else?`;
+      }
+    }
+    
+    // Fallback for contextual references
+    return `${namePrefix}I want to make sure I understand what you're referring to. Could you be more specific about what you'd like to know?`;
   }
 
   private static generateContextAwareResponse(
