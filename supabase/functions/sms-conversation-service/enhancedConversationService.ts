@@ -575,7 +575,19 @@ export class EnhancedConversationService {
     const context = conversation.conversation_context || {};
     const conversationFlow = context.conversation_flow || {};
     
-    // Use ConversationalResponseGenerator for contextual fallback
+    // Check if this could be a food/restaurant request that wasn't caught
+    if (message && this.couldBeFoodRequest(message)) {
+      console.log('🍽️ Fallback detected potential food request:', message);
+      return await this.handleRecommendationWithContext('ask_food_recommendations', property, message, conversation);
+    }
+    
+    // Check if this could be an activity/attraction request  
+    if (message && this.couldBeActivityRequest(message)) {
+      console.log('🎯 Fallback detected potential activity request:', message);
+      return await this.handleRecommendationWithContext('ask_activities', property, message, conversation);
+    }
+    
+    // Try ConversationalResponseGenerator first
     const response = ConversationalResponseGenerator.generateContextualResponse(
       intent || 'general_inquiry',
       conversationFlow,
@@ -583,6 +595,11 @@ export class EnhancedConversationService {
       message || '',
       context.guest_name
     );
+    
+    // If it signals to use recommendation service, do that
+    if (response === 'USE_RECOMMENDATION_SERVICE') {
+      return await this.handleRecommendationWithContext(intent || 'ask_food_recommendations', property, message || '', conversation);
+    }
     
     // Update conversation flow for fallback
     const updatedFlow = ConversationContextTracker.updateConversationFlow(
@@ -604,6 +621,36 @@ export class EnhancedConversationService {
       response: MessageUtils.ensureSmsLimit(response),
       shouldUpdateState: false
     };
+  }
+
+  // ✅ NEW: Check if message could be a food request not caught by intent recognition
+  private couldBeFoodRequest(message: string): boolean {
+    const lowerMessage = message.toLowerCase();
+    const foodIndicators = [
+      'recommend', 'suggestion', 'good place', 'favorite', 'try',
+      'hungry', 'eat', 'taste', 'dish', 'cuisine', 'flavor',
+      'local', 'nearby', 'close', 'around here'
+    ];
+    
+    return foodIndicators.some(indicator => lowerMessage.includes(indicator)) &&
+           (lowerMessage.includes('food') || lowerMessage.includes('restaurant') || 
+            lowerMessage.includes('coffee') || lowerMessage.includes('dinner') ||
+            lowerMessage.includes('lunch') || lowerMessage.includes('breakfast'));
+  }
+
+  // ✅ NEW: Check if message could be an activity request
+  private couldBeActivityRequest(message: string): boolean {
+    const lowerMessage = message.toLowerCase();
+    const activityIndicators = [
+      'recommend', 'suggestion', 'good place', 'favorite', 'try',
+      'visit', 'see', 'check out', 'explore', 'experience',
+      'local', 'nearby', 'close', 'around here'
+    ];
+    
+    return activityIndicators.some(indicator => lowerMessage.includes(indicator)) &&
+           (lowerMessage.includes('attraction') || lowerMessage.includes('activity') || 
+            lowerMessage.includes('fun') || lowerMessage.includes('sightseeing') ||
+            lowerMessage.includes('family') || lowerMessage.includes('kids'));
   }
 
   // Extract food filters from message

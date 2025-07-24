@@ -212,7 +212,9 @@ export class IntentRecognitionService {
       'food', 'restaurant', 'eat', 'dining', 'hungry', 'meal', 'lunch', 'dinner', 'breakfast',
       'where to eat', 'good food', 'best restaurant', 'food recommendations', 'places to eat',
       'grab a bite', 'get food', 'pizza', 'burger', 'sushi', 'italian', 'mexican', 'chinese', 
-      'american', 'cuisine', 'quick bite', 'fast food', 'takeout', 'delivery', 'coffee shop'
+      'american', 'cuisine', 'quick bite', 'fast food', 'takeout', 'delivery', 'coffee shop',
+      'puerto rican food', 'mofongo', 'seafood', 'authentic', 'local cuisine', 'coffee', 'café',
+      'pastries', 'bakery', 'breakfast spot', 'brunch', 'local food', 'traditional food'
     ])) {
       return { intent: 'ask_food_recommendations', confidence: 0.95 };
     }
