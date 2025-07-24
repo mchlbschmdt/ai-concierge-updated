@@ -60,6 +60,9 @@ export class RecommendationDiversifier {
     const recArray = Array.isArray(recommendations) ? recommendations : [recommendations];
     
     recArray.forEach(rec => {
+      // Ensure rec is a string
+      if (typeof rec !== 'string') return;
+      
       // Look for common restaurant/place name patterns
       const patterns = [
         /([A-Z][a-z]+ [A-Z][a-z]+ [A-Z][a-z]+)/g, // "Maple Street Biscuit Co"
@@ -68,9 +71,11 @@ export class RecommendationDiversifier {
       ];
       
       patterns.forEach(pattern => {
-        const matches = rec.match(pattern);
-        if (matches) {
-          places.push(...matches);
+        if (typeof rec === 'string') {
+          const matches = rec.match(pattern);
+          if (matches) {
+            places.push(...matches);
+          }
         }
       });
     });

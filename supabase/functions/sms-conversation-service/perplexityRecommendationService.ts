@@ -36,7 +36,7 @@ export class PerplexityRecommendationService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'llama-3.1-sonar-large-128k-online',
+          model: 'llama-3.1-sonar-small-128k-online',
           messages: [
             {
               role: 'system',
@@ -54,8 +54,9 @@ export class PerplexityRecommendationService {
       });
 
       if (!response.ok) {
-        console.error('❌ Perplexity API error:', response.status, await response.text());
-        return this.getFallbackRecommendation(property, requestType);
+        console.error(`❌ Perplexity API error: ${response.status} ${await response.text()}`);
+        console.log('🔄 Trying OpenAI fallback');
+        return await this.getOpenAIFallback(property, query, requestType, rejectedOptions);
       }
 
       const data = await response.json();
@@ -133,6 +134,88 @@ export class PerplexityRecommendationService {
     }
     
     return recommendation;
+  }
+
+  // NEW: OpenAI fallback for high-quality recommendations
+  private static async getOpenAIFallback(property: Property, query: string, requestType: string, rejectedOptions: string[] = []): Promise<string> {
+    try {
+      const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
+      if (!openAIApiKey) {
+        console.log('🔄 No OpenAI key, using local fallback');
+        return this.getFallbackRecommendation(property, requestType);
+      }
+
+      const prompt = this.buildOpenAIPrompt(property, query, requestType, rejectedOptions);
+      
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: 'You are a local concierge providing specific recommendations with ratings and distances. Be concise but helpful.' },
+            { role: 'user', content: prompt }
+          ],
+          max_tokens: 300,
+          temperature: 0.7,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const recommendation = data.choices[0].message.content;
+        console.log('✅ OpenAI recommendation received:', recommendation);
+        return this.formatRecommendation(recommendation);
+      } else {
+        console.error(`❌ OpenAI API error: ${response.status}`);
+        return this.getFallbackRecommendation(property, requestType);
+      }
+    } catch (error) {
+      console.error('❌ OpenAI fallback error:', error);
+      return this.getFallbackRecommendation(property, requestType);
+    }
+  }
+
+  private static buildOpenAIPrompt(property: Property, query: string, requestType: string, rejectedOptions: string[]): string {
+    const location = property.address || 'San Juan, Puerto Rico';
+    let specificRequest = '';
+    
+    switch (requestType.toLowerCase()) {
+      case 'coffee':
+        specificRequest = 'coffee shops and cafés with ratings 4+ stars, include pastries/breakfast options';
+        break;
+      case 'attractions':
+        specificRequest = 'tourist attractions, scenic spots, museums, parks, or cultural sites with ratings 4+ stars';
+        break;
+      case 'dinner':
+      case 'restaurant':
+        specificRequest = 'restaurants for dinner with ratings 4+ stars, various cuisines';
+        break;
+      default:
+        specificRequest = `${requestType} recommendations with ratings 4+ stars`;
+    }
+
+    let prompt = `Find 3 highly-rated ${specificRequest} near ${location}. 
+
+For each recommendation, provide:
+- Name and brief description
+- Walking/driving distance from ${location}
+- Why it's recommended (cuisine type, specialties, atmosphere)
+
+Requirements:
+- Only 4+ star rated establishments
+- Include distance estimates
+- Keep descriptions concise for SMS
+- Focus on local favorites and quality options`;
+
+    if (rejectedOptions.length > 0) {
+      prompt += `\n\nAvoid these previously suggested places: ${rejectedOptions.join(', ')}`;
+    }
+
+    return prompt;
   }
 
   private static getFallbackRecommendation(property: Property, requestType: string): string {
