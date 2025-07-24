@@ -16,6 +16,7 @@ import { MultiIntentHandler } from './multiIntentHandler.ts';
 import { PropertyContextSwitcher } from './propertyContextSwitcher.ts';
 import { MultiQueryParser } from './multiQueryParser.ts';
 import { RecommendationDiversifier } from './recommendationDiversifier.ts';
+import { PerplexityRecommendationService } from './perplexityRecommendationService.ts';
 import { Conversation, Property } from './types.ts';
 
 export class EnhancedConversationService {
@@ -120,7 +121,7 @@ export class EnhancedConversationService {
 
         // PHASE 3: Enhanced intent detection for food & local queries with diversification
         if (intentResult.intent === 'ask_food_recommendations') {
-          const enhancedFoodResponse = await this.handleEnhancedFoodIntentWithDiversification(conversation, message, property, intentResult);
+          const enhancedFoodResponse = await this.handleEnhancedFoodIntentWithDiversification(intentResult.intent, property, message, conversation);
           if (enhancedFoodResponse) {
             return enhancedFoodResponse;
           }
@@ -363,8 +364,81 @@ export class EnhancedConversationService {
     return await this.handleRecommendationWithContext(intent, property, message, conversation);
   }
 
-  // ✅ ENHANCED: Food intent with diversification
-  private async handleEnhancedFoodIntentWithDiversification(conversation: Conversation, message: string, property: Property, intentResult: any) {
+  /**
+   * Enhanced food recommendation with diversification
+   */
+  async handleEnhancedFoodIntentWithDiversification(intent: string, property: Property, message: string, conversation: Conversation): Promise<ProcessingResult> {
+    console.log('🍽️ Enhanced food intent with diversification:', intent);
+    
+    try {
+      const context = conversation?.conversation_context || {};
+      
+      // Get previous recommendations for diversification analysis  
+      const previousRecs = conversation?.last_recommendations;
+      console.log('📝 Previous recommendations for diversification:', previousRecs);
+      
+      // Parse previous recommendations safely
+      let previousRecommendations = [];
+      try {
+        previousRecommendations = previousRecs ? JSON.parse(previousRecs) : [];
+      } catch (e) {
+        // If parsing fails, treat as string array
+        previousRecommendations = previousRecs ? [previousRecs] : [];
+      }
+      
+      // Analyze if we should diversify
+      const diversificationContext = {
+        requestType: intent,
+        previousRecommendations,
+        conversationHistory: RecommendationDiversifier.extractConversationHistory(conversation),
+        timeOfDay: this.getTimeOfDay(),
+        guestPreferences: context.guest_preferences || {}
+      };
+      
+      const diversificationResult = RecommendationDiversifier.analyzeForDiversification(diversificationContext);
+      console.log('🎯 Diversification analysis:', diversificationResult);
+      
+      // Try Perplexity first for fresh, real-time recommendations
+      const requestType = this.categorizeRequestType(intent, message);
+      console.log('📋 Categorized request type:', requestType);
+      
+      const perplexityRecommendation = await PerplexityRecommendationService.getLocalRecommendations(
+        property,
+        message,
+        conversation,
+        requestType,
+        diversificationResult.rejectedOptions
+      );
+      
+      console.log('✅ Perplexity recommendation received:', perplexityRecommendation);
+      
+      // Update conversation with the new recommendation
+      await this.updateConversationState(conversation.phone_number, {
+        last_recommendations: JSON.stringify([perplexityRecommendation]),
+        last_message_type: intent,
+        conversation_context: {
+          ...context,
+          lastIntent: intent,
+          last_interaction: new Date().toISOString()
+        }
+      });
+      
+      return {
+        response: perplexityRecommendation,
+        shouldUpdateState: true
+      };
+      
+    } catch (error) {
+      console.error('❌ Error in enhanced food intent with diversification:', error);
+      return {
+        response: "I'm having trouble finding recommendations right now. Please try again in a moment.",
+        shouldUpdateState: false
+      };
+    }
+  }
+
+  // ✅ LEGACY: Old food intent method with diversification
+  private async handleEnhancedFoodIntentWithDiversificationOld(conversation: Conversation, message: string, property: Property, intentResult: any) {
     const lowerMessage = message.toLowerCase();
     const context = conversation.conversation_context || {};
     
@@ -955,4 +1029,53 @@ export class EnhancedConversationService {
       };
     }
   }
+
+  private getTimeOfDay(): string {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'morning';
+    if (hour < 17) return 'afternoon'; 
+    return 'evening';
+  }
+
+  private categorizeRequestType(intent: string, message: string): string {
+    const lowerMessage = message.toLowerCase();
+    const lowerIntent = intent.toLowerCase();
+    
+    // Check for specific food/dining requests
+    if (lowerMessage.includes('dinner') || lowerMessage.includes('restaurant') || lowerIntent.includes('food')) {
+      return 'dinner';
+    }
+    
+    if (lowerMessage.includes('coffee') || lowerMessage.includes('cafe')) {
+      return 'coffee';
+    }
+    
+    if (lowerMessage.includes('attraction') || lowerMessage.includes('activity') || lowerMessage.includes('things to do')) {
+      return 'attractions';
+    }
+    
+    if (lowerMessage.includes('breakfast')) {
+      return 'breakfast';
+    }
+    
+    if (lowerMessage.includes('lunch')) {
+      return 'lunch';
+    }
+    
+    // Default mapping from intent
+    if (lowerIntent.includes('food') || lowerIntent.includes('restaurant')) {
+      return 'restaurant';
+    }
+    
+    return lowerIntent.replace('ask_', '');
+  }
+
+  private async updateConversationState(phoneNumber: string, updates: any) {
+    await this.conversationManager.updateConversationState(phoneNumber, updates);
+  }
+}
+
+interface ProcessingResult {
+  response: string;
+  shouldUpdateState: boolean;
 }

@@ -53,10 +53,13 @@ export class RecommendationDiversifier {
   /**
    * Extracts place names from recommendation text
    */
-  private static extractPlaceNames(recommendations: string[]): string[] {
+  private static extractPlaceNames(recommendations: string[] | string): string[] {
     const places: string[] = [];
     
-    recommendations.forEach(rec => {
+    // Handle both string and array inputs
+    const recArray = Array.isArray(recommendations) ? recommendations : [recommendations];
+    
+    recArray.forEach(rec => {
       // Look for common restaurant/place name patterns
       const patterns = [
         /([A-Z][a-z]+ [A-Z][a-z]+ [A-Z][a-z]+)/g, // "Maple Street Biscuit Co"
