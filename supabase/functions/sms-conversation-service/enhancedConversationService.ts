@@ -144,8 +144,11 @@ export class EnhancedConversationService {
         }
 
         // Handle recommendation intents with enhanced context and diversification
+        console.log('🎯 Detected recommendation intent:', intentResult.intent);
         if (this.isRecommendationIntent(intentResult.intent)) {
-          return await this.handleRecommendationWithDiversification(intentResult.intent, property, message, conversation);
+          const result = await this.handleRecommendationWithDiversification(intentResult.intent, property, message, conversation);
+          console.log('📋 Recommendation result:', typeof result, result);
+          return result;
         }
 
         // Phase 4: Property Context Enhancement
@@ -458,6 +461,8 @@ export class EnhancedConversationService {
       conversation,
       { intent, confidence: 0.9 }
     );
+    
+    console.log('🔍 Recommendation service returned:', recommendationResponse);
     
     // Update conversation flow after recommendation
     const conversationFlow = context.conversation_flow || {};

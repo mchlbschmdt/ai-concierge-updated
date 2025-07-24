@@ -280,17 +280,13 @@ export class ConversationalResponseGenerator {
       return options[(depth - 1) % options.length];
     }
 
-    return `${namePrefix}I shared that information already. Is there something specific you'd like me to clarify?`;
+    return `${namePrefix}Let me double-check that information for you.`;
   }
 
   private static generateSmartDefault(namePrefix: string, flow: ConversationFlow, intent: string): string {
-    // Reference the conversation naturally
-    if (flow.recentTopics.length > 0) {
-      const lastIntent = flow.recentTopics[flow.recentTopics.length - 1].intent;
-      return `${namePrefix}along with what we discussed about ${this.getIntentFriendlyName(lastIntent)}, I can also help with ${this.getIntentFriendlyName(intent)}. What would you like to know?`;
-    }
-
-    return `${namePrefix}happy to help with ${this.getIntentFriendlyName(intent)}! What specific information do you need?`;
+    // Don't reference past topics unless we actually provided useful information
+    // Instead, focus on being helpful for the current request
+    return `${namePrefix}I'm here to help! Let me look into that for you.`;
   }
 
   private static getIntentFriendlyName(intent: string): string {
