@@ -101,10 +101,12 @@ export class EnhancedConversationService {
           }
         }
 
-        // Enhanced intent detection for food & local queries
-        const enhancedFoodResponse = await this.handleEnhancedFoodIntent(conversation, message, property, intentResult);
-        if (enhancedFoodResponse) {
-          return enhancedFoodResponse;
+        // Enhanced intent detection for food & local queries - ONLY for food intents
+        if (intentResult.intent === 'ask_food_recommendations') {
+          const enhancedFoodResponse = await this.handleEnhancedFoodIntent(conversation, message, property, intentResult);
+          if (enhancedFoodResponse) {
+            return enhancedFoodResponse;
+          }
         }
 
         // Phase 2: Enhanced WiFi Troubleshooting Integration
