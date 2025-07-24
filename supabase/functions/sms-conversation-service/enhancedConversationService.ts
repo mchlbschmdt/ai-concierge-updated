@@ -13,6 +13,9 @@ import { ConversationContextTracker } from './conversationContextTracker.ts';
 import { ConversationalResponseGenerator } from './conversationalResponseGenerator.ts';
 import { PropertyDataExtractor } from './propertyDataExtractor.ts';
 import { MultiIntentHandler } from './multiIntentHandler.ts';
+import { PropertyContextSwitcher } from './propertyContextSwitcher.ts';
+import { MultiQueryParser } from './multiQueryParser.ts';
+import { RecommendationDiversifier } from './recommendationDiversifier.ts';
 import { Conversation, Property } from './types.ts';
 
 export class EnhancedConversationService {
@@ -28,10 +31,28 @@ export class EnhancedConversationService {
 
   async processMessage(phoneNumber: string, message: string) {
     try {
-      console.log('🚀 Enhanced Conversation Service V2.3 - Processing:', { phoneNumber, message });
+      console.log('🚀 Enhanced Conversation Service V2.4 - Processing:', { phoneNumber, message });
 
-      // Get or create conversation
+      // PHASE 1: Property Context Switching Detection (NEW)
       let conversation = await this.conversationManager.getOrCreateConversation(phoneNumber);
+      const currentProperty = await PropertyService.getPropertyByPhone(this.supabase, phoneNumber);
+      
+      const propertySwitchResult = PropertyContextSwitcher.detectPropertySwitch(message, currentProperty);
+      if (propertySwitchResult.isPropertySwitch) {
+        return await this.handlePropertySwitch(phoneNumber, propertySwitchResult, conversation);
+      }
+
+      // PHASE 2: Multi-Query Detection and Immediate Acknowledgment (NEW)
+      const parsedQuery = MultiQueryParser.parseMessage(message);
+      if (parsedQuery.isMultiQuery) {
+        console.log('🔍 Multi-query detected:', parsedQuery);
+        // Send immediate acknowledgment
+        setTimeout(() => this.processMultiQuerySequentially(phoneNumber, parsedQuery, conversation), 100);
+        return {
+          response: MessageUtils.ensureSmsLimit(parsedQuery.acknowledgment),
+          shouldUpdateState: false
+        };
+      }
       
       // Special handling for 'get_conversation' requests
       if (message === 'get_conversation') {
@@ -101,9 +122,9 @@ export class EnhancedConversationService {
           }
         }
 
-        // Enhanced intent detection for food & local queries - ONLY for food intents
+        // PHASE 3: Enhanced intent detection for food & local queries with diversification
         if (intentResult.intent === 'ask_food_recommendations') {
-          const enhancedFoodResponse = await this.handleEnhancedFoodIntent(conversation, message, property, intentResult);
+          const enhancedFoodResponse = await this.handleEnhancedFoodIntentWithDiversification(conversation, message, property, intentResult);
           if (enhancedFoodResponse) {
             return enhancedFoodResponse;
           }
@@ -126,9 +147,9 @@ export class EnhancedConversationService {
           return await this.handleMultipleRequests(intentResult.subIntents, property, conversation, message);
         }
 
-        // Handle recommendation intents with enhanced context
+        // Handle recommendation intents with enhanced context and diversification
         if (this.isRecommendationIntent(intentResult.intent)) {
-          return await this.handleRecommendationWithContext(intentResult.intent, property, message, conversation);
+          return await this.handleRecommendationWithDiversification(intentResult.intent, property, message, conversation);
         }
 
         // Phase 4: Property Context Enhancement
@@ -162,6 +183,205 @@ export class EnhancedConversationService {
         shouldUpdateState: false
       };
     }
+  }
+
+  // ✅ NEW: Handle property context switching
+  private async handlePropertySwitch(phoneNumber: string, switchResult: any, conversation: Conversation) {
+    console.log('🏠 Property switch detected:', switchResult);
+    
+    try {
+      // Look up the new property
+      const newProperty = await this.propertyService.findPropertyByCode(switchResult.newPropertyCode);
+      
+      if (!newProperty) {
+        return {
+          response: PropertyContextSwitcher.generatePropertyNotFoundMessage(switchResult.newPropertyCode),
+          shouldUpdateState: false
+        };
+      }
+      
+      // Update conversation with new property context
+      await this.conversationManager.updateConversationState(phoneNumber, {
+        property_id: newProperty.id,
+        conversation_state: 'awaiting_confirmation',
+        conversation_context: {
+          ...conversation.conversation_context,
+          property_switch: true,
+          pending_property: newProperty,
+          previous_property: conversation.property_id
+        }
+      });
+      
+      return {
+        response: PropertyContextSwitcher.generateSwitchConfirmation(
+          switchResult.newPropertyCode, 
+          newProperty.property_name
+        ),
+        shouldUpdateState: false
+      };
+    } catch (error) {
+      console.error('❌ Property switch error:', error);
+      return {
+        response: "I'm having trouble switching properties right now. Please try again.",
+        shouldUpdateState: false
+      };
+    }
+  }
+
+  // ✅ NEW: Process multi-query sequentially
+  private async processMultiQuerySequentially(phoneNumber: string, parsedQuery: any, conversation: Conversation) {
+    console.log('🔄 Processing multi-query sequentially:', parsedQuery.queries);
+    
+    const responses: string[] = [];
+    
+    for (const query of parsedQuery.queries) {
+      try {
+        // Process each query component
+        const response = await this.processIndividualQuery(query, conversation);
+        if (response) {
+          responses.push(response);
+        }
+      } catch (error) {
+        console.error('❌ Error processing query component:', error);
+        responses.push(`I had trouble with your ${query.type} request.`);
+      }
+    }
+    
+    // Send combined response
+    if (responses.length > 0) {
+      const combinedResponse = responses.join('\n\n');
+      // This would need to be sent via SMS service directly
+      console.log('📱 Would send combined response:', combinedResponse);
+    }
+  }
+
+  // ✅ NEW: Process individual query component
+  private async processIndividualQuery(query: any, conversation: Conversation): Promise<string | null> {
+    const property = await PropertyService.getPropertyByPhone(this.supabase, conversation.phone_number);
+    if (!property) return null;
+    
+    // Route to appropriate handler based on query type
+    switch (query.type) {
+      case 'food':
+        return await this.handleRecommendationWithDiversification('ask_food_recommendations', property, query.text, conversation);
+      case 'activities':
+        return await this.handleRecommendationWithDiversification('ask_activities', property, query.text, conversation);
+      case 'transport':
+        const transportResponse = PropertyDataExtractor.extractGroceryTransportInfo(property);
+        return transportResponse.content;
+      case 'amenities':
+        const amenityResponse = PropertyDataExtractor.extractAmenityInfo(property, query.text);
+        return amenityResponse.content;
+      case 'property_info':
+        return await this.handlePropertyIntentWithDataExtraction('ask_property_specific', property, conversation, query.text);
+      default:
+        return await this.generateContextualFallback(conversation, property, query.intent, query.text);
+    }
+  }
+
+  // ✅ NEW: Handle recommendations with diversification
+  private async handleRecommendationWithDiversification(intent: string, property: Property, message: string, conversation: Conversation) {
+    console.log('🎯 Processing recommendation with diversification:', intent);
+    
+    const context = conversation.conversation_context || {};
+    const previousRecommendations = context.recommendation_history || [];
+    
+    // Check if diversification is needed
+    const diversificationContext = {
+      requestType: intent,
+      previousRecommendations: previousRecommendations,
+      conversationHistory: context.conversation_flow || {},
+      currentRequest: message
+    };
+    
+    const diversificationResult = RecommendationDiversifier.analyzeForDiversification(diversificationContext);
+    
+    if (diversificationResult.needsDiversification) {
+      console.log('🔄 Diversification needed:', diversificationResult);
+      
+      // Add rejection filters to the recommendation request
+      const enhancedMessage = message + ' ' + diversificationResult.rejectionFilters;
+      
+      // Get diversified recommendations
+      const recommendationResponse = await this.recommendationService.getEnhancedRecommendations(
+        property,
+        enhancedMessage,
+        conversation,
+        { intent, confidence: 0.9 }
+      );
+      
+      // Update conversation with new recommendations
+      const updatedHistory = [...previousRecommendations, {
+        intent,
+        recommendations: [recommendationResponse.response],
+        timestamp: new Date().toISOString()
+      }];
+      
+      await this.conversationManager.updateConversationState(conversation.phone_number, {
+        conversation_context: {
+          ...context,
+          recommendation_history: updatedHistory
+        },
+        last_message_type: intent,
+        last_recommendations: recommendationResponse.response
+      });
+      
+      // Add diversification note if needed
+      if (diversificationResult.diversificationNote) {
+        recommendationResponse.response = diversificationResult.diversificationNote + '\n\n' + recommendationResponse.response;
+      }
+      
+      return recommendationResponse;
+    }
+    
+    // No diversification needed, proceed normally
+    return await this.handleRecommendationWithContext(intent, property, message, conversation);
+  }
+
+  // ✅ ENHANCED: Food intent with diversification
+  private async handleEnhancedFoodIntentWithDiversification(conversation: Conversation, message: string, property: Property, intentResult: any) {
+    const lowerMessage = message.toLowerCase();
+    const context = conversation.conversation_context || {};
+    
+    // Check for food-specific keywords to ensure this is actually a food request
+    const foodKeywords = [
+      'eat', 'food', 'restaurant', 'dinner', 'lunch', 'breakfast', 'hungry',
+      'bite', 'pizza', 'seafood', 'burger', 'coffee', 'cafe'
+    ];
+    
+    const hasFood = foodKeywords.some(keyword => lowerMessage.includes(keyword));
+    
+    if (!hasFood) {
+      console.log('🚫 Not actually a food request, returning null');
+      return null;
+    }
+    
+    // CRITICAL: Check if we're already in an active dining conversation
+    const isInDiningConversation = context?.dining_conversation_state === 'active';
+    
+    if (isInDiningConversation) {
+      console.log('🍽️ Already in active dining conversation - continuing food recommendations');
+      
+      // Extract filters from current message
+      const filters = this.extractFoodFilters(message);
+      console.log('🔍 Food filters detected in active conversation:', filters);
+      
+      // Update preferences if new ones are detected
+      if (filters.length > 0) {
+        await this.conversationManager.updateConversationState(conversation.phone_number, {
+          conversation_context: {
+            ...context,
+            last_food_preferences: filters
+          }
+        });
+      }
+      
+      // Continue with diversified recommendation service
+      return await this.handleRecommendationWithDiversification('ask_food_recommendations', property, message, conversation);
+    }
+    
+    // Continue with diversified recommendation service for new food requests
+    return await this.handleRecommendationWithDiversification('ask_food_recommendations', property, message, conversation);
   }
 
   // ✅ NEW: Handle follow-up intents with proper context
@@ -376,238 +596,73 @@ export class EnhancedConversationService {
     };
   }
 
-  // ENHANCED: Better food intent detection with improved logging
-  private async handleEnhancedFoodIntent(conversation: Conversation, message: string, property: Property, intentResult: any) {
-    const lowerMessage = message.toLowerCase();
-    const context = conversation.conversation_context || {};
-    
-    // CRITICAL: Check if we're already in an active dining conversation
-    const isInDiningConversation = context?.dining_conversation_state === 'active';
-    
-    if (isInDiningConversation) {
-      console.log('🍽️ Already in active dining conversation - continuing food recommendations');
-      
-      // Extract filters from current message
-      const filters = this.extractFoodFilters(message);
-      console.log('🔍 Food filters detected in active conversation:', filters);
-      
-      // Update preferences if new ones are detected
-      if (filters.length > 0) {
-        await this.conversationManager.updateConversationState(conversation.phone_number, {
-          conversation_context: {
-            ...context,
-            last_food_preferences: filters
-          }
-        });
-      }
-      
-      // Continue with recommendation service
-      return await this.handleRecommendationWithContext('ask_food_recommendations', property, message, conversation);
-    }
-    
-    // Enhanced food keywords detection including rejection/continuation patterns
-    const foodKeywords = [
-      'eat', 'food', 'restaurant', 'dinner', 'lunch', 'breakfast', 'hungry',
-      'bite', 'grab something', 'quick', 'kid friendly', 'family', 'good for kids',
-      'upscale', 'fancy', 'casual', 'cheap', 'expensive', 'rooftop', 'outdoor',
-      'pizza', 'seafood', 'italian', 'mexican', 'chinese', 'burger', 'burgers', 'steak',
-      'what\'s good', 'where to eat', 'dining', 'spot', 'place to eat',
-      'something nearby', 'close by', 'walking distance', 'drive', 'takeout',
-      // Enhanced rejection/continuation patterns - CRITICAL FOR FLOW CONTINUATION
-      'let\'s do', 'how about', 'instead', 'rather', 'looking for', 'find me', 'show me',
-      'give me', 'want', 'need', 'local', 'options', 'recommendations', 'yeah give me',
-      'give me local', 'local options', 'other options', 'something else'
-    ];
-    
-    const hasFood = foodKeywords.some(keyword => lowerMessage.includes(keyword));
-    
-    // Enhanced specific food detection
-    const specificFoodItems = [
-      'burger', 'burgers', 'pizza', 'tacos', 'sushi', 'wings', 'bbq', 'steakhouse',
-      'seafood', 'italian', 'mexican', 'chinese', 'asian', 'american'
-    ];
-    const hasSpecificFood = specificFoodItems.some(item => lowerMessage.includes(item));
-    
-    console.log('🔍 Food intent analysis:', {
-      message: lowerMessage,
-      hasFood,
-      hasSpecificFood,
-      matchedKeywords: foodKeywords.filter(keyword => lowerMessage.includes(keyword)),
-      matchedFoodItems: specificFoodItems.filter(item => lowerMessage.includes(item))
-    });
-    
-    if (hasFood || hasSpecificFood) {
-      console.log('🍽️ Enhanced food intent detected - routing to recommendation service');
-      
-      // Extract filters from message
-      const filters = this.extractFoodFilters(message);
-      console.log('🔍 Food filters detected:', filters);
-      
-      // Store food preferences in memory
-      const context = conversation.conversation_context || {};
-      await this.conversationManager.updateConversationState(conversation.phone_number, {
-        conversation_context: {
-          ...context,
-          last_food_preferences: filters,
-          dining_conversation_state: 'active'
-        }
-      });
-      
-      // Use recommendation service with enhanced filters
-      return await this.handleRecommendationWithContext('ask_food_recommendations', property, message, conversation);
-    }
-    
-    console.log('❌ No food intent detected for message:', lowerMessage);
-    return null;
-  }
-
-  // ENHANCED: Better food filter extraction matching the RecommendationService
+  // Extract food filters from message
   private extractFoodFilters(message: string): string[] {
-    const lowerMessage = message.toLowerCase();
     const filters: string[] = [];
+    const lowerMessage = message.toLowerCase();
     
-    // Meal time filters
-    if (lowerMessage.includes('breakfast') || lowerMessage.includes('morning')) filters.push('breakfast');
-    if (lowerMessage.includes('lunch') || lowerMessage.includes('afternoon')) filters.push('lunch');
-    if (lowerMessage.includes('dinner') || lowerMessage.includes('evening')) filters.push('dinner');
-    if (lowerMessage.includes('late') || lowerMessage.includes('night')) filters.push('late_night');
-    
-    // Family/kid filters
-    if (lowerMessage.includes('kid') || lowerMessage.includes('family') || lowerMessage.includes('children')) {
-      filters.push('family_friendly');
-    }
-    
-    // Service type filters
-    if (lowerMessage.includes('quick') || lowerMessage.includes('fast') || lowerMessage.includes('grab')) {
-      filters.push('quick_service');
-    }
-    if (lowerMessage.includes('sit') || lowerMessage.includes('table') || lowerMessage.includes('service')) {
-      filters.push('sit_down');
-    }
-    
-    // Vibe filters
-    if (lowerMessage.includes('upscale') || lowerMessage.includes('fancy') || lowerMessage.includes('fine')) {
-      filters.push('upscale');
-    }
-    if (lowerMessage.includes('casual') || lowerMessage.includes('relaxed')) filters.push('casual');
-    if (lowerMessage.includes('rooftop') || lowerMessage.includes('view')) filters.push('rooftop');
-    if (lowerMessage.includes('outdoor') || lowerMessage.includes('patio')) filters.push('outdoor');
-    
-    // ENHANCED: Better cuisine and food item detection
-    if (lowerMessage.includes('burger') || lowerMessage.includes('burgers')) {
-      filters.push('burgers');
-      filters.push('american');
-    }
-    if (lowerMessage.includes('pizza')) filters.push('pizza');
-    if (lowerMessage.includes('seafood') || lowerMessage.includes('fish')) filters.push('seafood');
+    // Cuisine filters
     if (lowerMessage.includes('italian')) filters.push('italian');
     if (lowerMessage.includes('mexican')) filters.push('mexican');
-    if (lowerMessage.includes('chinese') || lowerMessage.includes('asian')) filters.push('asian');
-    if (lowerMessage.includes('steak')) filters.push('steakhouse');
-    if (lowerMessage.includes('wing') || lowerMessage.includes('wings')) filters.push('wings');
-    if (lowerMessage.includes('taco') || lowerMessage.includes('tacos')) filters.push('tacos');
+    if (lowerMessage.includes('chinese')) filters.push('chinese');
+    if (lowerMessage.includes('pizza')) filters.push('pizza');
+    if (lowerMessage.includes('seafood')) filters.push('seafood');
+    if (lowerMessage.includes('burger')) filters.push('burger');
     
-    console.log('🔍 Enhanced food filters extracted:', filters);
+    // Style filters
+    if (lowerMessage.includes('upscale') || lowerMessage.includes('fancy')) filters.push('upscale');
+    if (lowerMessage.includes('casual')) filters.push('casual');
+    if (lowerMessage.includes('kid friendly') || lowerMessage.includes('family')) filters.push('family-friendly');
+    
+    // Location filters
+    if (lowerMessage.includes('nearby') || lowerMessage.includes('close')) filters.push('nearby');
+    if (lowerMessage.includes('walking')) filters.push('walking distance');
     
     return filters;
   }
 
-  // Enhanced WiFi Troubleshooting with Host Escalation
+  // Check if intent is recommendation-related
+  private isRecommendationIntent(intent: string): boolean {
+    const recommendationIntents = [
+      'ask_food_recommendations',
+      'ask_activities',
+      'ask_attractions',
+      'ask_coffee_shops',
+      'ask_local_events'
+    ];
+    return recommendationIntents.includes(intent);
+  }
+
   private async handleEnhancedWiFiTroubleshooting(conversation: Conversation, message: string, property: Property) {
-    const context = conversation.conversation_context || {};
-    const lastMessageType = conversation.last_message_type;
     const lowerMessage = message.toLowerCase();
     
-    // Enhanced WiFi issue detection
-    const wifiIssueKeywords = [
-      'wifi not working', "wifi isn't working", "can't connect", "won't connect",
-      'not connecting', 'connection failed', 'wifi down', 'internet down',
-      'no internet', 'wifi broken', 'wifi issues', 'wifi problems', 'wifi trouble',
-      'still not working', 'still broken', "didn't help", 'not working'
-    ];
+    // Check for WiFi-related keywords
+    const wifiKeywords = ['wifi', 'wi-fi', 'internet', 'connection', 'network', 'password', 'slow internet'];
+    const hasWifiKeyword = wifiKeywords.some(keyword => lowerMessage.includes(keyword));
     
-    const hasWiFiIssue = wifiIssueKeywords.some(keyword => lowerMessage.includes(keyword));
-    
-    // Check if we're in WiFi troubleshooting flow
-    if (ConversationMemoryManager.isInWiFiTroubleshootingFlow(context)) {
-      const troubleshootingState = ConversationMemoryManager.getWiFiTroubleshootingState(context);
-      
-      if (troubleshootingState === 'awaiting_help_response') {
-        const response = WiFiTroubleshootingService.detectTroubleshootingResponse(message);
-        
-        if (response === 'no') {
-          // Enhanced host contact offer
-          await this.conversationManager.updateConversationState(conversation.phone_number, {
-            conversation_context: {
-              ...context,
-              wifi_troubleshooting_state: 'awaiting_host_contact_response'
-            }
-          });
-          
-          return {
-            response: WiFiTroubleshootingService.generateHostContactOffer(),
-            shouldUpdateState: false
-          };
-        } else if (response === 'yes') {
-          // Clear troubleshooting state
-          const clearedContext = ConversationMemoryManager.clearWiFiTroubleshootingState(context);
-          await this.conversationManager.updateConversationState(conversation.phone_number, {
-            conversation_context: clearedContext
-          });
-          
-          return {
-            response: "Great! Glad I could help get you connected. Need anything else?",
-            shouldUpdateState: false
-          };
-        }
-      }
-      
-      if (troubleshootingState === 'awaiting_host_contact_response') {
-        const response = WiFiTroubleshootingService.detectTroubleshootingResponse(message);
-        
-        if (response === 'yes') {
-          // Notify host via emergency contact and clear troubleshooting state
-          const clearedContext = ConversationMemoryManager.clearWiFiTroubleshootingState(context);
-          await this.conversationManager.updateConversationState(conversation.phone_number, {
-            conversation_context: clearedContext
-          });
-          
-          // TODO: Implement actual host notification via emergency_contact
-          console.log('📞 Would notify host:', property.emergency_contact);
-          
-          return {
-            response: WiFiTroubleshootingService.generateHostContactedConfirmation(),
-            shouldUpdateState: false
-          };
-        } else if (response === 'no') {
-          // Clear troubleshooting state
-          const clearedContext = ConversationMemoryManager.clearWiFiTroubleshootingState(context);
-          await this.conversationManager.updateConversationState(conversation.phone_number, {
-            conversation_context: clearedContext
-          });
-          
-          return {
-            response: "No problem! Let me know if you need help with anything else.",
-            shouldUpdateState: false
-          };
-        }
-      }
+    if (!hasWifiKeyword) {
+      return null;
     }
     
-    // Check if this is a new WiFi issue - enhanced detection
-    if (hasWiFiIssue || (lastMessageType === 'ask_wifi' && lowerMessage.includes('not working'))) {
-      console.log('🛠️ WiFi troubleshooting initiated');
-      
+    console.log('📶 WiFi troubleshooting request detected');
+    
+    // Get WiFi troubleshooting response
+    const wifiResponse = WiFiTroubleshootingService.handleWiFiQuery(message, property);
+    
+    if (wifiResponse) {
+      // Update conversation context to track WiFi troubleshooting
+      const context = conversation.conversation_context || {};
       await this.conversationManager.updateConversationState(conversation.phone_number, {
         conversation_context: {
           ...context,
-          wifi_troubleshooting_state: 'awaiting_help_response'
-        }
+          wifi_troubleshooting_active: true,
+          last_wifi_step: wifiResponse.step || 'initial'
+        },
+        last_message_type: 'wifi_troubleshooting'
       });
       
-      // Use enhanced troubleshooting steps
       return {
-        response: WiFiTroubleshootingService.generateEnhancedTroubleshootingSteps(),
+        response: MessageUtils.ensureSmsLimit(wifiResponse.response),
         shouldUpdateState: false
       };
     }
@@ -615,255 +670,214 @@ export class EnhancedConversationService {
     return null;
   }
 
-  // Phase 6: Menu and Food Query Integration
   private async handleMenuQueries(conversation: Conversation, message: string, property: Property) {
-    const context = conversation.conversation_context || {};
-    
-    // Check if this is a menu-related query
-    if (MenuService.extractMenuIntent(message)) {
-      const lastRecommendedRestaurant = ConversationMemoryManager.getLastRecommendedRestaurant(context);
-      
-      if (lastRecommendedRestaurant) {
-        const menuLink = await MenuService.getMenuLink(lastRecommendedRestaurant);
-        
-        if (menuLink) {
-          return {
-            response: `Here's the menu for ${lastRecommendedRestaurant}: ${menuLink}`,
-            shouldUpdateState: false
-          };
-        } else {
-          return {
-            response: MenuService.generateMenuResponse(lastRecommendedRestaurant, property.address),
-            shouldUpdateState: false
-          };
-        }
-      }
-    }
-    
-    // Check for specific food queries
-    const specificFoodType = MenuService.detectSpecificFoodQuery(message);
-    if (specificFoodType) {
-      const lastRecommendedRestaurant = ConversationMemoryManager.getLastRecommendedRestaurant(context);
-      
-      if (lastRecommendedRestaurant) {
-        return {
-          response: MenuService.generateSpecificFoodResponse(message, lastRecommendedRestaurant),
-          shouldUpdateState: false
-        };
-      }
-    }
-    
-    return null;
-  }
-
-  // Enhanced Property Context with distance, amenity, and visual queries
-  private async handlePropertyContextQueries(intent: string, property: Property, conversation: Conversation, message: string): Promise<string | null> {
-    const context = conversation?.conversation_context || {};
-    const guestName = context?.guest_name;
-    const namePrefix = guestName ? `${guestName}, ` : '';
-    const propertyContext = LocationService.getPropertySpecificContext(property.address);
     const lowerMessage = message.toLowerCase();
     
-    // Enhanced distance context handling
-    const distanceContext = LocationService.getDistanceContext(property.address, message);
-    if (distanceContext) {
-      return `${namePrefix}${distanceContext}`;
+    // Check for menu-related keywords
+    const menuKeywords = ['menu', 'food delivery', 'order food', 'restaurant menu', 'delivery options'];
+    const hasMenuKeyword = menuKeywords.some(keyword => lowerMessage.includes(keyword));
+    
+    if (!hasMenuKeyword) {
+      return null;
     }
     
-    // Enhanced Disney distance queries
-    if (lowerMessage.includes('disney') && (lowerMessage.includes('far') || lowerMessage.includes('distance'))) {
-      const propertyType = LocationService.determinePropertyType(property.address);
-      if (propertyType === 'reunion_resort') {
-        return `${namePrefix}from Plentiful Views Disney, it's about a 12-min drive to Disney's main gate (approx. 7 miles).`;
-      } else if (propertyType === 'disney_area') {
-        return `${namePrefix}you're about 8-15 minutes from Disney World depending on which park you're visiting!`;
-      }
-    }
+    console.log('🍽️ Menu query detected');
     
-    // Water park hours with enhanced context
-    if (lowerMessage.includes('water park') && (lowerMessage.includes('hour') || lowerMessage.includes('open') || lowerMessage.includes('time'))) {
-      if (propertyContext.waterParkInfo) {
-        return `${namePrefix}${propertyContext.waterParkInfo}. Want wristband info or directions?\n\nOr were you referring to a different water park?`;
-      } else {
-        return `${namePrefix}various water parks are available in the Orlando area. Would you like recommendations for specific ones nearby?`;
-      }
-    }
+    // Get menu information
+    const menuResponse = MenuService.getMenuInfo(property, message);
     
-    // Shuttle information with enhanced context and scheduling
-    if (lowerMessage.includes('shuttle') && (lowerMessage.includes('time') || lowerMessage.includes('leave') || lowerMessage.includes('schedule'))) {
-      if (propertyContext.shuttleInfo) {
-        return `${namePrefix}${propertyContext.shuttleInfo}. Would you like me to check today's schedule?\n\nOr were you asking about a different shuttle?`;
-      } else {
-        return `${namePrefix}let me help you find shuttle information. Are you looking for Disney shuttles or transportation to other attractions?`;
-      }
-    }
-    
-    // Visual/vibe queries for restaurants or amenities
-    if (lowerMessage.includes('vibe') || lowerMessage.includes('atmosphere') || lowerMessage.includes('photo') || lowerMessage.includes('picture')) {
-      const lastRestaurant = ConversationMemoryManager.getLastRecommendedRestaurant(context);
-      if (lastRestaurant) {
-        const yelpQuery = encodeURIComponent(`${lastRestaurant} orlando`);
-        return `${namePrefix}check ${lastRestaurant}'s photos on Yelp: https://www.yelp.com/search?find_desc=${yelpQuery}\n\nLooking for similar vibes or different atmosphere?`;
-      }
+    if (menuResponse) {
+      // Update conversation context
+      const context = conversation.conversation_context || {};
+      await this.conversationManager.updateConversationState(conversation.phone_number, {
+        conversation_context: {
+          ...context,
+          menu_query_active: true
+        },
+        last_message_type: 'menu_query'
+      });
+      
+      return {
+        response: MessageUtils.ensureSmsLimit(menuResponse),
+        shouldUpdateState: false
+      };
     }
     
     return null;
   }
 
-  // NEW: Handle property ID input
-  private async handlePropertyIdInput(conversation: Conversation, message: string) {
-    console.log('🏨 Handling property ID input:', message);
+  private async handleMultipleRequests(subIntents: string[], property: Property, conversation: Conversation, message: string) {
+    console.log('🔄 Processing multiple requests:', subIntents);
     
-    const propertyCode = message.match(/\d+/)?.[0];
+    const responses: string[] = [];
     
-    if (!propertyCode) {
+    for (const intent of subIntents) {
+      try {
+        // Process each sub-intent
+        const response = await this.handlePropertyIntentWithDataExtraction(intent, property, conversation, message);
+        if (response) {
+          responses.push(response);
+        }
+      } catch (error) {
+        console.error('❌ Error processing sub-intent:', intent, error);
+      }
+    }
+    
+    if (responses.length > 0) {
+      const combinedResponse = responses.join('\n\n');
+      
+      // Update conversation context
+      const context = conversation.conversation_context || {};
+      await this.conversationManager.updateConversationState(conversation.phone_number, {
+        conversation_context: {
+          ...context,
+          multi_request_processed: true
+        },
+        last_message_type: 'multiple_requests'
+      });
+      
       return {
-        response: "Hi! Please text your property ID number from your booking confirmation. Text 'reset' if needed.",
+        response: MessageUtils.ensureSmsLimit(combinedResponse),
         shouldUpdateState: false
       };
     }
+    
+    return null;
+  }
 
+  private async handlePropertyContextQueries(intent: string, property: Property, conversation: Conversation, message: string) {
+    // Handle property-specific context queries
+    const context = conversation.conversation_context || {};
+    
+    // Check if this is a property-specific query that needs context
+    const propertyContextIntents = [
+      'ask_property_amenities',
+      'ask_property_rules',
+      'ask_property_location',
+      'ask_property_contact'
+    ];
+    
+    if (!propertyContextIntents.includes(intent)) {
+      return null;
+    }
+    
+    console.log('🏠 Property context query:', intent);
+    
+    // Generate property-specific response
+    let response = '';
+    
+    switch (intent) {
+      case 'ask_property_amenities':
+        const amenityInfo = PropertyDataExtractor.extractAmenityInfo(property, message);
+        response = amenityInfo.content;
+        break;
+      case 'ask_property_contact':
+        const contactInfo = PropertyDataExtractor.extractEmergencyContact(property);
+        response = contactInfo.content;
+        break;
+      default:
+        response = `I can help you with information about ${property.property_name}. What specific details would you like to know?`;
+    }
+    
+    return response;
+  }
+
+  private async handlePropertyIdInput(conversation: Conversation, message: string) {
+    console.log('🏠 Processing property ID input:', message);
+    
+    const propertyCode = message.trim();
+    
     try {
+      // Look up property by code
       const property = await this.propertyService.findPropertyByCode(propertyCode);
       
       if (!property) {
         return {
-          response: `Property ID ${propertyCode} not found. Check your booking confirmation or text 'reset'.`,
+          response: `I couldn't find property ${propertyCode}. Please double-check the code and try again.`,
           shouldUpdateState: false
         };
       }
-
-      // Update to awaiting confirmation state with property info
+      
+      // Update conversation with property info and move to confirmation state
       await this.conversationManager.updateConversationState(conversation.phone_number, {
-        property_id: property.property_id || property.id,
+        property_id: property.id,
         conversation_state: 'awaiting_confirmation',
         conversation_context: {
           ...conversation.conversation_context,
           pending_property: property
         }
       });
-
-      const response = `Great! You're staying at ${property.property_name} (${property.address}). Correct? Reply Y or N.`;
+      
       return {
-        response: MessageUtils.ensureSmsLimit(response),
+        response: `Great! I found ${property.property_name} at ${property.property_address}. Is this correct? Reply Y for yes or N for no.`,
         shouldUpdateState: false
       };
+      
     } catch (error) {
-      console.error('❌ Error finding property:', error);
+      console.error('❌ Error processing property ID:', error);
       return {
-        response: "Trouble looking up that property ID. Try again or text 'reset'.",
+        response: "I'm having trouble looking up that property code. Please try again.",
         shouldUpdateState: false
       };
     }
   }
 
-  // Enhanced confirmation with personalized welcome message
   private async handleConfirmation(conversation: Conversation, message: string) {
-    console.log('✅ Handling confirmation:', message);
+    console.log('✅ Processing confirmation:', message);
     
-    const normalizedInput = message.toLowerCase().trim();
-    const isYes = ['y', 'yes', 'yeah', 'yep', 'correct', 'right', 'true', '1', 'ok', 'okay', 'yup', 'sure', 'absolutely', 'definitely'].includes(normalizedInput);
-    const isNo = ['n', 'no', 'nope', 'wrong', 'incorrect', 'false', '0', 'nah', 'negative'].includes(normalizedInput);
-
+    const lowerMessage = message.toLowerCase().trim();
+    const isYes = ['y', 'yes', 'yeah', 'yep', 'correct', 'right'].includes(lowerMessage);
+    const isNo = ['n', 'no', 'nope', 'wrong', 'incorrect'].includes(lowerMessage);
+    
     if (isYes) {
-      // Confirm the property and move to confirmed state
-      await this.conversationManager.updateConversationState(conversation.phone_number, {
-        property_confirmed: true,
-        conversation_state: 'confirmed'
-      });
-
-      // Enhanced welcome message with property details
       const context = conversation.conversation_context || {};
       const pendingProperty = context.pending_property;
       
-      let welcomeMessage;
-      if (pendingProperty?.property_name && pendingProperty?.address) {
-        welcomeMessage = `Welcome to ${pendingProperty.property_name} at ${pendingProperty.address}! I'm your AI concierge and I'm here to help with any questions about your stay. How may I help you today?`;
-      } else {
-        // Fallback to generic message
-        const greeting = ResponseGenerator.getTimeAwareGreeting(conversation?.timezone || 'UTC');
-        welcomeMessage = `${greeting}! I'm your AI concierge. I can help with WiFi, parking, directions, and local recommendations. What do you need?`;
+      if (!pendingProperty) {
+        return {
+          response: "Something went wrong. Please send your property code again.",
+          shouldUpdateState: false
+        };
       }
       
+      // Link phone number to property and confirm
+      await PropertyService.linkPhoneToProperty(this.supabase, conversation.phone_number, pendingProperty.id);
+      
+      // Update conversation to confirmed state
+      await this.conversationManager.updateConversationState(conversation.phone_number, {
+        conversation_state: 'confirmed',
+        conversation_context: {
+          ...context,
+          confirmed_property: pendingProperty,
+          pending_property: null
+        }
+      });
+      
       return {
-        response: MessageUtils.ensureSmsLimit(welcomeMessage),
+        response: `Perfect! I've linked your number to ${pendingProperty.property_name}. I'm ready to help with local recommendations, amenities, and any questions about your stay. What would you like to know?`,
         shouldUpdateState: false
       };
+      
     } else if (isNo) {
       // Reset to awaiting property ID
       await this.conversationManager.updateConversationState(conversation.phone_number, {
-        property_id: null,
         conversation_state: 'awaiting_property_id',
         conversation_context: {
           ...conversation.conversation_context,
           pending_property: null
         }
       });
-
+      
       return {
-        response: "No problem! Please provide your correct property ID from your booking confirmation.",
+        response: "No problem! Please send the correct property code.",
         shouldUpdateState: false
       };
+      
     } else {
       return {
-        response: "Please reply Y for Yes or N for No to confirm the property. Text 'reset' to start over.",
+        response: "Please reply Y for yes or N for no to confirm the property.",
         shouldUpdateState: false
       };
     }
-  }
-
-  // ENHANCED: Handle multiple intents efficiently
-  private async handleMultipleRequests(subIntents: string[], property: Property, conversation: Conversation, message: string) {
-    console.log('🎯 Handling multiple intents:', subIntents);
-    
-    const context = conversation.conversation_context || {};
-    
-    // Check if we should break down the questions
-    if (MultiIntentHandler.shouldBreakDownQuestions(subIntents)) {
-      const prompt = MultiIntentHandler.generateBreakDownPrompt(subIntents);
-      return {
-        response: prompt,
-        shouldUpdateState: false
-      };
-    }
-    
-    // Handle the multiple intents
-    const multiResponse = await MultiIntentHandler.handleMultipleIntents(
-      subIntents, 
-      property, 
-      conversation, 
-      message
-    );
-    
-    // Format and return the response
-    const formattedResponse = MultiIntentHandler.formatMultipleResponses(multiResponse.responses);
-    
-    // Update conversation context with handled intents
-    if (multiResponse.handledIntents.length > 0) {
-      const updatedContext = ConversationMemoryManager.updateMemory(
-        context,
-        'ask_multiple_requests',
-        'multi_intent_response',
-        { handledIntents: multiResponse.handledIntents }
-      );
-      
-      await this.conversationManager.updateConversationState(conversation.phone_number, {
-        conversation_context: updatedContext,
-        last_message_type: 'ask_multiple_requests'
-      });
-    }
-    
-    return {
-      response: formattedResponse,
-      shouldUpdateState: false
-    };
-  }
-
-  private isRecommendationIntent(intent: string): boolean {
-    return [
-      'ask_food_recommendations',
-      'ask_activities',
-      'ask_grocery_stores'
-    ].includes(intent);
   }
 }
