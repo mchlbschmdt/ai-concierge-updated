@@ -207,27 +207,14 @@ export class IntentRecognitionService {
       return { intent: 'ask_grocery_transport', confidence: 0.95 };
     }
 
-    // ENHANCED: More specific food detection - require explicit food context
+    // MUCH MORE RESTRICTIVE: Only detect food with explicit food keywords
     if (this.matchesKeywords(message, [
       'food', 'restaurant', 'eat', 'dining', 'hungry', 'meal', 'lunch', 'dinner', 'breakfast',
       'where to eat', 'good food', 'best restaurant', 'food recommendations', 'places to eat',
-      'restaurants near', 'food near', 'somewhere to eat', 'grab a bite', 'get food',
-      'pizza', 'burger', 'sushi', 'italian', 'mexican', 'chinese', 'american', 'cuisine',
-      'family friendly', 'family-friendly', 'kid friendly', 'casual', 'upscale', 'fine dining',
-      'quick bite', 'fast food', 'takeout', 'delivery', 'cheap eats', 'coffee shop'
-    ]) && !this.matchesKeywords(message, [
-      'grocery', 'supermarket', 'store', 'emergency', 'maintenance', 'amenities'
+      'grab a bite', 'get food', 'pizza', 'burger', 'sushi', 'italian', 'mexican', 'chinese', 
+      'american', 'cuisine', 'quick bite', 'fast food', 'takeout', 'delivery', 'coffee shop'
     ])) {
       return { intent: 'ask_food_recommendations', confidence: 0.95 };
-    }
-
-    // REDUCED: Location only triggers food if explicitly combined with food terms
-    if (this.matchesKeywords(message, [
-      'nearby', 'near me', 'close to', 'around', 'local', 'in the area', 'close by'
-    ]) && this.matchesKeywords(message, [
-      'food', 'restaurant', 'eat', 'dining', 'meal'
-    ])) {
-      return { intent: 'ask_food_recommendations', confidence: 0.90 };
     }
 
     // ENHANCED: Multi-part activities detection
