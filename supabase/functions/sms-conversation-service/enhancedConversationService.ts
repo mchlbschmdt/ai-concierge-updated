@@ -422,31 +422,74 @@ export class EnhancedConversationService {
       const requestType = this.categorizeRequestType(intent, message);
       console.log('📋 Categorized request type:', requestType);
       
-      const perplexityRecommendation = await PerplexityRecommendationService.getLocalRecommendations(
-        property,
-        message,
-        conversation,
-        requestType,
-        diversificationResult.rejectedOptions
-      );
-      
-      console.log('✅ Perplexity recommendation received:', perplexityRecommendation);
-      
-      // Update conversation with the new recommendation
-      await this.updateConversationState(conversation.phone_number, {
-        last_recommendations: JSON.stringify([perplexityRecommendation]),
-        last_message_type: intent,
-        conversation_context: {
-          ...context,
-          lastIntent: intent,
-          last_interaction: new Date().toISOString()
+      try {
+        const perplexityRecommendation = await PerplexityRecommendationService.getLocalRecommendations(
+          property,
+          message,
+          conversation,
+          requestType,
+          diversificationResult.rejectedOptions
+        );
+        
+        console.log('✅ Perplexity recommendation received:', perplexityRecommendation);
+        
+        // Check if Perplexity returned valid content
+        if (perplexityRecommendation && perplexityRecommendation.length > 20 && !perplexityRecommendation.includes('error') && !perplexityRecommendation.includes('sorry')) {
+          console.log('✅ Using Perplexity recommendation');
+          
+          // Update conversation with the new recommendation
+          await this.updateConversationState(conversation.phone_number, {
+            last_recommendations: JSON.stringify([perplexityRecommendation]),
+            last_message_type: intent,
+            conversation_context: {
+              ...context,
+              lastIntent: intent,
+              last_interaction: new Date().toISOString()
+            }
+          });
+          
+          return {
+            response: perplexityRecommendation,
+            shouldUpdateState: true
+          };
+        } else {
+          console.log('⚠️ Perplexity response invalid, falling back to local data');
+          throw new Error('Invalid Perplexity response');
         }
-      });
-      
-      return {
-        response: perplexityRecommendation,
-        shouldUpdateState: true
-      };
+      } catch (error) {
+        console.log('❌ Perplexity failed, using local property recommendations:', error.message);
+        
+        // Fallback to local property recommendations
+        const localResponse = await this.getLocalRecommendationsFallback(property, requestType, message, context);
+        
+        if (localResponse) {
+          console.log('✅ Using local fallback recommendation');
+          
+          // Update conversation with the fallback recommendation
+          await this.updateConversationState(conversation.phone_number, {
+            last_recommendations: JSON.stringify([localResponse]),
+            last_message_type: intent,
+            conversation_context: {
+              ...context,
+              lastIntent: intent,
+              last_interaction: new Date().toISOString()
+            }
+          });
+          
+          return {
+            response: localResponse,
+            shouldUpdateState: true
+          };
+        }
+        
+        // If both fail, provide a helpful response
+        const guestName = context?.guest_name;
+        const namePrefix = guestName ? `${guestName}, ` : '';
+        return {
+          response: `${namePrefix}I'd love to help with ${requestType} recommendations! Let me check what I have for ${property.property_name}. What specifically are you in the mood for?`,
+          shouldUpdateState: false
+        };
+      }
       
     } catch (error) {
       console.error('❌ Error in enhanced food intent with diversification:', error);
@@ -1132,6 +1175,96 @@ export class EnhancedConversationService {
     const hasKeywords = meaningfulKeywords.some(keyword => lowerMessage.includes(keyword));
     
     return hasIntent || hasKeywords;
+  }
+
+  // ✅ NEW: Get local recommendations fallback from property data
+  private async getLocalRecommendationsFallback(property: Property, requestType: string, message: string, context: any): Promise<string | null> {
+    console.log('🏠 Using local recommendations fallback for:', requestType);
+    
+    if (!property.local_recommendations) {
+      console.log('❌ No local recommendations in property data');
+      return null;
+    }
+    
+    const localRecs = property.local_recommendations.toLowerCase();
+    const lowerMessage = message.toLowerCase();
+    const lowerRequestType = requestType.toLowerCase();
+    
+    // Extract relevant sections based on request type
+    let relevantSection = '';
+    
+    if (lowerRequestType.includes('coffee') || lowerMessage.includes('coffee')) {
+      relevantSection = this.extractSectionFromRecommendations(property.local_recommendations, ['coffee', 'cafe', 'morning']);
+    } else if (lowerRequestType.includes('dinner') || lowerMessage.includes('dinner') || lowerMessage.includes('restaurant')) {
+      relevantSection = this.extractSectionFromRecommendations(property.local_recommendations, ['restaurant', 'dining', 'eat', 'food']);
+    } else if (lowerRequestType.includes('breakfast') || lowerMessage.includes('breakfast')) {
+      relevantSection = this.extractSectionFromRecommendations(property.local_recommendations, ['breakfast', 'morning', 'coffee']);
+    } else if (lowerRequestType.includes('attractions') || lowerMessage.includes('attraction') || lowerMessage.includes('activity')) {
+      relevantSection = this.extractSectionFromRecommendations(property.local_recommendations, ['attraction', 'beach', 'pool', 'fun', 'visit']);
+    } else {
+      // General food/dining fallback
+      relevantSection = this.extractSectionFromRecommendations(property.local_recommendations, ['restaurant', 'dining', 'eat', 'food']);
+    }
+    
+    if (relevantSection) {
+      // Format for SMS and add personal touch
+      const guestName = context?.guest_name;
+      const namePrefix = guestName ? `${guestName}, ` : '';
+      
+      // Truncate to SMS length and add helpful context
+      const formattedResponse = `${namePrefix}${this.formatLocalRecommendation(relevantSection, requestType)}`;
+      
+      return formattedResponse.length > 160 ? formattedResponse.substring(0, 157) + '...' : formattedResponse;
+    }
+    
+    return null;
+  }
+  
+  // ✅ NEW: Extract specific sections from local recommendations
+  private extractSectionFromRecommendations(recommendations: string, keywords: string[]): string {
+    const lines = recommendations.split('\n');
+    let relevantLines: string[] = [];
+    let foundSection = false;
+    
+    for (const line of lines) {
+      const lowerLine = line.toLowerCase();
+      
+      // Check if this line contains any of our keywords
+      const hasKeyword = keywords.some(keyword => lowerLine.includes(keyword));
+      
+      if (hasKeyword || foundSection) {
+        relevantLines.push(line.trim());
+        foundSection = true;
+        
+        // Stop if we hit a new section (lines starting with ***)
+        if (foundSection && line.startsWith('***') && relevantLines.length > 1) {
+          break;
+        }
+      }
+    }
+    
+    return relevantLines.join(' ').trim();
+  }
+  
+  // ✅ NEW: Format local recommendation for SMS
+  private formatLocalRecommendation(content: string, requestType: string): string {
+    // Clean up formatting
+    let formatted = content
+      .replace(/\*\*\*/g, '') // Remove section markers
+      .replace(/\n+/g, ' ')   // Replace line breaks with spaces
+      .replace(/\s+/g, ' ')   // Clean up multiple spaces
+      .trim();
+    
+    // Add context based on request type
+    if (requestType.includes('coffee')) {
+      formatted = `For coffee: ${formatted}`;
+    } else if (requestType.includes('dinner') || requestType.includes('restaurant')) {
+      formatted = `For dining: ${formatted}`;
+    } else if (requestType.includes('attractions') || requestType.includes('activity')) {
+      formatted = `For activities: ${formatted}`;
+    }
+    
+    return formatted;
   }
 
   private async processConfirmedStateMessage(message: string, conversation: Conversation, property: Property, phoneNumber: string) {
