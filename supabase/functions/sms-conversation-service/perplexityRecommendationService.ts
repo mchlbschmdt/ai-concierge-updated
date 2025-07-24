@@ -36,7 +36,7 @@ export class PerplexityRecommendationService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'llama-3.1-sonar-small-128k-online',
+          model: 'llama-3.1-sonar-large-128k-online',
           messages: [
             {
               role: 'system',
@@ -136,45 +136,58 @@ export class PerplexityRecommendationService {
   }
 
   private static getFallbackRecommendation(property: Property, requestType: string): string {
+    console.log('🔄 Using fallback recommendation for:', requestType);
     // Use existing property data as fallback
     const localRecs = property.local_recommendations;
     
     if (localRecs) {
+      console.log('📝 Local recommendations available:', localRecs.substring(0, 200) + '...');
+      
       // Extract relevant section based on request type
-      if (requestType.includes('coffee') && localRecs.includes('Coffee')) {
-        const coffeeSection = this.extractSection(localRecs, 'Coffee');
-        if (coffeeSection) return this.shortenForSMS(coffeeSection);
+      if ((requestType.includes('coffee') || requestType.includes('cafe')) && localRecs.includes('RESTAURANTS:')) {
+        // For coffee, extract from restaurants section
+        const restaurantSection = this.extractSectionByPrefix(localRecs, 'RESTAURANTS:', 'ATTRACTIONS:');
+        if (restaurantSection) {
+          console.log('✅ Found restaurant section for coffee');
+          return this.shortenForSMS('For coffee: ' + restaurantSection);
+        }
       }
       
-      if (requestType.includes('dinner') && localRecs.includes('Dining')) {
-        const diningSection = this.extractSection(localRecs, 'Dining');
-        if (diningSection) return this.shortenForSMS(diningSection);
+      if ((requestType.includes('dinner') || requestType.includes('restaurant') || requestType.includes('food')) && localRecs.includes('RESTAURANTS:')) {
+        const restaurantSection = this.extractSectionByPrefix(localRecs, 'RESTAURANTS:', 'ATTRACTIONS:');
+        if (restaurantSection) {
+          console.log('✅ Found restaurant section for dining');
+          return this.shortenForSMS(restaurantSection);
+        }
+      }
+      
+      if ((requestType.includes('attraction') || requestType.includes('activities') || requestType.includes('things to do')) && localRecs.includes('ATTRACTIONS:')) {
+        const attractionSection = this.extractSectionByPrefix(localRecs, 'ATTRACTIONS:', null);
+        if (attractionSection) {
+          console.log('✅ Found attractions section');
+          return this.shortenForSMS(attractionSection);
+        }
       }
     }
     
+    console.log('❌ No fallback data found, returning generic message');
     return `I'm looking into ${requestType} options near ${property.property_name || 'your property'}. Let me get some fresh recommendations for you!`;
   }
 
-  private static extractSection(text: string, keyword: string): string | null {
-    const lines = text.split('\n');
-    let inSection = false;
-    let section = '';
+  private static extractSectionByPrefix(text: string, startPrefix: string, endPrefix: string | null): string | null {
+    const startIndex = text.indexOf(startPrefix);
+    if (startIndex === -1) return null;
     
-    for (const line of lines) {
-      if (line.includes(`***${keyword}`)) {
-        inSection = true;
-        continue;
-      }
-      
-      if (inSection) {
-        if (line.startsWith('***') && !line.includes(keyword)) {
-          break; // Next section started
-        }
-        section += line + ' ';
+    let endIndex = text.length;
+    if (endPrefix) {
+      const endPrefixIndex = text.indexOf(endPrefix, startIndex + startPrefix.length);
+      if (endPrefixIndex !== -1) {
+        endIndex = endPrefixIndex;
       }
     }
     
-    return section.trim() || null;
+    const section = text.substring(startIndex + startPrefix.length, endIndex).trim();
+    return section || null;
   }
 
   private static shortenForSMS(text: string): string {
