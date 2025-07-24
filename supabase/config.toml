@@ -8,7 +8,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.openai-recommendations]
-verify_jwt = false
+verify_jwt = true
 
 [functions.openphone-webhook]
 verify_jwt = false
@@ -26,7 +26,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.contextual-recommendations]
-verify_jwt = false
+verify_jwt = true
 
 [functions.test-openphone-key]
 verify_jwt = false

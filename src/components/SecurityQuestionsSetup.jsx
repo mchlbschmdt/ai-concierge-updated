@@ -65,17 +65,26 @@ export default function SecurityQuestionsSetup({ onComplete, onSkip }) {
         throw new Error("No authenticated user found");
       }
 
+      // Hash the security answers before storing
+      const hashedAnswers = await Promise.all(
+        answers.map(async (answer) => {
+          const { data, error } = await supabase.rpc('hash_security_answer', { answer });
+          if (error) throw error;
+          return data;
+        })
+      );
+
       const { error } = await supabase
         .from('profiles')
         .upsert({
           id: user.id,
           email: user.email,
           security_question_1: questions[0],
-          security_answer_1: answers[0].toLowerCase().trim(),
+          security_answer_1: hashedAnswers[0],
           security_question_2: questions[1],
-          security_answer_2: answers[1].toLowerCase().trim(),
+          security_answer_2: hashedAnswers[1],
           security_question_3: questions[2],
-          security_answer_3: answers[2].toLowerCase().trim(),
+          security_answer_3: hashedAnswers[2],
         });
 
       if (error) throw error;

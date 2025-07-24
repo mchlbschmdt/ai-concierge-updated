@@ -85,16 +85,23 @@ export default function SecurityQuestionsReset({ email, onSuccess, onBack }) {
     setLoading(true);
     
     try {
-      // Verify answers (simple comparison - in production use hashed comparison)
-      const normalizedAnswers = answers.map(a => a.toLowerCase().trim());
+      // Hash user answers and compare with stored hashed answers
+      const hashedAnswers = await Promise.all(
+        answers.map(async (answer) => {
+          const { data, error } = await supabase.rpc('hash_security_answer', { answer });
+          if (error) throw error;
+          return data;
+        })
+      );
+
       const storedAnswers = [
         userProfile.security_answer_1,
         userProfile.security_answer_2,
         userProfile.security_answer_3
       ];
 
-      const answersMatch = normalizedAnswers.every((answer, index) => 
-        answer === storedAnswers[index]
+      const answersMatch = hashedAnswers.every((hashedAnswer, index) => 
+        hashedAnswer === storedAnswers[index]
       );
 
       if (!answersMatch) {
