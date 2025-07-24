@@ -255,14 +255,15 @@ export class IntentRecognitionService {
       return { intent: 'ask_food_recommendations', confidence: 0.95 };
     }
 
-    // ENHANCED: Multi-part activities detection
+    // ENHANCED: Multi-part activities detection - PRIORITIZE OVER FOOD
     if (this.matchesKeywords(message, [
       'things to do', 'activities', 'attractions', 'fun', 'sightseeing', 'entertainment',
       'what to do', 'places to visit', 'tourist spots', 'local attractions', 'activities near',
       'stuff to do', 'interesting places', 'worth visiting', 'recommendations for activities',
-      'family-friendly attractions', 'theme parks', 'nature', 'local events'
+      'family-friendly attractions', 'theme parks', 'nature', 'local events', 'attraction',
+      'beach', 'scenic', 'visit', 'explore', 'tour', 'museum', 'park', 'landmark'
     ])) {
-      return { intent: 'ask_activities', confidence: 0.95 };
+      return { intent: 'ask_attractions', confidence: 0.95 };
     }
 
     if (this.matchesKeywords(message, [

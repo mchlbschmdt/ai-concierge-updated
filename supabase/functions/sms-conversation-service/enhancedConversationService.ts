@@ -1111,30 +1111,41 @@ export class EnhancedConversationService {
     const lowerMessage = message.toLowerCase();
     const lowerIntent = intent.toLowerCase();
     
-    // Check for specific food/dining requests
-    if (lowerMessage.includes('dinner') || lowerMessage.includes('restaurant') || lowerIntent.includes('food')) {
-      return 'dinner';
-    }
-    
-    if (lowerMessage.includes('coffee') || lowerMessage.includes('cafe')) {
-      return 'coffee';
-    }
-    
-    if (lowerMessage.includes('attraction') || lowerMessage.includes('activity') || lowerMessage.includes('things to do')) {
+    // Check for attractions first (highest priority for clear intent)
+    if (lowerIntent.includes('attraction') || lowerMessage.includes('attraction') || 
+        lowerMessage.includes('activity') || lowerMessage.includes('things to do') ||
+        lowerMessage.includes('scenic') || lowerMessage.includes('visit') || lowerMessage.includes('beach')) {
       return 'attractions';
     }
     
-    if (lowerMessage.includes('breakfast')) {
+    // Check for coffee specifically (before general food)
+    if (lowerMessage.includes('coffee') || lowerMessage.includes('cafe') || 
+        lowerMessage.includes('espresso') || lowerMessage.includes('cappuccino')) {
+      return 'coffee';
+    }
+    
+    // Check for specific meal times
+    if (lowerMessage.includes('breakfast') || lowerMessage.includes('morning')) {
       return 'breakfast';
     }
     
-    if (lowerMessage.includes('lunch')) {
+    if (lowerMessage.includes('lunch') || lowerMessage.includes('brunch')) {
       return 'lunch';
+    }
+    
+    // Check for dinner/restaurant (but not if coffee was already detected)
+    if (lowerMessage.includes('dinner') || lowerMessage.includes('restaurant') || 
+        lowerMessage.includes('dining') || lowerMessage.includes('eat')) {
+      return 'dinner';
     }
     
     // Default mapping from intent
     if (lowerIntent.includes('food') || lowerIntent.includes('restaurant')) {
-      return 'restaurant';
+      return 'dinner';
+    }
+    
+    if (lowerIntent.includes('attraction')) {
+      return 'attractions';
     }
     
     return lowerIntent.replace('ask_', '');
@@ -1200,7 +1211,7 @@ export class EnhancedConversationService {
     } else if (lowerRequestType.includes('breakfast') || lowerMessage.includes('breakfast')) {
       relevantSection = this.extractSectionFromRecommendations(property.local_recommendations, ['breakfast', 'morning', 'coffee']);
     } else if (lowerRequestType.includes('attractions') || lowerMessage.includes('attraction') || lowerMessage.includes('activity')) {
-      relevantSection = this.extractSectionFromRecommendations(property.local_recommendations, ['attraction', 'beach', 'pool', 'fun', 'visit']);
+      relevantSection = this.extractSectionFromRecommendations(property.local_recommendations, ['attraction', 'beach', 'museum', 'park', 'tour', 'scenic', 'historic', 'rainforest', 'fort', 'old san juan']);
     } else {
       // General food/dining fallback
       relevantSection = this.extractSectionFromRecommendations(property.local_recommendations, ['restaurant', 'dining', 'eat', 'food']);
