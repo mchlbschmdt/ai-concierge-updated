@@ -262,10 +262,14 @@ export class EnhancedConversationService {
     
     // Route to appropriate handler based on query type
     switch (query.type) {
-      case 'food':
-        return await this.handleRecommendationWithDiversification('ask_food_recommendations', property, query.text, conversation);
-      case 'activities':
-        return await this.handleRecommendationWithDiversification('ask_activities', property, query.text, conversation);
+      case 'food': {
+        const result = await this.handleRecommendationWithDiversification('ask_food_recommendations', property, query.text, conversation);
+        return typeof result === 'string' ? result : result?.response || null;
+      }
+      case 'activities': {
+        const result = await this.handleRecommendationWithDiversification('ask_activities', property, query.text, conversation);
+        return typeof result === 'string' ? result : result?.response || null;
+      }
       case 'transport':
         const transportResponse = PropertyDataExtractor.extractGroceryTransportInfo(property);
         return transportResponse.content;
@@ -274,8 +278,10 @@ export class EnhancedConversationService {
         return amenityResponse.content;
       case 'property_info':
         return await this.handlePropertyIntentWithDataExtraction('ask_property_specific', property, conversation, query.text);
-      default:
-        return await this.generateContextualFallback(conversation, property, query.intent, query.text);
+      default: {
+        const result = await this.generateContextualFallback(conversation, property, query.intent, query.text);
+        return typeof result === 'string' ? result : result?.response || null;
+      }
     }
   }
 
@@ -331,7 +337,10 @@ export class EnhancedConversationService {
         recommendationResponse.response = diversificationResult.diversificationNote + '\n\n' + recommendationResponse.response;
       }
       
-      return recommendationResponse;
+      return {
+        response: recommendationResponse.response,
+        shouldUpdateState: false
+      };
     }
     
     // No diversification needed, proceed normally
@@ -456,7 +465,8 @@ export class EnhancedConversationService {
       last_recommendations: recommendationResponse.response
     });
     
-    return recommendationResponse;
+    // Return just the response string, not the full object
+    return recommendationResponse.response;
   }
 
   // ENHANCED: Handle property intents with data extraction and graceful fallbacks
