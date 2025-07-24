@@ -121,17 +121,49 @@ export class ConversationMemoryManager {
     const intentHistory = context.recommendation_history[intent];
     if (!intentHistory) return false;
     
-    // Check if same intent was asked within last 10 minutes
+    // Check if same intent was asked within last 5 minutes
     const lastAsked = new Date(intentHistory.timestamp);
     const now = new Date();
     const minutesSinceLastAsked = (now.getTime() - lastAsked.getTime()) / (1000 * 60);
     
-    // Prevent repetition if asked within 10 minutes AND count > 2
-    if (minutesSinceLastAsked < 10 && intentHistory.count > 2) {
+    // ENHANCED: Prevent repetition based on context and timing
+    if (minutesSinceLastAsked < 5 && intentHistory.count > 1) {
       return true;
     }
     
     return false;
+  }
+
+  // NEW: Check if response was already provided for this specific question
+  static wasSpecificQuestionAnswered(context: any, message: string): boolean {
+    const conversationFlow = context?.conversation_flow;
+    if (!conversationFlow?.recentTopics) return false;
+    
+    const lowerMessage = message.toLowerCase();
+    
+    // Check if this exact type of question was answered recently
+    return conversationFlow.recentTopics.some((topic: any) => {
+      if (!topic.timestamp) return false;
+      
+      const topicTime = new Date(topic.timestamp);
+      const now = new Date();
+      const minutesAgo = (now.getTime() - topicTime.getTime()) / (1000 * 60);
+      
+      // If answered within 3 minutes, consider it already answered
+      return minutesAgo < 3 && this.isSameQuestionType(lowerMessage, topic.intent);
+    });
+  }
+
+  private static isSameQuestionType(message: string, intent: string): boolean {
+    const questionTypeMap: Record<string, string[]> = {
+      'ask_food_recommendations': ['food', 'restaurant', 'eat', 'dining', 'breakfast', 'dinner', 'lunch'],
+      'ask_property_specific': ['amenities', 'pool', 'hot tub', 'checkout', 'check-out'],
+      'ask_emergency_contact': ['contact', 'emergency', 'maintenance', 'problem', 'issue'],
+      'ask_grocery_transport': ['grocery', 'store', 'transport', 'uber', 'getting around']
+    };
+    
+    const keywords = questionTypeMap[intent] || [];
+    return keywords.some(keyword => message.includes(keyword));
   }
 
   static generateRepetitionResponse(intent: string, guestName?: string): string {

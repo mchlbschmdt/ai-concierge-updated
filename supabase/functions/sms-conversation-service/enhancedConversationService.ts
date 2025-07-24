@@ -11,6 +11,8 @@ import { ConversationMemoryManager } from './conversationMemoryManager.ts';
 import { LocationService } from './locationService.ts';
 import { ConversationContextTracker } from './conversationContextTracker.ts';
 import { ConversationalResponseGenerator } from './conversationalResponseGenerator.ts';
+import { PropertyDataExtractor } from './propertyDataExtractor.ts';
+import { MultiIntentHandler } from './multiIntentHandler.ts';
 import { Conversation, Property } from './types.ts';
 
 export class EnhancedConversationService {
@@ -117,6 +119,11 @@ export class EnhancedConversationService {
           return menuResponse;
         }
 
+        // ENHANCED: Handle multi-part requests
+        if (intentResult.intent === 'ask_multiple_requests' && intentResult.subIntents) {
+          return await this.handleMultipleRequests(intentResult.subIntents, property, conversation, message);
+        }
+
         // Handle recommendation intents with enhanced context
         if (this.isRecommendationIntent(intentResult.intent)) {
           return await this.handleRecommendationWithContext(intentResult.intent, property, message, conversation);
@@ -128,8 +135,8 @@ export class EnhancedConversationService {
           return await this.updateConversationAndRespond(phoneNumber, intentResult.intent, propertyContextResponse, conversation);
         }
 
-        // Handle property-specific intents with conversational context
-        const propertyResponse = await this.handlePropertyIntentWithContext(intentResult.intent, property, conversation, message);
+        // ENHANCED: Handle property-specific intents with data extraction
+        const propertyResponse = await this.handlePropertyIntentWithDataExtraction(intentResult.intent, property, conversation, message);
         if (propertyResponse) {
           return await this.updateConversationAndRespond(phoneNumber, intentResult.intent, propertyResponse, conversation);
         }
@@ -230,12 +237,63 @@ export class EnhancedConversationService {
     return recommendationResponse;
   }
 
-  // ✅ NEW: Handle property intents with conversational context
-  private async handlePropertyIntentWithContext(intent: string, property: Property, conversation: Conversation, message: string): Promise<string | null> {
+  // ENHANCED: Handle property intents with data extraction and graceful fallbacks
+  private async handlePropertyIntentWithDataExtraction(intent: string, property: Property, conversation: Conversation, message: string): Promise<string | null> {
     const context = conversation?.conversation_context || {};
-    const conversationFlow = context.conversation_flow || {};
     
-    // Use ConversationalResponseGenerator for contextual responses
+    // Handle specific property intents with data extraction
+    switch (intent) {
+      case 'ask_property_specific': {
+        const amenityResponse = PropertyDataExtractor.extractAmenityInfo(property, message);
+        const checkoutResponse = PropertyDataExtractor.extractCheckoutInfo(property);
+        
+        let combinedResponse = '';
+        
+        // Handle amenity questions
+        if (message.toLowerCase().includes('amenities') || message.toLowerCase().includes('pool') || 
+            message.toLowerCase().includes('hot tub') || message.toLowerCase().includes('game room')) {
+          if (amenityResponse.hasData) {
+            combinedResponse += amenityResponse.content + ' ';
+          } else {
+            combinedResponse += 'Let me get the amenity details for you. ';
+          }
+        }
+        
+        // Handle checkout questions
+        if (message.toLowerCase().includes('checkout') || message.toLowerCase().includes('check-out') || 
+            message.toLowerCase().includes('instructions')) {
+          if (checkoutResponse.hasData) {
+            combinedResponse += checkoutResponse.content;
+          } else {
+            combinedResponse += checkoutResponse.content;
+          }
+        }
+        
+        // If we answered something, return it
+        if (combinedResponse.trim()) {
+          return combinedResponse.trim();
+        }
+        break;
+      }
+      
+      case 'ask_emergency_contact': {
+        const emergencyResponse = PropertyDataExtractor.extractEmergencyContact(property);
+        return emergencyResponse.content;
+      }
+      
+      case 'ask_grocery_transport': {
+        const groceryTransportResponse = PropertyDataExtractor.extractGroceryTransportInfo(property);
+        if (groceryTransportResponse.hasData) {
+          return groceryTransportResponse.content;
+        } else {
+          // Route to recommendation service for enhanced response
+          return await this.handleRecommendationWithContext('ask_food_recommendations', property, message, conversation);
+        }
+      }
+    }
+    
+    // Fallback to conversational response generator
+    const conversationFlow = context.conversation_flow || {};
     const response = ConversationalResponseGenerator.generateContextualResponse(
       intent,
       conversationFlow,
@@ -750,6 +808,53 @@ export class EnhancedConversationService {
         shouldUpdateState: false
       };
     }
+  }
+
+  // ENHANCED: Handle multiple intents efficiently
+  private async handleMultipleRequests(subIntents: string[], property: Property, conversation: Conversation, message: string) {
+    console.log('🎯 Handling multiple intents:', subIntents);
+    
+    const context = conversation.conversation_context || {};
+    
+    // Check if we should break down the questions
+    if (MultiIntentHandler.shouldBreakDownQuestions(subIntents)) {
+      const prompt = MultiIntentHandler.generateBreakDownPrompt(subIntents);
+      return {
+        response: prompt,
+        shouldUpdateState: false
+      };
+    }
+    
+    // Handle the multiple intents
+    const multiResponse = await MultiIntentHandler.handleMultipleIntents(
+      subIntents, 
+      property, 
+      conversation, 
+      message
+    );
+    
+    // Format and return the response
+    const formattedResponse = MultiIntentHandler.formatMultipleResponses(multiResponse.responses);
+    
+    // Update conversation context with handled intents
+    if (multiResponse.handledIntents.length > 0) {
+      const updatedContext = ConversationMemoryManager.updateMemory(
+        context,
+        'ask_multiple_requests',
+        'multi_intent_response',
+        { handledIntents: multiResponse.handledIntents }
+      );
+      
+      await this.conversationManager.updateConversationState(conversation.phone_number, {
+        conversation_context: updatedContext,
+        last_message_type: 'ask_multiple_requests'
+      });
+    }
+    
+    return {
+      response: formattedResponse,
+      shouldUpdateState: false
+    };
   }
 
   private isRecommendationIntent(intent: string): boolean {

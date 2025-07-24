@@ -1,4 +1,3 @@
-
 import { VibeDetectionService } from './vibeDetectionService.ts';
 import { MenuService } from './menuService.ts';
 import { AmenityService } from './amenityService.ts';
@@ -143,20 +142,23 @@ export class IntentRecognitionService {
     });
   }
 
+  // ENHANCED: Detect multiple requests with better patterns
   private static detectMultipleRequests(message: string): boolean {
     const multiPartIndicators = [
-      ' and ',
-      ' & ',
-      'also',
-      'plus',
-      'what about',
-      'how about'
+      ' and ', ' & ', 'also', 'plus', 'what about', 'how about', 'along with'
     ];
     
-    const questionWords = ['what', 'where', 'how', 'when', 'do you know'];
+    // Check for multiple question words or topics
+    const questionWords = ['what', 'where', 'how', 'when', 'who'];
     const questionCount = questionWords.filter(word => message.includes(word)).length;
     
-    return multiPartIndicators.some(indicator => message.includes(indicator)) || questionCount > 1;
+    // Check for multiple topic areas in one message
+    const topicAreas = ['food', 'restaurant', 'amenities', 'activities', 'grocery', 'transport'];
+    const topicCount = topicAreas.filter(topic => message.includes(topic)).length;
+    
+    return multiPartIndicators.some(indicator => message.includes(indicator)) || 
+           questionCount > 1 || 
+           topicCount > 1;
   }
 
   private static parseMultipleIntents(message: string): string[] {
@@ -178,40 +180,64 @@ export class IntentRecognitionService {
   }
 
   private static detectSingleIntent(message: string): { intent: string; confidence: number } {
-    // Location/nearby requests - HIGHEST PRIORITY to avoid misclassification  
+    // ENHANCED: Property-specific intents with higher priority than food
     if (this.matchesKeywords(message, [
-      'nearby', 'near me', 'close to', 'around', 'local', 'in the area', 'close by',
-      'near my destination', 'near here', 'within walking distance', 'walking distance',
-      'around here', 'in this area', 'end destination', 'destination'
+      'amenities', 'amenity', 'pool', 'hot tub', 'game room', 'gym', 'fitness',
+      'check out', 'checkout', 'check-out', 'instructions', 'time to leave',
+      'departure', 'when do i leave', 'check out time', 'checkout time'
     ])) {
-      return { intent: 'ask_food_recommendations', confidence: 0.95 };
+      return { intent: 'ask_property_specific', confidence: 0.95 };
     }
 
-    // Enhanced recommendation detection - HIGHEST PRIORITY for user engagement
+    // ENHANCED: Emergency/Maintenance with highest priority
+    if (this.matchesKeywords(message, [
+      'emergency', 'maintenance', 'problem', 'issue', 'broken', 'not working',
+      'who do i contact', 'who should i contact', 'contact for', 'emergency contact',
+      'maintenance issues', 'problems during', 'issues during'
+    ])) {
+      return { intent: 'ask_emergency_contact', confidence: 0.98 };
+    }
+
+    // ENHANCED: Transportation/Grocery with specific detection
+    if (this.matchesKeywords(message, [
+      'grocery', 'groceries', 'supermarket', 'store', 'shopping',
+      'transportation', 'transport', 'without a car', 'public transport',
+      'uber', 'taxi', 'bus', 'getting around'
+    ])) {
+      return { intent: 'ask_grocery_transport', confidence: 0.95 };
+    }
+
+    // ENHANCED: More specific food detection - require explicit food context
     if (this.matchesKeywords(message, [
       'food', 'restaurant', 'eat', 'dining', 'hungry', 'meal', 'lunch', 'dinner', 'breakfast',
       'where to eat', 'good food', 'best restaurant', 'food recommendations', 'places to eat',
       'restaurants near', 'food near', 'somewhere to eat', 'grab a bite', 'get food',
       'pizza', 'burger', 'sushi', 'italian', 'mexican', 'chinese', 'american', 'cuisine',
       'family friendly', 'family-friendly', 'kid friendly', 'casual', 'upscale', 'fine dining',
-      'quick bite', 'fast food', 'takeout', 'delivery', 'cheap eats'
+      'quick bite', 'fast food', 'takeout', 'delivery', 'cheap eats', 'coffee shop'
+    ]) && !this.matchesKeywords(message, [
+      'grocery', 'supermarket', 'store', 'emergency', 'maintenance', 'amenities'
     ])) {
       return { intent: 'ask_food_recommendations', confidence: 0.95 };
     }
 
+    // REDUCED: Location only triggers food if explicitly combined with food terms
+    if (this.matchesKeywords(message, [
+      'nearby', 'near me', 'close to', 'around', 'local', 'in the area', 'close by'
+    ]) && this.matchesKeywords(message, [
+      'food', 'restaurant', 'eat', 'dining', 'meal'
+    ])) {
+      return { intent: 'ask_food_recommendations', confidence: 0.90 };
+    }
+
+    // ENHANCED: Multi-part activities detection
     if (this.matchesKeywords(message, [
       'things to do', 'activities', 'attractions', 'fun', 'sightseeing', 'entertainment',
       'what to do', 'places to visit', 'tourist spots', 'local attractions', 'activities near',
-      'stuff to do', 'interesting places', 'worth visiting', 'recommendations for activities'
+      'stuff to do', 'interesting places', 'worth visiting', 'recommendations for activities',
+      'family-friendly attractions', 'theme parks', 'nature', 'local events'
     ])) {
       return { intent: 'ask_activities', confidence: 0.95 };
-    }
-
-    if (this.matchesKeywords(message, [
-      'grocery', 'groceries', 'store', 'shopping', 'market', 'supermarket',
-      'buy food', 'get groceries', 'food store', 'convenience store', 'shop for food'
-    ])) {
-      return { intent: 'ask_grocery_stores', confidence: 0.9 };
     }
 
     if (this.matchesKeywords(message, [
