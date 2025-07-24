@@ -34,7 +34,13 @@ export class IntentRecognitionService {
       return { intent: 'ask_menu', confidence: 0.9, isMultiPart: false };
     }
     
-    // NEW: Amenity requests
+    // NEW: Food recommendations - PRIORITIZE OVER AMENITIES
+    if (this.detectFoodRecommendationIntent(lowerMessage)) {
+      console.log('🍽️ Food recommendation intent detected:', message);
+      return { intent: 'ask_food_recommendations', confidence: 0.95, isMultiPart: false };
+    }
+    
+    // NEW: Amenity requests - AFTER food detection
     if (AmenityService.detectAmenityQuery(message)) {
       console.log('🏊 Amenity intent detected:', message);
       return { intent: 'ask_amenity', confidence: 0.9, isMultiPart: false };
@@ -115,6 +121,36 @@ export class IntentRecognitionService {
   private static isTravelCode(message: string): boolean {
     const cleanMessage = message.trim().toLowerCase();
     return cleanMessage === 'travel';
+  }
+
+  // NEW: Detect food recommendation intents with high priority
+  private static detectFoodRecommendationIntent(message: string): boolean {
+    const foodKeywords = [
+      'food', 'restaurant', 'eat', 'dining', 'hungry', 'meal', 'lunch', 'dinner', 'breakfast',
+      'where to eat', 'good food', 'best restaurant', 'food recommendations', 'places to eat',
+      'grab a bite', 'get food', 'pizza', 'burger', 'sushi', 'italian', 'mexican', 'chinese', 
+      'american', 'cuisine', 'quick bite', 'fast food', 'takeout', 'delivery', 'coffee shop',
+      'puerto rican food', 'mofongo', 'seafood', 'authentic', 'local cuisine', 'coffee', 'café',
+      'pastries', 'bakery', 'breakfast spot', 'brunch', 'local food', 'traditional food',
+      'recommend a restaurant', 'restaurant near', 'good place to eat', 'dining options'
+    ];
+    
+    // Check for recommendation phrases combined with food-related terms
+    const recommendationPhrases = [
+      'recommend', 'suggestion', 'suggest', 'where should', 'what\'s good', 'best place',
+      'good place', 'looking for', 'need to find'
+    ];
+    
+    const hasFoodKeyword = foodKeywords.some(keyword => message.includes(keyword));
+    const hasRecommendationPhrase = recommendationPhrases.some(phrase => message.includes(phrase));
+    
+    // Strong signal: both recommendation language and food terms
+    if (hasFoodKeyword && hasRecommendationPhrase) {
+      return true;
+    }
+    
+    // Also catch direct food keywords
+    return this.matchesKeywords(message, foodKeywords);
   }
 
   private static isResetCommand(message: string): boolean {
