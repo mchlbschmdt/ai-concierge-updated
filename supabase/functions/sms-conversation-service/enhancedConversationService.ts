@@ -139,11 +139,13 @@ export class EnhancedConversationService {
           }
         }
 
-        // PHASE 3: Enhanced intent detection for food & local queries with diversification
-        if (intentResult.intent === 'ask_food_recommendations') {
-          const enhancedFoodResponse = await this.handleEnhancedFoodIntentWithDiversification(intentResult.intent, property, message, conversation);
-          if (enhancedFoodResponse) {
-            return enhancedFoodResponse;
+        // PHASE 3: Enhanced intent detection for food, coffee & attraction queries with diversification
+        if (intentResult.intent === 'ask_food_recommendations' || 
+            intentResult.intent === 'ask_coffee_recommendations' || 
+            intentResult.intent === 'ask_attractions') {
+          const enhancedResponse = await this.handleEnhancedRecommendationWithDiversification(intentResult.intent, property, message, conversation);
+          if (enhancedResponse) {
+            return enhancedResponse;
           }
         }
 
@@ -385,10 +387,10 @@ export class EnhancedConversationService {
   }
 
   /**
-   * Enhanced food recommendation with diversification
+   * Enhanced recommendation with diversification (food, coffee, attractions)
    */
-  async handleEnhancedFoodIntentWithDiversification(intent: string, property: Property, message: string, conversation: Conversation): Promise<ProcessingResult> {
-    console.log('🍽️ Enhanced food intent with diversification:', intent);
+  async handleEnhancedRecommendationWithDiversification(intent: string, property: Property, message: string, conversation: Conversation): Promise<ProcessingResult> {
+    console.log('🎯 Enhanced recommendation intent with diversification:', intent);
     
     try {
       const context = conversation?.conversation_context || {};
@@ -837,6 +839,7 @@ export class EnhancedConversationService {
   private isRecommendationIntent(intent: string): boolean {
     const recommendationIntents = [
       'ask_food_recommendations',
+      'ask_coffee_recommendations',
       'ask_activities',
       'ask_attractions',
       'ask_coffee_shops',
@@ -1278,16 +1281,81 @@ export class EnhancedConversationService {
     return formatted;
   }
 
+  // ✅ NEW: Helper functions for enhanced recommendation handling
+  private categorizeRequestTypeByIntent(intent: string, message: string): string {
+    switch (intent) {
+      case 'ask_coffee_recommendations':
+        return 'coffee';
+      case 'ask_attractions':
+        return 'attractions';
+      case 'ask_food_recommendations':
+        if (message.toLowerCase().includes('dinner')) return 'dinner';
+        if (message.toLowerCase().includes('lunch')) return 'lunch';
+        if (message.toLowerCase().includes('breakfast')) return 'breakfast';
+        return 'restaurant';
+      default:
+        return intent.replace('ask_', '');
+    }
+  }
+
+  private extractFiltersForIntent(intent: string, message: string): string[] {
+    const filters: string[] = [];
+    const lowerMessage = message.toLowerCase();
+    
+    if (intent === 'ask_coffee_recommendations') {
+      if (lowerMessage.includes('pastry') || lowerMessage.includes('pastries')) filters.push('pastries');
+      if (lowerMessage.includes('breakfast')) filters.push('breakfast');
+      if (lowerMessage.includes('espresso') || lowerMessage.includes('latte')) filters.push('specialty coffee');
+    } else if (intent === 'ask_food_recommendations') {
+      if (lowerMessage.includes('seafood')) filters.push('seafood');
+      if (lowerMessage.includes('vegetarian')) filters.push('vegetarian');
+      if (lowerMessage.includes('authentic') || lowerMessage.includes('local')) filters.push('local cuisine');
+    } else if (intent === 'ask_attractions') {
+      if (lowerMessage.includes('outdoor') || lowerMessage.includes('nature')) filters.push('outdoor');
+      if (lowerMessage.includes('historic') || lowerMessage.includes('museum')) filters.push('historic');
+      if (lowerMessage.includes('family')) filters.push('family-friendly');
+    }
+    
+    return filters;
+  }
+
+  private extractRejectedOptions(conversation: Conversation, message: string): string[] {
+    const rejected: string[] = [];
+    const context = conversation.conversation_context || {};
+    
+    // Look for "not" phrases in current message
+    if (message.toLowerCase().includes('not ') || message.toLowerCase().includes("don't")) {
+      // Extract what they don't want - this is a simplified version
+      if (message.toLowerCase().includes('not chains')) rejected.push('chain restaurants');
+      if (message.toLowerCase().includes('not fast food')) rejected.push('fast food');
+    }
+    
+    // Look at conversation history for previous suggestions they may have rejected
+    const lastRecommendations = conversation.last_recommendations;
+    if (lastRecommendations && (message.toLowerCase().includes('different') || 
+                               message.toLowerCase().includes('other') ||
+                               message.toLowerCase().includes('something else'))) {
+      // They want different recommendations, so add previous ones to rejected list
+      // This is a simplified extraction - could be enhanced further
+      if (lastRecommendations.includes('Starbucks')) rejected.push('Starbucks');
+      if (lastRecommendations.includes('McDonald')) rejected.push("McDonald's");
+    }
+    
+    return rejected;
+  }
+
   private async processConfirmedStateMessage(message: string, conversation: Conversation, property: Property, phoneNumber: string) {
     // Re-run the main processing logic now that we're in confirmed state
     const intentResult = IntentRecognitionService.recognizeIntent(message);
     console.log('🎯 Processing confirmed state message with intent:', intentResult.intent);
 
-    // PHASE 3: Enhanced intent detection for food & local queries with diversification
-    if (intentResult.intent === 'ask_food_recommendations') {
-      const enhancedFoodResponse = await this.handleEnhancedFoodIntentWithDiversification(intentResult.intent, property, message, conversation);
-      if (enhancedFoodResponse) {
-        return enhancedFoodResponse;
+    // PHASE 3: Enhanced intent detection for food, coffee & attraction queries with diversification
+    if (intentResult.intent === 'ask_food_recommendations' || 
+        intentResult.intent === 'ask_coffee_recommendations' || 
+        intentResult.intent === 'ask_attractions') {
+      const enhancedResponse = await this.handleEnhancedRecommendationWithDiversification(intentResult.intent, property, message, conversation);
+      if (enhancedResponse) {
+        return enhancedResponse;
       }
     }
 

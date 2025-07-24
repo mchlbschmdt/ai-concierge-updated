@@ -36,7 +36,7 @@ export class PerplexityRecommendationService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'llama-3.1-sonar-small-128k-online',
+          model: 'llama-3.1-sonar-large-128k-online',
           messages: [
             {
               role: 'system',
@@ -117,6 +117,21 @@ export class PerplexityRecommendationService {
   }
 
   private static formatRecommendation(recommendation: string): string {
+    // Fix enumeration cutting off issue
+    if (recommendation.includes('1.') && !recommendation.includes('2.')) {
+      // If we see "1." but not "2.", there might be a formatting issue
+      console.log('⚠️ Detected potential formatting issue in recommendation:', recommendation.substring(0, 100));
+      
+      // Try to extract meaningful content after "1."
+      const parts = recommendation.split('1.');
+      if (parts.length > 1) {
+        const content = parts[1].trim();
+        if (content.length > 10) {
+          recommendation = content;
+        }
+      }
+    }
+    
     // Ensure SMS-friendly length
     if (recommendation.length > 160) {
       const sentences = recommendation.split('. ');
@@ -253,8 +268,19 @@ Requirements:
       }
     }
     
-    console.log('❌ No fallback data found, returning generic message');
-    return `I'm looking into ${requestType} options near ${property.property_name || 'your property'}. Let me get some fresh recommendations for you!`;
+    console.log('❌ No fallback data found, returning graceful message');
+    
+    // Provide category-specific graceful messages
+    switch (requestType.toLowerCase()) {
+      case 'coffee':
+      case 'cafe':
+        return "I'm sorry, I don't currently have coffee shop recommendations available. I've asked our assistant to look up some top-rated cafés nearby and will update you shortly.";
+      case 'attractions':
+      case 'activities':
+        return "I'm gathering information about local attractions and activities for you. This might take a few moments while I find the best options in your area.";
+      default:
+        return `I'm looking into ${requestType} options near ${property.property_name || 'your property'}. Let me get some fresh recommendations for you!`;
+    }
   }
 
   private static extractSectionByPrefix(text: string, startPrefix: string, endPrefix: string | null): string | null {

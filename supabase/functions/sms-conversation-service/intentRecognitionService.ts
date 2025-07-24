@@ -34,7 +34,19 @@ export class IntentRecognitionService {
       return { intent: 'ask_menu', confidence: 0.9, isMultiPart: false };
     }
     
-    // NEW: Food recommendations - PRIORITIZE OVER AMENITIES
+    // NEW: Coffee requests - HIGHEST PRIORITY for food-related queries
+    if (this.detectCoffeeIntent(lowerMessage)) {
+      console.log('☕ Coffee intent detected:', message);
+      return { intent: 'ask_coffee_recommendations', confidence: 0.95, isMultiPart: false };
+    }
+    
+    // NEW: Attractions - HIGH PRIORITY before general food
+    if (this.detectAttractionIntent(lowerMessage)) {
+      console.log('🏛️ Attraction intent detected:', message);
+      return { intent: 'ask_attractions', confidence: 0.95, isMultiPart: false };
+    }
+
+    // NEW: Food recommendations - AFTER coffee and attractions
     if (this.detectFoodRecommendationIntent(lowerMessage)) {
       console.log('🍽️ Food recommendation intent detected:', message);
       return { intent: 'ask_food_recommendations', confidence: 0.95, isMultiPart: false };
@@ -123,15 +135,48 @@ export class IntentRecognitionService {
     return cleanMessage === 'travel';
   }
 
-  // NEW: Detect food recommendation intents with high priority
+  // NEW: Detect coffee-specific intents FIRST (higher priority than food)
+  private static detectCoffeeIntent(message: string): boolean {
+    const coffeeKeywords = [
+      'coffee', 'café', 'cafe', 'coffee shop', 'espresso', 'latte', 'cappuccino', 'pastries',
+      'bakery', 'breakfast spot', 'morning coffee', 'coffee place', 'barista', 'brew',
+      'coffee near', 'good coffee', 'coffee recommendations', 'caffeine'
+    ];
+    
+    return this.matchesKeywords(message, coffeeKeywords);
+  }
+
+  // NEW: Detect attraction-specific intents
+  private static detectAttractionIntent(message: string): boolean {
+    const attractionKeywords = [
+      'attraction', 'attractions', 'scenic', 'park', 'museum', 'landmark', 'tour', 'historic',
+      'rainforest', 'old san juan', 'fort', 'beach', 'nature', 'hiking', 'waterfall',
+      'sightseeing', 'tourist spot', 'places to visit', 'worth visiting', 'things to see',
+      'local attractions', 'interesting places', 'explore', 'visit', 'viewpoint'
+    ];
+    
+    return this.matchesKeywords(message, attractionKeywords);
+  }
+
+  // NEW: Detect food recommendation intents (excluding coffee and attractions)
   private static detectFoodRecommendationIntent(message: string): boolean {
+    // Check for coffee first - if it's coffee, don't classify as food
+    if (this.detectCoffeeIntent(message)) {
+      return false;
+    }
+    
+    // Check for attractions - if it's attractions, don't classify as food
+    if (this.detectAttractionIntent(message)) {
+      return false;
+    }
+    
     const foodKeywords = [
       'food', 'restaurant', 'eat', 'dining', 'hungry', 'meal', 'lunch', 'dinner', 'breakfast',
       'where to eat', 'good food', 'best restaurant', 'food recommendations', 'places to eat',
       'grab a bite', 'get food', 'pizza', 'burger', 'sushi', 'italian', 'mexican', 'chinese', 
-      'american', 'cuisine', 'quick bite', 'fast food', 'takeout', 'delivery', 'coffee shop',
-      'puerto rican food', 'mofongo', 'seafood', 'authentic', 'local cuisine', 'coffee', 'café',
-      'pastries', 'bakery', 'breakfast spot', 'brunch', 'local food', 'traditional food',
+      'american', 'cuisine', 'quick bite', 'fast food', 'takeout', 'delivery',
+      'puerto rican food', 'mofongo', 'seafood', 'authentic', 'local cuisine',
+      'brunch', 'local food', 'traditional food',
       'recommend a restaurant', 'restaurant near', 'good place to eat', 'dining options'
     ];
     
@@ -243,14 +288,24 @@ export class IntentRecognitionService {
       return { intent: 'ask_grocery_transport', confidence: 0.95 };
     }
 
-    // MUCH MORE RESTRICTIVE: Only detect food with explicit food keywords
+    // Coffee-specific detection first
+    if (this.detectCoffeeIntent(message)) {
+      return { intent: 'ask_coffee_recommendations', confidence: 0.95 };
+    }
+
+    // Attraction-specific detection
+    if (this.detectAttractionIntent(message)) {
+      return { intent: 'ask_attractions', confidence: 0.95 };
+    }
+
+    // MUCH MORE RESTRICTIVE: Only detect food with explicit food keywords (excluding coffee)
     if (this.matchesKeywords(message, [
       'food', 'restaurant', 'eat', 'dining', 'hungry', 'meal', 'lunch', 'dinner', 'breakfast',
       'where to eat', 'good food', 'best restaurant', 'food recommendations', 'places to eat',
       'grab a bite', 'get food', 'pizza', 'burger', 'sushi', 'italian', 'mexican', 'chinese', 
-      'american', 'cuisine', 'quick bite', 'fast food', 'takeout', 'delivery', 'coffee shop',
-      'puerto rican food', 'mofongo', 'seafood', 'authentic', 'local cuisine', 'coffee', 'café',
-      'pastries', 'bakery', 'breakfast spot', 'brunch', 'local food', 'traditional food'
+      'american', 'cuisine', 'quick bite', 'fast food', 'takeout', 'delivery',
+      'puerto rican food', 'mofongo', 'seafood', 'authentic', 'local cuisine',
+      'brunch', 'local food', 'traditional food'
     ])) {
       return { intent: 'ask_food_recommendations', confidence: 0.95 };
     }
