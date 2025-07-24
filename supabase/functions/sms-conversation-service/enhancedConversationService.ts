@@ -92,8 +92,28 @@ export class EnhancedConversationService {
         return await this.handlePropertyIdInput(conversation, message);
       }
 
-      // State 2: Awaiting Confirmation
+      // State 2: Awaiting Confirmation - Auto-confirm if user asks meaningful questions
       if (conversation.conversation_state === 'awaiting_confirmation') {
+        const intentResult = IntentRecognitionService.recognizeIntent(message);
+        
+        // If user asks a real question instead of Y/N, auto-confirm the property
+        if (this.shouldAutoConfirmProperty(intentResult.intent, message)) {
+          console.log('🔄 Auto-confirming property due to meaningful question:', intentResult.intent);
+          const confirmationResult = await this.handleConfirmation(conversation, 'yes');
+          
+          // After auto-confirming, process the original request
+          if (confirmationResult.response.includes("Perfect! I've linked")) {
+            // Property confirmed, now process the original request
+            const property = await PropertyService.getPropertyByPhone(this.supabase, phoneNumber);
+            if (property) {
+              // Process the original intent now that property is confirmed
+              return await this.processConfirmedStateMessage(message, conversation, property, phoneNumber);
+            }
+          }
+          return confirmationResult;
+        }
+        
+        // Otherwise handle normal Y/N confirmation
         return await this.handleConfirmation(conversation, message);
       }
 
@@ -990,20 +1010,27 @@ export class EnhancedConversationService {
       }
       
       // Link phone number to property and confirm
-      await PropertyService.linkPhoneToProperty(this.supabase, conversation.phone_number, pendingProperty.id);
+      await PropertyService.linkPhoneToProperty(this.supabase, conversation.phone_number, pendingProperty.property_id);
       
       // Update conversation to confirmed state
       await this.conversationManager.updateConversationState(conversation.phone_number, {
         conversation_state: 'confirmed',
+        property_confirmed: true,
         conversation_context: {
           ...context,
           confirmed_property: pendingProperty,
-          pending_property: null
+          pending_property: null,
+          property_switch: false
         }
       });
       
+      // Create a welcoming message with property name and location
+      const welcomeMessage = context.property_switch 
+        ? `Welcome to ${pendingProperty.property_name} in ${this.extractCityFromAddress(pendingProperty.address)}! I'm ready to help with local recommendations, amenities, and any questions about your stay. What would you like to know?`
+        : `Perfect! I've linked your number to ${pendingProperty.property_name}. I'm ready to help with local recommendations, amenities, and any questions about your stay. What would you like to know?`;
+      
       return {
-        response: `Perfect! I've linked your number to ${pendingProperty.property_name}. I'm ready to help with local recommendations, amenities, and any questions about your stay. What would you like to know?`,
+        response: welcomeMessage,
         shouldUpdateState: false
       };
       
@@ -1070,8 +1097,75 @@ export class EnhancedConversationService {
     return lowerIntent.replace('ask_', '');
   }
 
+  private extractCityFromAddress(address: string): string {
+    if (!address) return 'your area';
+    
+    // Extract city from address patterns like "123 Main St, City, State" 
+    const parts = address.split(',');
+    if (parts.length >= 2) {
+      return parts[parts.length - 2].trim();
+    }
+    
+    return 'your area';
+  }
+
   private async updateConversationState(phoneNumber: string, updates: any) {
     await this.conversationManager.updateConversationState(phoneNumber, updates);
+  }
+
+  private shouldAutoConfirmProperty(intent: string, message: string): boolean {
+    // Auto-confirm if user asks meaningful questions instead of just Y/N
+    const meaningfulIntents = [
+      'ask_food_recommendations', 'ask_amenity', 'ask_property_specific',
+      'ask_local_recommendations', 'ask_emergency_contact', 'ask_checkout',
+      'ask_multiple_requests', 'ask_venue_vibe', 'general_inquiry'
+    ];
+    
+    const meaningfulKeywords = [
+      'restaurant', 'coffee', 'dinner', 'food', 'eat', 'drink',
+      'amenity', 'pool', 'wifi', 'parking', 'emergency', 'help',
+      'recommendation', 'attraction', 'checkout', 'where', 'what', 'how'
+    ];
+    
+    const lowerMessage = message.toLowerCase();
+    const hasIntent = meaningfulIntents.includes(intent);
+    const hasKeywords = meaningfulKeywords.some(keyword => lowerMessage.includes(keyword));
+    
+    return hasIntent || hasKeywords;
+  }
+
+  private async processConfirmedStateMessage(message: string, conversation: Conversation, property: Property, phoneNumber: string) {
+    // Re-run the main processing logic now that we're in confirmed state
+    const intentResult = IntentRecognitionService.recognizeIntent(message);
+    console.log('🎯 Processing confirmed state message with intent:', intentResult.intent);
+
+    // PHASE 3: Enhanced intent detection for food & local queries with diversification
+    if (intentResult.intent === 'ask_food_recommendations') {
+      const enhancedFoodResponse = await this.handleEnhancedFoodIntentWithDiversification(intentResult.intent, property, message, conversation);
+      if (enhancedFoodResponse) {
+        return enhancedFoodResponse;
+      }
+    }
+
+    // Handle recommendation intents with enhanced context and diversification
+    console.log('🎯 Detected recommendation intent:', intentResult.intent);
+    if (this.isRecommendationIntent(intentResult.intent)) {
+      const result = await this.handleRecommendationWithDiversification(intentResult.intent, property, message, conversation);
+      console.log('📋 Recommendation result:', typeof result, result);
+      return result;
+    }
+
+    // Property context enhancement
+    const propertyContextResponse = await this.handlePropertyContextQueries(intentResult.intent, property, conversation, message);
+    if (propertyContextResponse) {
+      return await this.updateConversationAndRespond(phoneNumber, intentResult.intent, propertyContextResponse, conversation);
+    }
+
+    // Fallback response
+    return {
+      response: "I'm here to help! What would you like to know about your stay?",
+      shouldUpdateState: false
+    };
   }
 }
 
