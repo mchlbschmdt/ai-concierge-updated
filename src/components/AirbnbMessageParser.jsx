@@ -1,7 +1,6 @@
 
 import React, { useState } from 'react';
-import { doc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { supabase } from '../integrations/supabase/client';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";

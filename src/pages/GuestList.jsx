@@ -1,7 +1,6 @@
 // dashboard-fixed/src/pages/GuestList.jsx
 import React, { useEffect, useState } from 'react';
-import { db } from '../firebase';
-import { collection, getDocs } from 'firebase/firestore';
+import { supabase } from '../integrations/supabase/client';
 
 const GuestList = () => {
   const [guests, setGuests] = useState([]);

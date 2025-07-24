@@ -1,10 +1,7 @@
 // File: /frontend/dashboard-fixed/src/pages/SmartInsights.jsx
 
 import React, { useEffect, useState } from 'react';
-import { db } from '../firebase';
-import {
-  collection, getDocs, addDoc, Timestamp, query, where
-} from 'firebase/firestore';
+import { supabase } from '../integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {

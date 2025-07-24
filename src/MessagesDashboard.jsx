@@ -1,7 +1,6 @@
 
 import React, { useEffect, useState } from "react";
-import { collection, getDocs } from "firebase/firestore";
-import { db } from "./firebase";
+import { supabase } from "./integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import Layout from "./components/Layout";
 

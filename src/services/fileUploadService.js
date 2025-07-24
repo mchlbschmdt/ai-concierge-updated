@@ -1,7 +1,4 @@
-
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { doc, updateDoc, arrayUnion, arrayRemove, getDoc } from 'firebase/firestore';
-import { db, storage } from '../firebase';
+import { supabase } from '../integrations/supabase/client';
 
 const FILE_EXTENSIONS = {
   'application/pdf': '.pdf',
@@ -24,54 +21,73 @@ export async function uploadFileToProperty(file, propertyId, onProgressUpdate) {
   console.log("Starting upload process for property:", propertyId);
   
   try {
-    // Reference to property
-    const propertyDocRef = doc(db, "properties", propertyId);
-    const propertyDoc = await getDoc(propertyDocRef);
+    // Check if property exists
+    const { data: property, error: propertyError } = await supabase
+      .from('properties')
+      .select('id')
+      .eq('id', propertyId)
+      .single();
     
-    if (!propertyDoc.exists()) {
+    if (propertyError || !property) {
       console.error("Property not found:", propertyId);
       throw new Error("Property not found.");
     }
     
     if (onProgressUpdate) onProgressUpdate(20);
     
-    // Create a reference to the file location in Firebase Storage
+    // Create file path for Supabase Storage
     const fileExtension = FILE_EXTENSIONS[file.type] || '';
     const timestamp = Date.now();
     const storagePath = `properties/${propertyId}/knowledge_base/${timestamp}_${file.name}`;
-    const storageRef = ref(storage, storagePath);
     
     console.log("Uploading file to path:", storagePath);
     
     if (onProgressUpdate) onProgressUpdate(40);
     
-    // Upload file
-    const uploadResult = await uploadBytes(storageRef, file);
-    console.log("File uploaded successfully:", uploadResult);
+    // Upload file to Supabase Storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('property-files')
+      .upload(storagePath, file);
+    
+    if (uploadError) {
+      console.error("Upload error:", uploadError);
+      throw uploadError;
+    }
+    
+    console.log("File uploaded successfully:", uploadData);
     
     if (onProgressUpdate) onProgressUpdate(70);
     
-    // Get download URL
-    const downloadURL = await getDownloadURL(storageRef);
-    console.log("File download URL:", downloadURL);
+    // Get public URL
+    const { data: { publicUrl } } = supabase.storage
+      .from('property-files')
+      .getPublicUrl(storagePath);
+    
+    console.log("File public URL:", publicUrl);
     
     if (onProgressUpdate) onProgressUpdate(90);
     
-    // Add file metadata to property document
+    // Create file record in database
     const fileData = {
+      property_id: propertyId,
       name: file.name,
       type: file.type,
       size: file.size,
-      uploaded_at: new Date(),
-      url: downloadURL,
-      path: storagePath
+      storage_path: storagePath,
+      url: publicUrl,
+      uploaded_at: new Date().toISOString()
     };
     
-    await updateDoc(propertyDocRef, {
-      files: arrayUnion(fileData)
-    });
+    const { error: insertError } = await supabase
+      .from('file_uploads')
+      .insert(fileData);
     
-    console.log("File metadata added to property document");
+    if (insertError) {
+      console.error("Error saving file metadata:", insertError);
+      throw insertError;
+    }
+    
+    console.log("File metadata saved to database");
     if (onProgressUpdate) onProgressUpdate(100);
     
     return fileData;
@@ -89,36 +105,31 @@ export async function deleteFileFromProperty(propertyId, filePath) {
   console.log("Deleting file:", filePath, "from property:", propertyId);
   
   try {
-    // Create a reference to the file in storage
-    const storageRef = ref(storage, filePath);
-    
     // Delete the file from storage
-    await deleteObject(storageRef);
+    const { error: deleteError } = await supabase.storage
+      .from('property-files')
+      .remove([filePath]);
+    
+    if (deleteError) {
+      console.error("Error deleting from storage:", deleteError);
+      throw deleteError;
+    }
+    
     console.log("File deleted from storage");
     
-    // Get the property document to find the file data
-    const propertyDocRef = doc(db, "properties", propertyId);
-    const propertyDoc = await getDoc(propertyDocRef);
+    // Remove the file record from database
+    const { error: dbDeleteError } = await supabase
+      .from('file_uploads')
+      .delete()
+      .eq('storage_path', filePath)
+      .eq('property_id', propertyId);
     
-    if (!propertyDoc.exists()) {
-      throw new Error("Property not found");
+    if (dbDeleteError) {
+      console.error("Error deleting file record:", dbDeleteError);
+      throw dbDeleteError;
     }
     
-    // Find the file data in the property document
-    const propertyData = propertyDoc.data();
-    const fileData = (propertyData.files || []).find(f => f.path === filePath);
-    
-    if (!fileData) {
-      console.warn("File data not found in property document");
-      return;
-    }
-    
-    // Remove the file data from the property document
-    await updateDoc(propertyDocRef, {
-      files: arrayRemove(fileData)
-    });
-    
-    console.log("File metadata removed from property document");
+    console.log("File metadata removed from database");
     return { success: true };
   } catch (error) {
     console.error("Error deleting file:", error);
