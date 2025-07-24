@@ -46,12 +46,8 @@ export class EnhancedConversationService {
       const parsedQuery = MultiQueryParser.parseMessage(message);
       if (parsedQuery.isMultiQuery) {
         console.log('🔍 Multi-query detected:', parsedQuery);
-        // Send immediate acknowledgment
-        setTimeout(() => this.processMultiQuerySequentially(phoneNumber, parsedQuery, conversation), 100);
-        return {
-          response: MessageUtils.ensureSmsLimit(parsedQuery.acknowledgment),
-          shouldUpdateState: false
-        };
+        // Process multi-query immediately, don't use setTimeout to avoid race conditions
+        return await this.processMultiQuerySequentially(phoneNumber, parsedQuery, conversation);
       }
       
       // Special handling for 'get_conversation' requests
@@ -233,6 +229,8 @@ export class EnhancedConversationService {
     console.log('🔄 Processing multi-query sequentially:', parsedQuery.queries);
     
     const responses: string[] = [];
+    // Add immediate acknowledgment first
+    responses.push(parsedQuery.acknowledgmentMessage);
     
     for (const query of parsedQuery.queries) {
       try {
@@ -243,16 +241,27 @@ export class EnhancedConversationService {
         }
       } catch (error) {
         console.error('❌ Error processing query component:', error);
-        responses.push(`I had trouble with your ${query.type} request.`);
+        responses.push(`I had trouble with your ${query.type} request. Let me know if you'd like me to try again.`);
       }
     }
     
-    // Send combined response
-    if (responses.length > 0) {
-      const combinedResponse = responses.join('\n\n');
-      // This would need to be sent via SMS service directly
-      console.log('📱 Would send combined response:', combinedResponse);
-    }
+    // Combine all responses
+    const combinedResponse = responses.join('\n\n');
+    
+    // Update conversation state
+    await this.conversationManager.updateConversationState(phoneNumber, {
+      last_message_type: 'multi_query_processed',
+      conversation_context: {
+        ...conversation.conversation_context,
+        multi_request_processed: true,
+        last_multi_query: parsedQuery.queries.map(q => q.type)
+      }
+    });
+    
+    return {
+      response: MessageUtils.ensureSmsLimit(combinedResponse),
+      shouldUpdateState: false
+    };
   }
 
   // ✅ NEW: Process individual query component
@@ -291,6 +300,7 @@ export class EnhancedConversationService {
     
     const context = conversation.conversation_context || {};
     const previousRecommendations = context.recommendation_history || [];
+    console.log('📝 Previous recommendations for diversification:', previousRecommendations);
     
     // Check if diversification is needed
     const diversificationContext = {
@@ -301,12 +311,15 @@ export class EnhancedConversationService {
     };
     
     const diversificationResult = RecommendationDiversifier.analyzeForDiversification(diversificationContext);
-    
-    if (diversificationResult.needsDiversification) {
+    console.log('🎲 Diversification analysis result:', diversificationResult);
+    if (diversificationResult.shouldDiversify) {
       console.log('🔄 Diversification needed:', diversificationResult);
       
       // Add rejection filters to the recommendation request
-      const enhancedMessage = message + ' ' + diversificationResult.rejectionFilters;
+      const rejectionNote = diversificationResult.rejectedOptions.length > 0 
+        ? `Avoid suggesting: ${diversificationResult.rejectedOptions.join(', ')}. ` 
+        : '';
+      const enhancedMessage = rejectionNote + message;
       
       // Get diversified recommendations
       const recommendationResponse = await this.recommendationService.getEnhancedRecommendations(
