@@ -165,4 +165,32 @@ export class PropertyService {
       return null;
     }
   }
+
+  // Add the missing linkPhoneToProperty method
+  static async linkPhoneToProperty(supabase: any, phoneNumber: string, propertyId: string): Promise<boolean> {
+    console.log("🔗 PropertyService: Linking phone to property:", phoneNumber, "->", propertyId);
+    
+    try {
+      const { error } = await supabase
+        .from('sms_conversations')
+        .update({
+          property_id: propertyId,
+          property_confirmed: true,
+          conversation_state: 'active',
+          updated_at: new Date().toISOString()
+        })
+        .eq('phone_number', phoneNumber);
+
+      if (error) {
+        console.error("❌ PropertyService: Error linking phone to property:", error);
+        return false;
+      }
+
+      console.log("✅ PropertyService: Successfully linked phone to property");
+      return true;
+    } catch (error) {
+      console.error("❌ PropertyService: Error in linkPhoneToProperty:", error);
+      return false;
+    }
+  }
 }
