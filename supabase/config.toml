@@ -17,13 +17,13 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.send-sms]
-verify_jwt = false
+verify_jwt = true
 
 [functions.send-sms-with-test]
-verify_jwt = false
+verify_jwt = true
 
 [functions.sms-conversation-service]
-verify_jwt = false
+verify_jwt = true
 
 [functions.contextual-recommendations]
 verify_jwt = true
