@@ -94,12 +94,19 @@ export async function addProperty(propertyData) {
     if (!propertyData.property_name || !propertyData.address) {
       throw new Error("Property name and address are required");
     }
+
+    // Get current user
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      throw new Error("Authentication required to add property");
+    }
     
     // Ensure we have all required fields with defaults
     const insertData = {
       property_name: propertyData.property_name,
       code: propertyData.code || `PROP-${Date.now()}`,
       address: propertyData.address,
+      user_id: user.id, // Add user_id for RLS
       check_in_time: propertyData.check_in_time || '4:00 PM',
       check_out_time: propertyData.check_out_time || '11:00 AM',
       wifi_name: propertyData.wifi_name || '',
@@ -147,9 +154,15 @@ export async function uploadFile(propertyId, file) {
   try {
     console.log(`Uploading file for property ${propertyId}:`, file.name);
     
+    // Get current user for file path security
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      throw new Error("Authentication required to upload files");
+    }
+    
     const fileExt = file.name.split('.').pop();
     const fileName = `${Date.now()}-${file.name.replace(/\s/g, '_')}`;
-    const filePath = `properties/${propertyId}/knowledge_base/${fileName}`;
+    const filePath = `${user.id}/${propertyId}/knowledge_base/${fileName}`;
     
     const { data, error } = await supabase.storage
       .from('property-files')

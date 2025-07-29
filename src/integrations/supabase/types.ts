@@ -320,6 +320,7 @@ export type Database = {
           property_name: string
           special_notes: string | null
           updated_at: string
+          user_id: string | null
           wifi_name: string | null
           wifi_password: string | null
         }
@@ -342,6 +343,7 @@ export type Database = {
           property_name: string
           special_notes?: string | null
           updated_at?: string
+          user_id?: string | null
           wifi_name?: string | null
           wifi_password?: string | null
         }
@@ -364,6 +366,7 @@ export type Database = {
           property_name?: string
           special_notes?: string | null
           updated_at?: string
+          user_id?: string | null
           wifi_name?: string | null
           wifi_password?: string | null
         }
@@ -629,28 +632,11 @@ export type Database = {
       }
     }
     Views: {
-      common_questions_analytics: {
-        Row: {
-          frequency: number | null
-          last_asked: string | null
-          properties_asked: string[] | null
-          question_category: string | null
-        }
-        Relationships: []
-      }
-      common_recommendations_analytics: {
-        Row: {
-          frequency: number | null
-          last_mentioned: string | null
-          properties_mentioned: string[] | null
-          recommendation_name: string | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Functions: {
       admin_update_user_password: {
-        Args: { user_id: string; new_password: string }
+        Args: { target_user_id: string; new_password: string }
         Returns: undefined
       }
       hash_security_answer: {
