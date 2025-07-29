@@ -354,9 +354,12 @@ export class IntentRecognitionService {
       return { intent: 'ask_wifi', confidence: 0.9 };
     }
 
-    // Parking - be more specific to avoid false positives with "park" in other contexts
-    if (this.matchesKeywords(message, ['parking spot', 'parking lot', 'parking space', 'where to park', 'car park', 'parking garage', 'parking area', 'parking information']) ||
-        (this.matchesKeywords(message, ['parking']) && !this.matchesKeywords(message, ['nearby', 'near', 'around', 'close to', 'destination', 'location']))) {
+    // Parking - include "park" patterns when asking about parking
+    if (this.matchesKeywords(message, [
+      'parking', 'park', 'where to park', 'where do we park', 'where can i park',
+      'parking spot', 'parking lot', 'parking space', 'car park', 'parking garage', 
+      'parking area', 'parking information', 'do we park'
+    ])) {
       return { intent: 'ask_parking', confidence: 0.9 };
     }
 

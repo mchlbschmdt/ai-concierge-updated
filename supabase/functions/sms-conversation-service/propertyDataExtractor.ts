@@ -21,7 +21,7 @@ export class PropertyDataExtractor {
       
       if (specialNotes.includes('pool') || specialNotes.includes('Pool')) {
         const poolInfo = this.extractPoolInfo(specialNotes);
-        if (poolInfo) response += poolInfo;
+        if (poolInfo) response += poolInfo + ' ';
       }
       
       if (property.local_recommendations && property.local_recommendations.includes('Seven Eagles pool')) {

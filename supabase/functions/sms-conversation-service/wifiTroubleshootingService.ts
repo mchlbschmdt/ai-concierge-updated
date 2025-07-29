@@ -54,4 +54,22 @@ Did that help?`;
     
     return 'unclear';
   }
+
+  static handleWiFiQuery(property: any, message: string): string {
+    const wifiName = property.wifi_name;
+    const wifiPassword = property.wifi_password;
+    
+    if (!wifiName || !wifiPassword) {
+      return "Let me get the WiFi details for you - I'll check with your host about the network info.";
+    }
+    
+    // More conversational response
+    const responses = [
+      `Here's your WiFi info! 📶\n\nNetwork: ${wifiName}\nPassword: ${wifiPassword}\n\nJust connect like you would at home - should work right away!`,
+      `WiFi details coming right up! 📱\n\nNetwork: ${wifiName}\nPassword: ${wifiPassword}\n\nIt should connect automatically once you enter these.`,
+      `Got your WiFi info! 🌐\n\nNetwork: ${wifiName}\nPassword: ${wifiPassword}\n\nLet me know if you have any trouble connecting!`
+    ];
+    
+    return responses[Math.floor(Math.random() * responses.length)];
+  }
 }

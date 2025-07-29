@@ -25,26 +25,30 @@ export class ResponseGenerator {
     
     if (MessageUtils.matchesAnyKeywords(lowerMessage, ['food now', 'hungry', 'eat now', 'dinner now', 'lunch now'])) {
       const urgentPhrases = [
-        `${greeting}${nameToUse}! Hungry now? I've got you covered 🙂`,
-        `${greeting}${nameToUse}! Ready for a bite? Happy to help 🙂`,
-        `${greeting}${nameToUse}! Looks like you're ready for a bite—happy to help 🙂`
+        `${greeting}${nameToUse}! Hungry now? I've got you covered! 🍽️`,
+        `${greeting}${nameToUse}! Ready for a bite? Let me find you something great! 🙂`,
+        `${greeting}${nameToUse}! Looks like you're ready for a meal—I know just the spots! 😊`
       ];
       return urgentPhrases[Math.floor(Math.random() * urgentPhrases.length)];
     }
     
     if (MessageUtils.matchesAnyKeywords(lowerMessage, ['restaurant', 'food', 'eat', 'dining'])) {
-      return `${greeting}${nameToUse}! Looking for somewhere great to eat? I've got some perfect spots for you 🙂`;
+      return `${greeting}${nameToUse}! Looking for somewhere great to eat? I've got some perfect spots for you! 🍽️`;
     }
     
     if (MessageUtils.matchesAnyKeywords(lowerMessage, ['drink', 'bar', 'cocktail', 'beer'])) {
-      return `${greeting}${nameToUse}! Ready for drinks? I know some fantastic spots 🙂`;
+      return `${greeting}${nameToUse}! Ready for drinks? I know some fantastic spots! 🍻`;
     }
     
     if (MessageUtils.matchesAnyKeywords(lowerMessage, ['coffee', 'cafe'])) {
-      return `${greeting}${nameToUse}! Need your coffee fix? I've got great recommendations 🙂`;
+      return `${greeting}${nameToUse}! Need your coffee fix? I've got great recommendations! ☕`;
+    }
+
+    if (MessageUtils.matchesAnyKeywords(lowerMessage, ['park', 'parking'])) {
+      return `${greeting}${nameToUse}! Need to know about parking? I can help with that! 🚗`;
     }
     
-    return `${greeting}${nameToUse}! I'd love to help with recommendations 🙂`;
+    return `${greeting}${nameToUse}! I'd love to help with recommendations! 😊`;
   }
 
   static getClarifyingQuestion(message: string): string {

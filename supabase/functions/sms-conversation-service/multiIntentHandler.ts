@@ -107,9 +107,15 @@ export class MultiIntentHandler {
       
       case 'ask_parking': {
         if (property.parking_instructions) {
-          return `🚗 Parking: ${property.parking_instructions}`;
+          return `🚗 You can park ${property.parking_instructions.toLowerCase()}. Should be easy to find!`;
         } else {
-          return 'I can help you with parking information for this property.';
+          // Generate generic parking response
+          const responses = [
+            '🚗 You can park in the property\'s designated parking area - usually right on-site or very close by!',
+            '🚗 Parking is typically included with your stay. Look for the property\'s parking spots when you arrive!',
+            '🚗 No worries about parking - there\'s space available for guests at the property!'
+          ];
+          return responses[Math.floor(Math.random() * responses.length)];
         }
       }
       
