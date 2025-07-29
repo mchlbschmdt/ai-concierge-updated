@@ -146,13 +146,15 @@ export class IntentRecognitionService {
     return this.matchesKeywords(message, coffeeKeywords);
   }
 
-  // NEW: Detect attraction-specific intents
+  // NEW: Detect attraction-specific intents with enhanced location patterns
   private static detectAttractionIntent(message: string): boolean {
     const attractionKeywords = [
       'attraction', 'attractions', 'scenic', 'park', 'museum', 'landmark', 'tour', 'historic',
       'rainforest', 'old san juan', 'fort', 'beach', 'nature', 'hiking', 'waterfall',
       'sightseeing', 'tourist spot', 'places to visit', 'worth visiting', 'things to see',
-      'local attractions', 'interesting places', 'explore', 'visit', 'viewpoint'
+      'local attractions', 'interesting places', 'explore', 'visit', 'viewpoint',
+      'how far to', 'distance to', 'directions to', 'animal kingdom', 'disney', 'universal',
+      'theme park', 'epcot', 'hollywood studios', 'magic kingdom', 'islands of adventure'
     ];
     
     return this.matchesKeywords(message, attractionKeywords);

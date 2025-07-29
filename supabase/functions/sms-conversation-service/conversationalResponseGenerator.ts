@@ -11,6 +11,12 @@ export class ConversationalResponseGenerator {
   ): string {
     const namePrefix = guestName ? `${guestName}, ` : '';
     
+    // ✅ ENHANCED: Check for repetitive patterns first
+    if (this.hasRecentSimilarResponse(intent, conversationFlow)) {
+      console.log('⚠️ Avoiding repetitive response for intent:', intent);
+      return this.generateVariedResponse(intent, conversationFlow, property, message, namePrefix);
+    }
+    
     // Handle follow-up intents with specific responses
     if (intent.includes('_followup')) {
       return this.generateFollowUpResponse(intent, conversationFlow, property, message, namePrefix);
@@ -421,5 +427,77 @@ export class ConversationalResponseGenerator {
     };
     
     return names[intent] || 'your stay';
+  }
+
+  /**
+   * ✅ ENHANCED: Check for repetitive response patterns
+   */
+  private static hasRecentSimilarResponse(intent: string, conversationFlow: ConversationFlow): boolean {
+    const recentTopics = conversationFlow.recentTopics || [];
+    
+    // Check if we've seen this intent recently (within last 3 interactions)
+    const recentSameIntents = recentTopics
+      .slice(-3)
+      .filter(topic => topic.intent === intent);
+    
+    // If we've responded to this intent 2+ times recently, it's repetitive
+    return recentSameIntents.length >= 2;
+  }
+
+  /**
+   * ✅ ENHANCED: Generate varied responses to avoid repetition
+   */
+  private static generateVariedResponse(
+    intent: string,
+    conversationFlow: ConversationFlow,
+    property: any,
+    message: string,
+    namePrefix: string
+  ): string {
+    console.log('🔄 Generating varied response for:', intent);
+    
+    const lowerMessage = message.toLowerCase();
+    
+    // For location-based queries, route to AI instead of generic responses
+    if (this.isLocationQuery(lowerMessage) || this.isRecommendationIntent(intent)) {
+      console.log('🌍 Location-based repetitive query, routing to AI');
+      return 'USE_RECOMMENDATION_SERVICE';
+    }
+    
+    // For property-specific queries, provide different angle
+    switch (intent) {
+      case 'ask_wifi':
+        return `${namePrefix}Still having WiFi trouble? Let me help you troubleshoot or connect you with tech support.`;
+      
+      case 'ask_checkin_time':
+        return `${namePrefix}Planning your arrival? I can help with early check-in options or directions to the property.`;
+      
+      case 'ask_checkout_time':
+        return `${namePrefix}Getting ready to leave? I can assist with late checkout requests or departure planning.`;
+      
+      case 'ask_parking':
+        return `${namePrefix}Need clearer parking directions? I can get you specific spot details or contact the property.`;
+      
+      case 'ask_emergency_contact':
+        return `${namePrefix}Ready to contact the property? I can help you prepare what to mention or find alternative contacts.`;
+      
+      default:
+        // More helpful fallback than generic responses
+        return `${namePrefix}I want to make sure I'm giving you the right help. Could you tell me more specifically what you're looking for?`;
+    }
+  }
+
+  /**
+   * Helper to identify location-based queries
+   */
+  private static isLocationQuery(message: string): boolean {
+    const locationKeywords = [
+      'restaurant', 'food', 'eat', 'dining', 'coffee', 'cafe',
+      'attraction', 'activity', 'things to do', 'places to visit',
+      'how far', 'distance', 'directions to', 'near', 'nearby',
+      'grocery', 'store', 'shopping', 'recommendations'
+    ];
+    
+    return locationKeywords.some(keyword => message.includes(keyword));
   }
 }

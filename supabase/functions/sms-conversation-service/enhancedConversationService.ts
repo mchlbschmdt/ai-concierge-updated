@@ -17,6 +17,8 @@ import { PropertyContextSwitcher } from './propertyContextSwitcher.ts';
 import { MultiQueryParser } from './multiQueryParser.ts';
 import { RecommendationDiversifier } from './recommendationDiversifier.ts';
 import { PerplexityRecommendationService } from './perplexityRecommendationService.ts';
+import { EnhancedPropertyKnowledgeService } from './enhancedPropertyKnowledgeService.ts';
+import { EnhancedIntentRouter } from './enhancedIntentRouter.ts';
 import { Conversation, Property } from './types.ts';
 
 export class EnhancedConversationService {
@@ -166,12 +168,12 @@ export class EnhancedConversationService {
           return await this.handleMultipleRequests(intentResult.subIntents, property, conversation, message);
         }
 
-        // Handle recommendation intents with enhanced context and diversification
-        console.log('🎯 Detected recommendation intent:', intentResult.intent);
-        if (this.isRecommendationIntent(intentResult.intent)) {
-          const result = await this.handleRecommendationWithDiversification(intentResult.intent, property, message, conversation);
-          console.log('📋 Recommendation result:', typeof result, result);
-          return result;
+        // ✅ PHASE 1: Enhanced Knowledge-First Response System
+        console.log('🎯 Processing with enhanced knowledge-first approach:', intentResult.intent);
+        const enhancedResponse = await this.processWithKnowledgeFirst(intentResult.intent, message, property, conversation);
+        if (enhancedResponse) {
+          console.log('✅ Enhanced response generated');
+          return enhancedResponse;
         }
 
         // Phase 4: Property Context Enhancement
@@ -1447,6 +1449,123 @@ export class EnhancedConversationService {
     }
     
     return rejected;
+  }
+
+  /**
+   * ✅ PHASE 1: Enhanced Knowledge-First Processing
+   * Implements hierarchical response system: Property Knowledge → External AI → Fallback
+   */
+  private async processWithKnowledgeFirst(intent: string, message: string, property: Property, conversation: Conversation) {
+    console.log('🔍 Enhanced knowledge-first processing:', { intent, message: message.substring(0, 50) });
+
+    // STEP 1: Route the query intelligently
+    const routeDecision = EnhancedIntentRouter.routeQuery(message, intent, property);
+    console.log('🧭 Route decision:', routeDecision);
+
+    // STEP 2: Handle based on routing decision
+    switch (routeDecision.route) {
+      case 'property_knowledge':
+        console.log('✅ Using property knowledge directly');
+        if (routeDecision.needsAI) {
+          // Enhance property knowledge with AI context
+          const enhancedPrompt = EnhancedIntentRouter.enhancePromptWithPropertyContext(message, property);
+          const aiEnhancement = await this.getAIEnhancement(enhancedPrompt, property, conversation);
+          const combinedResponse = this.combineKnowledgeWithAI(routeDecision.content!, aiEnhancement);
+          return await this.updateConversationAndRespond(conversation.phone_number, intent, combinedResponse, conversation);
+        } else {
+          // Use property knowledge as-is
+          return await this.updateConversationAndRespond(conversation.phone_number, intent, routeDecision.content!, conversation);
+        }
+
+      case 'external_ai':
+        console.log('🤖 Routing to external AI');
+        if (this.isRecommendationIntent(intent)) {
+          // Use existing recommendation system for location-based queries
+          return await this.handleRecommendationWithDiversification(intent, property, message, conversation);
+        } else {
+          // Handle other AI queries
+          const aiResponse = await this.getAIEnhancement(message, property, conversation);
+          return await this.updateConversationAndRespond(conversation.phone_number, intent, aiResponse, conversation);
+        }
+
+      case 'clarification':
+        console.log('❓ Providing clarification');
+        return await this.updateConversationAndRespond(conversation.phone_number, intent, routeDecision.content!, conversation);
+
+      case 'error':
+      default:
+        console.log('⚠️ Fallback to contextual response');
+        return await this.generateContextualFallback(conversation, property, intent, message);
+    }
+  }
+
+  /**
+   * Get AI enhancement for property knowledge
+   */
+  private async getAIEnhancement(prompt: string, property: Property, conversation: Conversation): Promise<string> {
+    try {
+      // Try Perplexity first for real-time local information
+      const perplexityResponse = await PerplexityRecommendationService.getLocalRecommendations(
+        property,
+        prompt,
+        conversation,
+        'general',
+        []
+      );
+      
+      if (perplexityResponse && perplexityResponse.length > 20) {
+        return perplexityResponse;
+      }
+    } catch (error) {
+      console.log('⚠️ Perplexity enhancement failed, using fallback');
+    }
+
+    // Fallback to local property data
+    return this.generateLocalPropertyResponse(prompt, property);
+  }
+
+  /**
+   * Combine property knowledge with AI enhancement
+   */
+  private combineKnowledgeWithAI(propertyKnowledge: string, aiEnhancement: string): string {
+    if (!aiEnhancement || aiEnhancement.length < 20) {
+      return propertyKnowledge;
+    }
+
+    // If both are substantial, combine them intelligently
+    if (propertyKnowledge.length > 50 && aiEnhancement.length > 50) {
+      return `${propertyKnowledge}\n\n${aiEnhancement}`;
+    }
+
+    // Otherwise, use the longer/better response
+    return aiEnhancement.length > propertyKnowledge.length ? aiEnhancement : propertyKnowledge;
+  }
+
+  /**
+   * Generate local property response when AI is unavailable
+   */
+  private generateLocalPropertyResponse(query: string, property: Property): string {
+    const lowerQuery = query.toLowerCase();
+    
+    // Check for local recommendations in property data
+    if (property.local_recommendations) {
+      const localRecs = property.local_recommendations.toLowerCase();
+      
+      if (lowerQuery.includes('food') || lowerQuery.includes('restaurant')) {
+        if (localRecs.includes('restaurant') || localRecs.includes('dining')) {
+          return property.local_recommendations;
+        }
+      }
+      
+      if (lowerQuery.includes('activity') || lowerQuery.includes('attraction')) {
+        if (localRecs.includes('activity') || localRecs.includes('attraction') || localRecs.includes('park')) {
+          return property.local_recommendations;
+        }
+      }
+    }
+
+    // Fallback to contextual suggestion
+    return `I'd love to help you find local recommendations! Let me know what specifically you're looking for near ${property.address || 'your property'}.`;
   }
 
   private async processConfirmedStateMessage(message: string, conversation: Conversation, property: Property, phoneNumber: string) {
