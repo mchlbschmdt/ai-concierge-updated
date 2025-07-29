@@ -22,6 +22,7 @@ import FaqEditor from "./pages/FaqEditor";
 import ResetPassword from "./pages/ResetPassword";
 import GoogleAuthCallback from "./pages/GoogleAuthCallback";
 import TravelGuideAdmin from "./pages/TravelGuideAdmin";
+import Register from "./pages/Register";
 
 const queryClient = new QueryClient();
 
@@ -35,6 +36,7 @@ const App = () => (
             <Sonner />
             <Routes>
               <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/auth/callback" element={<GoogleAuthCallback />} />
               <Route path="/" element={

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "./integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
+import { loginRateLimiter } from "./utils/inputValidation";
 import GoogleOAuthButton from "./components/GoogleOAuthButton";
 import CustomPasswordReset from "./components/CustomPasswordReset";
 import SecurityQuestionsReset from "./components/SecurityQuestionsReset";
@@ -29,12 +30,31 @@ export default function Login() {
     setError("");
     
     try {
+      // Check rate limiting
+      if (!loginRateLimiter.isAllowed(email)) {
+        const remainingTime = Math.ceil(loginRateLimiter.getRemainingTime(email) / (1000 * 60));
+        throw new Error(`Too many login attempts. Please try again in ${remainingTime} minutes.`);
+      }
+
+      // Validate inputs
+      if (!email || !password) {
+        throw new Error("Email and password are required");
+      }
+
+      // Sanitize email
+      const sanitizedEmail = email.trim().toLowerCase();
+
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
+        email: sanitizedEmail,
         password
       });
       
-      if (error) throw error;
+      if (error) {
+        if (error.message.includes("Invalid login credentials")) {
+          throw new Error("Invalid email or password. Please check your credentials and try again.");
+        }
+        throw error;
+      }
 
       toast({
         title: "Login successful",
