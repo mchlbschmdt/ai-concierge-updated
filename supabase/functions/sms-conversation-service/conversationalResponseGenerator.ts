@@ -58,6 +58,16 @@ export class ConversationalResponseGenerator {
   ): string {
     const baseIntent = intent.replace('_followup', '').replace('_generic_followup', '');
     const lowerMessage = message.toLowerCase();
+    
+    // Handle new distance-specific follow-ups
+    if (intent === 'ask_distance_followup') {
+      return this.handleDistanceFollowUp(lowerMessage, conversationFlow, namePrefix, property);
+    }
+    
+    // Handle restaurant-specific follow-ups
+    if (intent === 'ask_restaurant_followup') {
+      return this.handleRestaurantFollowUp(lowerMessage, conversationFlow, namePrefix, property);
+    }
 
     // Handle contextual references like "that restaurant", "there", "it", etc.
     if (this.isContextualReference(lowerMessage)) {
@@ -137,6 +147,118 @@ export class ConversationalResponseGenerator {
     return contextualWords.some(word => message.includes(word));
   }
 
+  private static handleDistanceFollowUp(
+    message: string,
+    conversationFlow: ConversationFlow,
+    namePrefix: string,
+    property: any
+  ): string {
+    const lastResponse = conversationFlow.lastSpecificResponse || '';
+    const propertyAddress = property?.address || '';
+    
+    // Extract restaurant name from the message or last response
+    let restaurantName = this.extractRestaurantFromMessage(message);
+    if (!restaurantName) {
+      restaurantName = this.extractRestaurantFromResponse(lastResponse);
+    }
+    
+    if (restaurantName) {
+      // Use LocationService to get accurate distance
+      import('./locationService.ts').then(async ({ LocationService }) => {
+        const distanceInfo = await LocationService.getAccurateDistance(
+          propertyAddress,
+          restaurantName
+        );
+        
+        if (distanceInfo) {
+          const walkableText = distanceInfo.walkable ? 'You can walk there!' : 'You\'ll need to drive or take an Uber.';
+          return `${namePrefix}${restaurantName} is ${distanceInfo.distance} away (about ${distanceInfo.duration} by car). ${walkableText} 🚗`;
+        }
+      });
+      
+      // Fallback response while distance calculation happens
+      if (propertyAddress.toLowerCase().includes('reunion')) {
+        return `${namePrefix}${restaurantName} is close by! Most restaurants in the area are 5-15 minutes drive from Reunion Resort. Would you like specific directions? 📍`;
+      } else {
+        return `${namePrefix}${restaurantName} is in the local area, typically 5-20 minutes drive. Would you like me to help with directions? 🗺️`;
+      }
+    }
+    
+    return `${namePrefix}Which restaurant are you asking about? I can give you distance and direction info! 📍`;
+  }
+  
+  private static handleRestaurantFollowUp(
+    message: string,
+    conversationFlow: ConversationFlow,
+    namePrefix: string,
+    property: any
+  ): string {
+    const lastResponse = conversationFlow.lastSpecificResponse || '';
+    
+    // Extract restaurant name from message or previous response
+    let restaurantName = this.extractRestaurantFromMessage(message);
+    if (!restaurantName) {
+      restaurantName = this.extractRestaurantFromResponse(lastResponse);
+    }
+    
+    if (message.includes('far') || message.includes('distance') || message.includes('drive') || message.includes('walk')) {
+      return this.handleDistanceFollowUp(message, conversationFlow, namePrefix, property);
+    }
+    
+    if (message.includes('hours') || message.includes('open') || message.includes('time')) {
+      const restaurant = restaurantName || 'the restaurant';
+      return `${namePrefix}${restaurant} typically operates standard dinner hours, but I'd recommend calling ahead to confirm. Would you like me to help find their contact info? 📞`;
+    }
+    
+    if (message.includes('reservation') || message.includes('book') || message.includes('phone')) {
+      const restaurant = restaurantName || 'that restaurant';
+      return `${namePrefix}${restaurant} usually accepts walk-ins, but for busy nights, a reservation is smart! I can help you find their phone number. 🍽️`;
+    }
+    
+    if (message.includes('direction') || message.includes('how to get') || message.includes('address')) {
+      const restaurant = restaurantName || 'the restaurant';
+      return `${namePrefix}I can help with directions to ${restaurant}! It's easily accessible from your location. Would you like turn-by-turn directions? 🧭`;
+    }
+    
+    // Generic restaurant follow-up
+    const restaurant = restaurantName || 'the restaurant I recommended';
+    return `${namePrefix}What would you like to know about ${restaurant}? I can help with directions, hours, or contact info! 🍴`;
+  }
+  
+  private static extractRestaurantFromMessage(message: string): string | null {
+    // Look for restaurant names in the message
+    const commonRestaurants = ['coopershawk', 'cooper hawk', 'paddlefish', 'homecomin', 'boathouse', 'wharf', 'eleven'];
+    
+    for (const restaurant of commonRestaurants) {
+      if (message.toLowerCase().includes(restaurant)) {
+        return restaurant;
+      }
+    }
+    
+    return null;
+  }
+  
+  private static extractRestaurantFromResponse(response: string): string | null {
+    // Extract restaurant names from previous response
+    const patterns = [
+      /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:Restaurant|Cafe|Bistro|Bar|Grill)/gi,
+      /(?:Try|Visit|Check out)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/gi,
+      /\b([A-Z][a-z]+(?:'s)?(?:\s+[A-Z][a-z]+)*)\s+(?:is|offers|serves|has)/gi
+    ];
+    
+    for (const pattern of patterns) {
+      const match = response.match(pattern);
+      if (match) {
+        const nameMatch = match[0].match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/);
+        if (nameMatch) {
+          return nameMatch[1];
+        }
+      }
+    }
+    
+    return null;
+  }
+
   private static handleContextualReference(
     message: string, 
     conversationFlow: ConversationFlow, 
@@ -151,31 +273,19 @@ export class ConversationalResponseGenerator {
         message.includes('animal kingdom') || message.includes('hollywood studios')) {
       
       if (lastTopic?.intent === 'ask_food_recommendations' && lastRecommendations) {
-        // Extract restaurant name from last recommendation if possible
-        const restaurantMatch = lastRecommendations.match(/(\w+['']?\w*(?:\s+\w+)*?)(?:\s+\(|,|\s+is)/);
-        const restaurantName = restaurantMatch ? restaurantMatch[1] : 'the restaurant I recommended';
-        
-        // Provide distance context based on property location
-        const propertyAddress = property?.address || '';
-        if (propertyAddress.toLowerCase().includes('reunion') || propertyAddress.toLowerCase().includes('kissimmee')) {
-          return `${namePrefix}${restaurantName} is about 12-15 minutes from Disney parks, similar to your property location. It's an easy drive to any of the parks!`;
-        } else if (propertyAddress.toLowerCase().includes('orlando')) {
-          return `${namePrefix}${restaurantName} is typically 8-15 minutes from Disney parks depending on traffic and which park you're visiting. Want specific directions?`;
-        } else {
-          return `${namePrefix}${restaurantName} is in the Disney area, so it should be close to all the parks. Would you like specific directions to the restaurant or a particular park?`;
-        }
+        return this.handleDistanceFollowUp(message, conversationFlow, namePrefix, property);
       }
     }
     
     // Handle other contextual references
     if ((message.includes('that') || message.includes('there') || message.includes('it')) && lastRecommendations) {
       if (lastTopic?.intent === 'ask_food_recommendations') {
-        return `${namePrefix}I can give you more details about the restaurant I recommended! What specifically would you like to know - directions, hours, or something else?`;
+        return `${namePrefix}I can give you more details about the restaurant I recommended! What specifically would you like to know - directions, hours, or something else? 🍽️`;
       }
     }
     
     // Fallback for contextual references
-    return `${namePrefix}I want to make sure I understand what you're referring to. Could you be more specific about what you'd like to know?`;
+    return `${namePrefix}I want to make sure I understand what you're referring to. Could you be more specific about what you'd like to know? 🤔`;
   }
 
   private static generateContextAwareResponse(
@@ -280,13 +390,22 @@ export class ConversationalResponseGenerator {
       return options[(depth - 1) % options.length];
     }
 
-    return `${namePrefix}Let me double-check that information for you.`;
+    // More helpful fallback instead of generic "double-check"
+    return `${namePrefix}What specific information can I help you with? 🤔`;
   }
 
   private static generateSmartDefault(namePrefix: string, flow: ConversationFlow, intent: string): string {
-    // Don't reference past topics unless we actually provided useful information
-    // Instead, focus on being helpful for the current request
-    return `${namePrefix}I'm here to help! Let me look into that for you.`;
+    // Reduce generic responses by providing more specific help based on context
+    const lastTopic = flow.currentTopic?.intent;
+    
+    // If we just had a conversation, offer to continue helping
+    if (flow.conversationDepth > 2 && lastTopic) {
+      const topicName = this.getIntentFriendlyName(lastTopic);
+      return `${namePrefix}Need more help with ${topicName} or something else? I'm here to assist! 😊`;
+    }
+    
+    // More engaging default response
+    return `${namePrefix}What can I help you with today? Dining, activities, property info? 🏠✨`;
   }
 
   private static getIntentFriendlyName(intent: string): string {

@@ -51,6 +51,17 @@ export class ConversationContextTracker {
     if (!conversationFlow.currentTopic) return null;
 
     const lastIntent = conversationFlow.currentTopic.intent;
+    const lastResponse = conversationFlow.lastSpecificResponse || '';
+    
+    // Enhanced distance and restaurant-specific follow-up detection
+    if (this.isDistanceQuestion(lowerMessage)) {
+      return 'ask_distance_followup';
+    }
+    
+    // Enhanced restaurant name recognition from previous recommendations
+    if (this.isRestaurantSpecificQuestion(lowerMessage, lastResponse)) {
+      return 'ask_restaurant_followup';
+    }
     
     // Check for common follow-up patterns
     const followUpPatterns: Record<string, string[]> = {
@@ -64,7 +75,8 @@ export class ConversationContextTracker {
         'where exactly', 'which spot', 'how do i', 'contact', 'full'
       ],
       'ask_food_recommendations': [
-        'directions', 'how to get', 'reservation', 'hours', 'contact', 'phone'
+        'directions', 'how to get', 'reservation', 'hours', 'contact', 'phone',
+        'how far', 'distance', 'drive to', 'walk to', 'close', 'near'
       ]
     };
 
@@ -73,12 +85,75 @@ export class ConversationContextTracker {
       return `${lastIntent}_followup`;
     }
 
-    // Generic follow-up questions
+    // Generic follow-up questions (more restrictive)
     if (this.isGenericFollowUp(lowerMessage)) {
       return `${lastIntent}_generic_followup`;
     }
 
     return null;
+  }
+  
+  private static isDistanceQuestion(message: string): boolean {
+    const distancePatterns = [
+      'how far away is', 'how far is', 'distance to', 'distance from',
+      'how close is', 'how long to get to', 'walk to', 'drive to',
+      'far away is', 'close to', 'near to'
+    ];
+    
+    return distancePatterns.some(pattern => message.includes(pattern));
+  }
+  
+  private static isRestaurantSpecificQuestion(message: string, lastResponse: string): boolean {
+    // Extract restaurant names from the last response
+    const restaurantNames = this.extractRestaurantNames(lastResponse);
+    
+    // Check if the message mentions any of these restaurants
+    for (const name of restaurantNames) {
+      if (message.toLowerCase().includes(name.toLowerCase())) {
+        return true;
+      }
+    }
+    
+    // Check for generic restaurant references
+    const restaurantReferences = [
+      'that restaurant', 'the restaurant', 'that place', 'the place',
+      'there', 'it', 'them', 'this place', 'that spot'
+    ];
+    
+    return restaurantReferences.some(ref => message.includes(ref));
+  }
+  
+  private static extractRestaurantNames(response: string): string[] {
+    const names: string[] = [];
+    
+    // Common restaurant name patterns
+    const patterns = [
+      /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:Restaurant|Cafe|Bistro|Bar|Grill)/gi,
+      /(?:Try|Visit|Check out)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/gi,
+      /\b([A-Z][a-z]+(?:'s)?(?:\s+[A-Z][a-z]+)*)\s+(?:is|offers|serves|has)/gi
+    ];
+    
+    patterns.forEach(pattern => {
+      const matches = response.match(pattern);
+      if (matches) {
+        matches.forEach(match => {
+          const nameMatch = match.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/);
+          if (nameMatch) {
+            names.push(nameMatch[1]);
+          }
+        });
+      }
+    });
+    
+    // Also look for specific restaurant names mentioned
+    const commonNames = ['coopershawk', 'cooper hawk', 'paddlefish', 'homecomin', 'boathouse', 'wharf'];
+    commonNames.forEach(name => {
+      if (response.toLowerCase().includes(name)) {
+        names.push(name);
+      }
+    });
+    
+    return [...new Set(names)]; // Remove duplicates
   }
 
   private static isGenericFollowUp(message: string): boolean {
@@ -112,6 +187,19 @@ export class ConversationContextTracker {
     const urgencyWords = ['urgent', 'asap', 'quickly', 'soon', 'now'];
     if (urgencyWords.some(word => message.toLowerCase().includes(word))) {
       details.urgency = 'high';
+    }
+    
+    // Extract restaurant names or specific places mentioned
+    if (intent.includes('food') || intent.includes('restaurant')) {
+      const restaurantMentions = this.extractRestaurantNames(message);
+      if (restaurantMentions.length > 0) {
+        details.restaurantNames = restaurantMentions;
+      }
+    }
+    
+    // Extract distance-related context
+    if (message.toLowerCase().includes('far') || message.toLowerCase().includes('distance')) {
+      details.askingDistance = true;
     }
 
     return details;

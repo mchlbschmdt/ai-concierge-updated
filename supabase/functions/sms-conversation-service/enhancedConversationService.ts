@@ -555,6 +555,29 @@ export class EnhancedConversationService {
     const context = conversation.conversation_context || {};
     const conversationFlow = context.conversation_flow || {};
     
+    // Special handling for distance follow-ups - use LocationService
+    if (followUpIntent === 'ask_distance_followup') {
+      const restaurantName = this.extractRestaurantFromMessage(message);
+      if (restaurantName) {
+        try {
+          const distanceInfo = await LocationService.getAccurateDistance(
+            property.address,
+            restaurantName
+          );
+          
+          if (distanceInfo) {
+            const walkableText = distanceInfo.walkable ? '🚶‍♂️ You can walk there!' : '🚗 You\'ll need to drive or take an Uber.';
+            const namePrefix = context.guest_name ? `${context.guest_name}, ` : '';
+            const response = `${namePrefix}${restaurantName} is ${distanceInfo.distance} away (about ${distanceInfo.duration} by car). ${walkableText}`;
+            
+            return await this.updateConversationAndReturnResponse(conversation, followUpIntent, message, response);
+          }
+        } catch (error) {
+          console.error('Error getting distance info:', error);
+        }
+      }
+    }
+    
     // Generate contextual response using ConversationalResponseGenerator
     const response = ConversationalResponseGenerator.generateContextualResponse(
       followUpIntent,
@@ -564,10 +587,35 @@ export class EnhancedConversationService {
       context.guest_name
     );
     
-    // Update conversation flow with follow-up
+    // Check if response signals to use recommendation service
+    if (response === 'USE_RECOMMENDATION_SERVICE') {
+      return await this.handleRecommendationWithContext('ask_food_recommendations', property, message, conversation);
+    }
+    
+    return await this.updateConversationAndReturnResponse(conversation, followUpIntent, message, response);
+  }
+  
+  private extractRestaurantFromMessage(message: string): string | null {
+    // Look for restaurant names in the message
+    const commonRestaurants = ['coopershawk', 'cooper hawk', 'paddlefish', 'homecomin', 'boathouse', 'wharf', 'eleven'];
+    
+    for (const restaurant of commonRestaurants) {
+      if (message.toLowerCase().includes(restaurant)) {
+        return restaurant;
+      }
+    }
+    
+    return null;
+  }
+  
+  private async updateConversationAndReturnResponse(conversation: Conversation, intent: string, message: string, response: string) {
+    const context = conversation.conversation_context || {};
+    const conversationFlow = context.conversation_flow || {};
+    
+    // Update conversation flow
     const updatedFlow = ConversationContextTracker.updateConversationFlow(
       conversationFlow,
-      followUpIntent,
+      intent,
       message,
       response
     );
@@ -578,7 +626,7 @@ export class EnhancedConversationService {
         ...context,
         conversation_flow: updatedFlow
       },
-      last_message_type: followUpIntent
+      last_message_type: intent
     });
     
     return {
@@ -732,6 +780,36 @@ export class EnhancedConversationService {
     const context = conversation.conversation_context || {};
     const conversationFlow = context.conversation_flow || {};
     
+    // NEW: Check for distance questions that weren't caught as follow-ups
+    if (message && this.isDistanceQuestion(message)) {
+      console.log('📍 Fallback detected distance question:', message);
+      const restaurantName = this.extractRestaurantFromMessage(message);
+      
+      if (restaurantName) {
+        try {
+          const distanceInfo = await LocationService.getAccurateDistance(
+            property.address,
+            restaurantName
+          );
+          
+          if (distanceInfo) {
+            const walkableText = distanceInfo.walkable ? '🚶‍♂️ You can walk there!' : '🚗 You\'ll need to drive or take an Uber.';
+            const namePrefix = context.guest_name ? `${context.guest_name}, ` : '';
+            const response = `${namePrefix}${restaurantName} is ${distanceInfo.distance} away (about ${distanceInfo.duration} by car). ${walkableText}`;
+            
+            return await this.updateConversationAndReturnResponse(conversation, 'ask_distance_info', message, response);
+          }
+        } catch (error) {
+          console.error('Error getting distance info:', error);
+        }
+      }
+      
+      // Fallback for distance questions without specific restaurant
+      const namePrefix = context.guest_name ? `${context.guest_name}, ` : '';
+      const response = `${namePrefix}Which restaurant are you asking about? I can give you distance and direction info! 📍`;
+      return await this.updateConversationAndReturnResponse(conversation, 'ask_distance_info', message, response);
+    }
+    
     // Check if this could be a food/restaurant request that wasn't caught
     if (message && this.couldBeFoodRequest(message)) {
       console.log('🍽️ Fallback detected potential food request:', message);
@@ -758,26 +836,18 @@ export class EnhancedConversationService {
       return await this.handleRecommendationWithContext(intent || 'ask_food_recommendations', property, message || '', conversation);
     }
     
-    // Update conversation flow for fallback
-    const updatedFlow = ConversationContextTracker.updateConversationFlow(
-      conversationFlow,
-      intent || 'general_inquiry',
-      message || '',
-      response
-    );
+    return await this.updateConversationAndReturnResponse(conversation, intent || 'general_inquiry', message || '', response);
+  }
+  
+  private isDistanceQuestion(message: string): boolean {
+    const lowerMessage = message.toLowerCase();
+    const distancePatterns = [
+      'how far away is', 'how far is', 'distance to', 'distance from',
+      'how close is', 'how long to get to', 'walk to', 'drive to',
+      'far away is', 'close to', 'near to'
+    ];
     
-    await this.conversationManager.updateConversationState(conversation.phone_number, {
-      conversation_context: {
-        ...context,
-        conversation_flow: updatedFlow
-      },
-      last_message_type: intent || 'general_inquiry'
-    });
-    
-    return {
-      response: MessageUtils.ensureSmsLimit(response),
-      shouldUpdateState: false
-    };
+    return distancePatterns.some(pattern => lowerMessage.includes(pattern));
   }
 
   // ✅ NEW: Check if message could be a food request not caught by intent recognition
