@@ -59,10 +59,13 @@ export class MultiIntentHandler {
     const lowerMessage = message.toLowerCase();
     
     switch (intent) {
-      case 'ask_property_specific': {
+      case 'ask_property_specific': 
+      case 'ask_amenity': {
         // Handle property amenities and checkout questions
         if (lowerMessage.includes('amenities') || lowerMessage.includes('pool') || 
-            lowerMessage.includes('hot tub') || lowerMessage.includes('game room')) {
+            lowerMessage.includes('hot tub') || lowerMessage.includes('game room') ||
+            lowerMessage.includes('grill') || lowerMessage.includes('bbq') ||
+            lowerMessage.includes('wifi') || lowerMessage.includes('ac')) {
           const response = PropertyDataExtractor.extractAmenityInfo(property, message);
           return response.hasData ? response.content : 'Let me get the amenity details for this property.';
         }

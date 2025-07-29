@@ -14,6 +14,15 @@ export class PropertyDataExtractor {
     let response = '';
     let hasData = false;
     
+    // BBQ Grill information
+    if ((lowerMessage.includes('grill') || lowerMessage.includes('bbq') || lowerMessage.includes('barbecue')) && amenities.includes('BBQ Grill')) {
+      response += '🔥 Yes! There\'s a BBQ grill available for you to use! Perfect for grilling up some dinner. 🍖\n\nWant me to recommend what groceries to pick up for a cookout?';
+      hasData = true;
+    } else if (lowerMessage.includes('grill') || lowerMessage.includes('bbq') || lowerMessage.includes('barbecue')) {
+      response += '🔥 No grill at this property, but I can recommend great BBQ restaurants nearby if you\'re craving grilled food! 🍖';
+      hasData = true;
+    }
+    
     // Pool information
     if (lowerMessage.includes('pool') && amenities.includes('Pool')) {
       response += '🏊‍♀️ Yes! The property has a pool. ';
@@ -38,6 +47,30 @@ export class PropertyDataExtractor {
         const hotTubInfo = this.extractHotTubInfo(specialNotes);
         if (hotTubInfo) response += hotTubInfo;
       }
+    }
+    
+    // WiFi information
+    if (lowerMessage.includes('wifi') || lowerMessage.includes('internet') || lowerMessage.includes('password')) {
+      if (property.wifi_name && property.wifi_password) {
+        response += `📶 WiFi Info:\nNetwork: "${property.wifi_name}"\nPassword: "${property.wifi_password}"\n\nYou should be all set to connect! 📱`;
+        hasData = true;
+      } else {
+        response += '📶 WiFi is available - check your welcome guide or contact your host for the network details! 📱';
+        hasData = true;
+      }
+    }
+    
+    // Air conditioning information
+    if ((lowerMessage.includes('ac') || lowerMessage.includes('air conditioning') || lowerMessage.includes('cooling')) && amenities.includes('Air Conditioning')) {
+      response += '❄️ Yes! Air conditioning is available to keep you comfortable! 🌡️';
+      
+      if (specialNotes.includes('HVAC') || specialNotes.includes('A/C')) {
+        const acNote = specialNotes.match(/The HVAC.*?(?=\n\n|\.$|$)/i);
+        if (acNote) {
+          response += `\n\n💡 Tip: ${acNote[0]}`;
+        }
+      }
+      hasData = true;
     }
     
     // Game room / entertainment

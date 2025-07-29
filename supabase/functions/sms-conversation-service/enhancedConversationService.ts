@@ -680,15 +680,19 @@ export class EnhancedConversationService {
     
     // Handle specific property intents with data extraction
     switch (intent) {
-      case 'ask_property_specific': {
+      case 'ask_property_specific':
+      case 'ask_amenity': {
         const amenityResponse = PropertyDataExtractor.extractAmenityInfo(property, message);
         const checkoutResponse = PropertyDataExtractor.extractCheckoutInfo(property);
         
         let combinedResponse = '';
         
-        // Handle amenity questions
+        // Handle amenity questions (including grill, pool, hot tub, etc.)
         if (message.toLowerCase().includes('amenities') || message.toLowerCase().includes('pool') || 
-            message.toLowerCase().includes('hot tub') || message.toLowerCase().includes('game room')) {
+            message.toLowerCase().includes('hot tub') || message.toLowerCase().includes('game room') ||
+            message.toLowerCase().includes('grill') || message.toLowerCase().includes('bbq') ||
+            message.toLowerCase().includes('wifi') || message.toLowerCase().includes('ac') ||
+            message.toLowerCase().includes('air conditioning')) {
           if (amenityResponse.hasData) {
             combinedResponse += amenityResponse.content + ' ';
           } else {
@@ -711,6 +715,37 @@ export class EnhancedConversationService {
           return combinedResponse.trim();
         }
         break;
+      }
+      
+      case 'ask_food_recommendations': {
+        // Check if property has local_recommendations with restaurant info
+        if (property?.local_recommendations) {
+          const recommendations = property.local_recommendations;
+          
+          // Extract restaurant section if it exists
+          const diningSection = recommendations.match(/\*\*\*Dining[^*]*\*\*\*(.*?)(\*\*\*|$)/is);
+          if (diningSection) {
+            let diningText = diningSection[1].trim();
+            
+            // Format the dining recommendations more conversationally
+            let response = "🍽️ Here are some great local spots I recommend:\n\n";
+            
+            // Clean up the formatting
+            diningText = diningText
+              .replace(/--/g, '🍴 ')
+              .replace(/\n\n/g, '\n')
+              .replace(/\n+/g, '\n')
+              .trim();
+            
+            response += diningText;
+            response += "\n\nWhat sounds good? Want directions or more details about any of these? 😊";
+            
+            return response;
+          }
+        }
+        
+        // Fallback to AI recommendations if no property data
+        return null; // Let the recommendation service handle this
       }
       
       case 'ask_emergency_contact': {
