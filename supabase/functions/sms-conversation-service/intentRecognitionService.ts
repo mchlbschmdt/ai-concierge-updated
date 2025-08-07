@@ -40,6 +40,13 @@ export class IntentRecognitionService {
       return { intent: 'ask_coffee_recommendations', confidence: 0.95, isMultiPart: false };
     }
     
+    // NEW: Location/Direction queries - HIGH PRIORITY for AI routing
+    const locationIntent = this.detectLocationIntent(lowerMessage);
+    if (locationIntent) {
+      console.log('🌍 Location intent detected:', locationIntent, message);
+      return { intent: locationIntent, confidence: 0.95, isMultiPart: false };
+    }
+
     // NEW: Attractions - HIGH PRIORITY before general food
     if (this.detectAttractionIntent(lowerMessage)) {
       console.log('🏛️ Attraction intent detected:', message);
@@ -146,6 +153,53 @@ export class IntentRecognitionService {
     return this.matchesKeywords(message, coffeeKeywords);
   }
 
+  // NEW: Detect location/direction-based queries that should route to external AI
+  private static detectLocationIntent(message: string): string | null {
+    const lowerMessage = message.toLowerCase();
+    
+    // Distance and direction keywords - These should go to AI
+    const directionKeywords = [
+      'how far', 'distance to', 'directions to', 'how to get to',
+      'drive to', 'walk to', 'how close', 'how far away',
+      'miles to', 'minutes to', 'travel time'
+    ];
+    
+    // Location-based recommendation keywords - These should also go to AI
+    const locationKeywords = [
+      'restaurant near', 'food near', 'coffee near', 'places to eat',
+      'things to do near', 'attractions near', 'activities around',
+      'shopping near', 'grocery near', 'recommend', 'suggestions',
+      'best place', 'good place', 'where to', 'local'
+    ];
+    
+    // Check for direction/distance queries first
+    if (directionKeywords.some(keyword => lowerMessage.includes(keyword))) {
+      // Determine the type of location query
+      if (lowerMessage.includes('waterpark') || lowerMessage.includes('theme park') || lowerMessage.includes('attraction')) {
+        return 'ask_attractions';
+      }
+      if (lowerMessage.includes('restaurant') || lowerMessage.includes('food') || lowerMessage.includes('eat')) {
+        return 'ask_food_recommendations';
+      }
+      return 'ask_directions'; // Generic direction query
+    }
+    
+    // Check for recommendation queries
+    if (locationKeywords.some(keyword => lowerMessage.includes(keyword))) {
+      if (lowerMessage.includes('food') || lowerMessage.includes('restaurant') || lowerMessage.includes('eat') || lowerMessage.includes('dining')) {
+        return 'ask_food_recommendations';
+      }
+      if (lowerMessage.includes('coffee') || lowerMessage.includes('cafe')) {
+        return 'ask_coffee_recommendations';
+      }
+      if (lowerMessage.includes('attraction') || lowerMessage.includes('activity') || lowerMessage.includes('things to do') || lowerMessage.includes('fun')) {
+        return 'ask_attractions';
+      }
+    }
+    
+    return null;
+  }
+
   // NEW: Detect attraction-specific intents with enhanced location patterns
   private static detectAttractionIntent(message: string): boolean {
     const attractionKeywords = [
@@ -153,7 +207,7 @@ export class IntentRecognitionService {
       'rainforest', 'old san juan', 'fort', 'beach', 'nature', 'hiking', 'waterfall',
       'sightseeing', 'tourist spot', 'places to visit', 'worth visiting', 'things to see',
       'local attractions', 'interesting places', 'explore', 'visit', 'viewpoint',
-      'how far to', 'distance to', 'directions to', 'animal kingdom', 'disney', 'universal',
+      'animal kingdom', 'disney', 'universal',
       'theme park', 'epcot', 'hollywood studios', 'magic kingdom', 'islands of adventure'
     ];
     

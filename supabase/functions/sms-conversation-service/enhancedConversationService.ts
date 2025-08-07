@@ -131,7 +131,15 @@ export class EnhancedConversationService {
           };
         }
 
-        // ✅ NEW: Check for follow-up intents FIRST before processing new intents
+        // ✅ PHASE 1: Enhanced Knowledge-First Response System (HIGHEST PRIORITY)
+        console.log('🎯 Processing with enhanced knowledge-first approach:', intentResult.intent);
+        const enhancedResponse = await this.processWithKnowledgeFirst(intentResult.intent, message, property, conversation);
+        if (enhancedResponse && enhancedResponse.response && enhancedResponse.response.length > 10) {
+          console.log('✅ Enhanced knowledge-first response generated');
+          return enhancedResponse;
+        }
+
+        // ✅ Follow-up intents after knowledge check
         const conversationFlow = conversation.conversation_context?.conversation_flow;
         if (conversationFlow) {
           const followUpIntent = ConversationContextTracker.detectFollowUpIntent(message, conversationFlow);
@@ -141,54 +149,25 @@ export class EnhancedConversationService {
           }
         }
 
-        // PHASE 3: Enhanced intent detection for food, coffee & attraction queries with diversification
-        if (intentResult.intent === 'ask_food_recommendations' || 
-            intentResult.intent === 'ask_coffee_recommendations' || 
-            intentResult.intent === 'ask_attractions') {
-          const enhancedResponse = await this.handleEnhancedRecommendationWithDiversification(intentResult.intent, property, message, conversation);
-          if (enhancedResponse) {
-            return enhancedResponse;
-          }
-        }
-
-        // Phase 2: Enhanced WiFi Troubleshooting Integration
+        // Enhanced WiFi Troubleshooting Integration
         const wifiTroubleshootingResponse = await this.handleEnhancedWiFiTroubleshooting(conversation, message, property);
         if (wifiTroubleshootingResponse) {
           return wifiTroubleshootingResponse;
         }
 
-        // Phase 6: Menu and Food Query Integration
+        // Menu and Food Query Integration
         const menuResponse = await this.handleMenuQueries(conversation, message, property);
         if (menuResponse) {
           return menuResponse;
         }
 
-        // ENHANCED: Handle multi-part requests
+        // Handle multi-part requests
         if (intentResult.intent === 'ask_multiple_requests' && intentResult.subIntents) {
           return await this.handleMultipleRequests(intentResult.subIntents, property, conversation, message);
         }
 
-        // ✅ PHASE 1: Enhanced Knowledge-First Response System
-        console.log('🎯 Processing with enhanced knowledge-first approach:', intentResult.intent);
-        const enhancedResponse = await this.processWithKnowledgeFirst(intentResult.intent, message, property, conversation);
-        if (enhancedResponse) {
-          console.log('✅ Enhanced response generated');
-          return enhancedResponse;
-        }
-
-        // Phase 4: Property Context Enhancement
-        const propertyContextResponse = await this.handlePropertyContextQueries(intentResult.intent, property, conversation, message);
-        if (propertyContextResponse) {
-          return await this.updateConversationAndRespond(phoneNumber, intentResult.intent, propertyContextResponse, conversation);
-        }
-
-        // ENHANCED: Handle property-specific intents with data extraction
-        const propertyResponse = await this.handlePropertyIntentWithDataExtraction(intentResult.intent, property, conversation, message);
-        if (propertyResponse) {
-          return await this.updateConversationAndRespond(phoneNumber, intentResult.intent, propertyResponse, conversation);
-        }
-
-        // Phase 5: Enhanced fallback with conversation context
+        // Final fallback - only if no enhanced response was generated
+        console.log('⚠️ No enhanced response found, using contextual fallback');
         return await this.generateContextualFallback(conversation, property, intentResult.intent, message);
       }
 
@@ -812,12 +791,14 @@ export class EnhancedConversationService {
     };
   }
 
-  // ✅ NEW: Enhanced contextual fallback
+  // ✅ Enhanced contextual fallback - NO MORE GENERIC RESPONSES
   private async generateContextualFallback(conversation: Conversation, property: Property, intent?: string, message?: string) {
     const context = conversation.conversation_context || {};
     const conversationFlow = context.conversation_flow || {};
     
-    // NEW: Check for distance questions that weren't caught as follow-ups
+    console.log('🔧 Generating contextual fallback for:', { intent, message: message?.substring(0, 50) });
+    
+    // Check for distance questions that weren't caught as follow-ups
     if (message && this.isDistanceQuestion(message)) {
       console.log('📍 Fallback detected distance question:', message);
       const restaurantName = this.extractRestaurantFromMessage(message);
@@ -847,33 +828,80 @@ export class EnhancedConversationService {
       return await this.updateConversationAndReturnResponse(conversation, 'ask_distance_info', message, response);
     }
     
-    // Check if this could be a food/restaurant request that wasn't caught
-    if (message && this.couldBeFoodRequest(message)) {
-      console.log('🍽️ Fallback detected potential food request:', message);
-      return await this.handleRecommendationWithContext('ask_food_recommendations', property, message, conversation);
+    // Check if this could be a location-based request (food, activities, etc.)
+    if (message && (this.couldBeFoodRequest(message) || this.couldBeActivityRequest(message) || this.isLocationBasedQuery(intent || '', message))) {
+      console.log('🌍 Fallback detected location-based request, routing to AI');
+      const recommendationIntent = this.determineRecommendationIntent(message);
+      return await this.handleRecommendationWithDiversification(recommendationIntent, property, message, conversation);
     }
     
-    // Check if this could be an activity/attraction request  
-    if (message && this.couldBeActivityRequest(message)) {
-      console.log('🎯 Fallback detected potential activity request:', message);
-      return await this.handleRecommendationWithContext('ask_activities', property, message, conversation);
+    // For property-specific queries, try to extract information from property data
+    if (intent && this.isPropertySpecificIntent(intent)) {
+      console.log('🏠 Property-specific query, checking property data');
+      const propertyResponse = await this.handlePropertyIntentWithDataExtraction(intent, property, conversation, message || '');
+      if (propertyResponse) {
+        return propertyResponse;
+      }
     }
     
-    // Try ConversationalResponseGenerator first
-    const response = ConversationalResponseGenerator.generateContextualResponse(
-      intent || 'general_inquiry',
-      conversationFlow,
-      property,
-      message || '',
-      context.guest_name
-    );
+    // Last resort: Provide helpful contextual guidance instead of generic responses
+    const namePrefix = context.guest_name ? `${context.guest_name}, ` : '';
+    const helpfulResponse = this.generateHelpfulResponse(intent, property, namePrefix, message);
     
-    // If it signals to use recommendation service, do that
-    if (response === 'USE_RECOMMENDATION_SERVICE') {
-      return await this.handleRecommendationWithContext(intent || 'ask_food_recommendations', property, message || '', conversation);
+    return await this.updateConversationAndReturnResponse(conversation, intent || 'general_inquiry', message || '', helpfulResponse);
+  }
+
+  /**
+   * Determine the appropriate recommendation intent based on message content
+   */
+  private determineRecommendationIntent(message: string): string {
+    const lowerMessage = message.toLowerCase();
+    
+    if (lowerMessage.includes('coffee') || lowerMessage.includes('cafe')) {
+      return 'ask_coffee_recommendations';
+    }
+    if (lowerMessage.includes('food') || lowerMessage.includes('restaurant') || lowerMessage.includes('eat') || lowerMessage.includes('dining')) {
+      return 'ask_food_recommendations';
+    }
+    if (lowerMessage.includes('activity') || lowerMessage.includes('attraction') || lowerMessage.includes('fun') || lowerMessage.includes('visit')) {
+      return 'ask_attractions';
     }
     
-    return await this.updateConversationAndReturnResponse(conversation, intent || 'general_inquiry', message || '', response);
+    // Default to food recommendations for location queries
+    return 'ask_food_recommendations';
+  }
+
+  /**
+   * Check if intent is property-specific
+   */
+  private isPropertySpecificIntent(intent: string): boolean {
+    const propertyIntents = [
+      'ask_wifi', 'ask_parking', 'ask_checkin_time', 'ask_checkout_time',
+      'ask_emergency_contact', 'ask_amenity', 'ask_access', 'ask_property_specific'
+    ];
+    return propertyIntents.includes(intent);
+  }
+
+  /**
+   * Generate helpful response instead of generic fallback
+   */
+  private generateHelpfulResponse(intent: string | undefined, property: Property, namePrefix: string, message?: string): string {
+    // Avoid the generic "Need more help with your stay..." responses
+    if (message) {
+      const lowerMessage = message.toLowerCase();
+      
+      // If they're asking about something we should know, offer to check with property
+      if (lowerMessage.includes('pool') || lowerMessage.includes('hot tub') || lowerMessage.includes('amenity')) {
+        return `${namePrefix}Let me check the property details for you. What specific amenity information do you need?`;
+      }
+      
+      if (lowerMessage.includes('direction') || lowerMessage.includes('location') || lowerMessage.includes('address')) {
+        return `${namePrefix}I can help with directions! What specific location are you trying to get to?`;
+      }
+    }
+    
+    // Provide specific options instead of generic help
+    return `${namePrefix}I can help you with local recommendations, property amenities, or directions. What would you like to know?`;
   }
   
   private isDistanceQuestion(message: string): boolean {
@@ -1478,25 +1506,60 @@ export class EnhancedConversationService {
         }
 
       case 'external_ai':
-        console.log('🤖 Routing to external AI');
-        if (this.isRecommendationIntent(intent)) {
-          // Use existing recommendation system for location-based queries
+        console.log('🤖 Routing to external AI for location-based query');
+        // For location-based queries, always use AI recommendations
+        if (this.isLocationBasedQuery(intent, message)) {
+          console.log('🌍 Processing location-based query with AI');
+          return await this.handleRecommendationWithDiversification(intent, property, message, conversation);
+        } else if (this.isRecommendationIntent(intent)) {
           return await this.handleRecommendationWithDiversification(intent, property, message, conversation);
         } else {
-          // Handle other AI queries
+          // Handle other AI queries with Perplexity
           const aiResponse = await this.getAIEnhancement(message, property, conversation);
-          return await this.updateConversationAndRespond(conversation.phone_number, intent, aiResponse, conversation);
+          if (aiResponse && aiResponse.length > 20) {
+            return await this.updateConversationAndRespond(conversation.phone_number, intent, aiResponse, conversation);
+          }
         }
+        // No break - fall through to clarification if AI fails
 
       case 'clarification':
         console.log('❓ Providing clarification');
-        return await this.updateConversationAndRespond(conversation.phone_number, intent, routeDecision.content!, conversation);
+        if (routeDecision.content && routeDecision.content.length > 10) {
+          return await this.updateConversationAndRespond(conversation.phone_number, intent, routeDecision.content, conversation);
+        }
+        // No break - fall through to error handling
 
       case 'error':
       default:
-        console.log('⚠️ Fallback to contextual response');
-        return await this.generateContextualFallback(conversation, property, intent, message);
+        console.log('⚠️ Knowledge-first processing failed, returning null for fallback');
+        return null; // Return null so the main flow can handle fallback
     }
+  }
+
+  /**
+   * Check if query is location-based
+   */
+  private isLocationBasedQuery(intent: string, message: string): boolean {
+    const locationIntents = [
+      'ask_food_recommendations',
+      'ask_coffee_recommendations', 
+      'ask_attractions',
+      'ask_activities',
+      'ask_grocery_transport'
+    ];
+
+    if (locationIntents.includes(intent)) {
+      return true;
+    }
+
+    const locationKeywords = [
+      'how far', 'distance', 'directions', 'drive to', 'walk to',
+      'restaurant', 'food', 'coffee', 'attraction', 'activity',
+      'nearby', 'close', 'around here', 'local'
+    ];
+
+    const lowerMessage = message.toLowerCase();
+    return locationKeywords.some(keyword => lowerMessage.includes(keyword));
   }
 
   /**
