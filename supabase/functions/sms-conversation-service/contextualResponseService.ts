@@ -42,14 +42,14 @@ What would be most helpful?`;
 What can I help you with?`;
     }
     
-    // General helpful fallback
-    return `${namePrefix}I can help with:
-• Restaurant and dining recommendations
-• WiFi, parking, or checkout details  
-• Local activities and attractions
+    // General helpful fallback - more conversational and specific
+    return `${namePrefix}I'm here to help! I can assist with:
+• Finding great local restaurants and dining spots
+• WiFi, parking, access, or checkout details  
+• Local activities, attractions, and things to do
 • Property amenities and services
 
-What would be most helpful right now?`;
+What can I help you with right now?`;
   }
 
   static generateClarificationQuestion(message: string, context: any): string {
@@ -57,17 +57,17 @@ What would be most helpful right now?`;
     const guestName = context?.guest_name;
     const namePrefix = guestName ? `${guestName}, ` : '';
     
-    // Detect vague requests and provide specific clarification
+    // Detect vague requests and provide specific clarification with empathy
     if (lowerMessage.includes('there') || lowerMessage.includes('here') || lowerMessage.includes('that place')) {
-      return `${namePrefix}just to clarify—were you asking about WiFi, dining, or something else specific?`;
+      return `${namePrefix}I want to make sure I help you with the right information. Are you asking about a restaurant, property amenity, or something else?`;
     }
     
     if (lowerMessage.includes('they') || lowerMessage.includes('it')) {
       const lastRestaurant = context?.last_recommended_restaurant;
       if (lastRestaurant) {
-        return `${namePrefix}are you asking about ${lastRestaurant}, or a different restaurant?`;
+        return `${namePrefix}are you asking about ${lastRestaurant}, or would you like information about a different place?`;
       }
-      return `${namePrefix}want to clarify—are you asking about a restaurant, amenity, or something else?`;
+      return `${namePrefix}I want to give you the right info—are you asking about a restaurant, property feature, or something else?`;
     }
     
     if (lowerMessage.includes('open') || lowerMessage.includes('hours')) {

@@ -6,6 +6,68 @@ export interface PropertyDataResponse {
 
 export class PropertyDataExtractor {
   
+  // NEW: Main property data extraction method
+  static extractPropertyData(property: any, intent: string, message: string): PropertyDataResponse {
+    switch (intent) {
+      case 'ask_access':
+        return this.extractAccessInfo(property);
+      case 'ask_wifi':
+        return this.extractWifiInfo(property);
+      case 'ask_parking':
+        return this.extractParkingInfo(property);
+      case 'ask_checkout_time':
+        return this.extractCheckoutInfo(property);
+      case 'ask_checkin_time':
+        return this.extractCheckinInfo(property);
+      case 'ask_emergency_contact':
+        return this.extractEmergencyContact(property);
+      case 'ask_amenity':
+        return this.extractAmenityInfo(property, message);
+      default:
+        return { content: '', hasData: false, dataType: 'general' };
+    }
+  }
+
+  // NEW: Extract WiFi info
+  static extractWifiInfo(property: any): PropertyDataResponse {
+    if (property.wifi_name && property.wifi_password) {
+      return {
+        content: `📶 WiFi Details:\nNetwork: ${property.wifi_name}\nPassword: ${property.wifi_password}`,
+        hasData: true,
+        dataType: 'general'
+      };
+    }
+    return { content: '', hasData: false, dataType: 'general' };
+  }
+
+  // NEW: Extract parking info
+  static extractParkingInfo(property: any): PropertyDataResponse {
+    if (property.parking_instructions) {
+      return {
+        content: `🚗 Parking Instructions:\n${property.parking_instructions}`,
+        hasData: true,
+        dataType: 'general'
+      };
+    }
+    return { content: '', hasData: false, dataType: 'general' };
+  }
+
+  // NEW: Extract check-in info
+  static extractCheckinInfo(property: any): PropertyDataResponse {
+    if (property.check_in_time) {
+      let content = `🏠 Check-in time: ${property.check_in_time}`;
+      if (property.access_instructions) {
+        content += `\n\n🔑 Access: ${property.access_instructions}`;
+      }
+      return {
+        content,
+        hasData: true,
+        dataType: 'general'
+      };
+    }
+    return { content: '', hasData: false, dataType: 'general' };
+  }
+  
   static extractAmenityInfo(property: any, message: string): PropertyDataResponse {
     const lowerMessage = message.toLowerCase();
     const amenities = property.amenities ? JSON.parse(property.amenities) : [];

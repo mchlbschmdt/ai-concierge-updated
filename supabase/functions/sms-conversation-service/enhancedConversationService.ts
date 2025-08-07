@@ -791,12 +791,24 @@ export class EnhancedConversationService {
     };
   }
 
-  // ✅ Enhanced contextual fallback - NO MORE GENERIC RESPONSES
-  private async generateContextualFallback(conversation: Conversation, property: Property, intent?: string, message?: string) {
+  // ✅ Enhanced contextual fallback - NO MORE GENERIC RESPONSES, WITH EMPATHY AND SPECIFIC HELP
+  private async generateContextualFallback(conversation: Conversation, property: Property, intent?: string, message?: string): Promise<ProcessingResult> {
     const context = conversation.conversation_context || {};
-    const conversationFlow = context.conversation_flow || {};
+    const isUrgent = message ? IntentRecognitionService.detectUrgency(message) : false;
     
-    console.log('🔧 Generating contextual fallback for:', { intent, message: message?.substring(0, 50) });
+    console.log('🔧 Generating contextual fallback for:', { intent, message: message?.substring(0, 50), isUrgent });
+    
+    // Handle urgent issues with empathy and immediate help
+    if (isUrgent) {
+      if (intent === 'ask_access' || (message && (message.toLowerCase().includes('get in') || message.toLowerCase().includes('code')))) {
+        return await this.handleUrgentAccessIssue(property, message || '', conversation);
+      }
+      
+      return {
+        response: [`I understand you're having trouble. Let me help you right away. ${property.emergency_contact ? `You can also contact: ${property.emergency_contact}` : 'I can connect you with the host if needed.'}`],
+        shouldUpdateState: false
+      };
+    }
     
     // Check for distance questions that weren't caught as follow-ups
     if (message && this.isDistanceQuestion(message)) {
@@ -835,18 +847,70 @@ export class EnhancedConversationService {
       return await this.handleRecommendationWithDiversification(recommendationIntent, property, message, conversation);
     }
     
-    // For property-specific queries, try to extract information from property data
-    if (intent && this.isPropertySpecificIntent(intent)) {
-      console.log('🏠 Property-specific query, checking property data');
-      const propertyResponse = await this.handlePropertyIntentWithDataExtraction(intent, property, conversation, message || '');
-      if (propertyResponse) {
-        return propertyResponse;
-      }
+    // Smart fallback based on intent type with conversational tone
+    switch (intent) {
+      case 'ask_food_recommendations':
+      case 'ask_coffee_recommendations':
+        return {
+          response: ["I'd love to help you find great local spots! Are you looking for breakfast, lunch, dinner, or something specific like kid-friendly places?"],
+          shouldUpdateState: false
+        };
+      
+      case 'ask_attractions':
+        return {
+          response: ["I can recommend amazing things to do! Are you interested in outdoor activities, cultural attractions, family-friendly spots, or something else?"],
+          shouldUpdateState: false
+        };
+      
+      case 'ask_access':
+        if (property.access_instructions) {
+          return {
+            response: [`🔑 Here are your access instructions:\n${property.access_instructions}\n\nIf you're still having trouble, let me know!`],
+            shouldUpdateState: false
+          };
+        }
+        return {
+          response: [`I can help you get into ${property.property_name || 'your property'}. Are you having trouble with the door code, key, or building entrance?`],
+          shouldUpdateState: false
+        };
+      
+      case 'ask_wifi':
+        if (property.wifi_name && property.wifi_password) {
+          return {
+            response: [`📶 WiFi Details:\nNetwork: ${property.wifi_name}\nPassword: ${property.wifi_password}\n\nHaving trouble connecting? Let me know!`],
+            shouldUpdateState: false
+          };
+        }
+        return {
+          response: [`I can help with WiFi! Are you having trouble finding the network or connecting?`],
+          shouldUpdateState: false
+        };
+      
+      case 'ask_parking':
+        if (property.parking_instructions) {
+          return {
+            response: [`🚗 Parking Info:\n${property.parking_instructions}\n\nNeed directions or have other questions?`],
+            shouldUpdateState: false
+          };
+        }
+        return {
+          response: [`I can help with parking information. Are you looking for where to park or how to access the parking area?`],
+          shouldUpdateState: false
+        };
+      
+      default:
+        // Use contextual response service for helpful fallback
+        const helpfulResponse = ContextualResponseService.generateHelpfulFallback(
+          context, 
+          intent, 
+          this.getPropertyType(property)
+        );
+        
+        return {
+          response: [helpfulResponse],
+          shouldUpdateState: false
+        };
     }
-    
-    // Last resort: Provide helpful contextual guidance instead of generic responses
-    const namePrefix = context.guest_name ? `${context.guest_name}, ` : '';
-    const helpfulResponse = this.generateHelpfulResponse(intent, property, namePrefix, message);
     
     return await this.updateConversationAndReturnResponse(conversation, intent || 'general_inquiry', message || '', helpfulResponse);
   }
@@ -1480,13 +1544,34 @@ export class EnhancedConversationService {
   }
 
   /**
-   * ✅ PHASE 1: Enhanced Knowledge-First Processing
-   * Implements hierarchical response system: Property Knowledge → External AI → Fallback
+   * ✅ PHASE 1: Enhanced Knowledge-First Processing with Urgency Handling
+   * Implements hierarchical response system: Urgency → Property Knowledge → External AI → Fallback
    */
   private async processWithKnowledgeFirst(intent: string, message: string, property: Property, conversation: Conversation) {
     console.log('🔍 Enhanced knowledge-first processing:', { intent, message: message.substring(0, 50) });
+    
+    // PRIORITY 1: Handle urgent access issues immediately
+    if (intent === 'ask_access' && IntentRecognitionService.detectUrgency(message)) {
+      console.log('🚨 URGENT ACCESS ISSUE DETECTED');
+      return await this.handleUrgentAccessIssue(property, message, conversation);
+    }
+    
+    // PRIORITY 2: Property knowledge base search for property-specific intents
+    if (this.isPropertyIntent(intent)) {
+      console.log('🏠 Property intent detected, searching knowledge base first');
+      const propertyResponse = await this.handlePropertyKnowledgeFirst(intent, message, property, conversation);
+      if (propertyResponse) {
+        return propertyResponse;
+      }
+    }
+    
+    // PRIORITY 3: Location/recommendation queries - route to external AI
+    if (this.isLocationIntent(intent)) {
+      console.log('🌍 Location intent detected, routing to external AI');
+      return await this.handleRecommendationWithContext(intent, property, message, conversation);
+    }
 
-    // STEP 1: Route the query intelligently
+    // STEP 1: Route the query intelligently for other cases
     const routeDecision = EnhancedIntentRouter.routeQuery(message, intent, property);
     console.log('🧭 Route decision:', routeDecision);
 
@@ -1534,6 +1619,74 @@ export class EnhancedConversationService {
         console.log('⚠️ Knowledge-first processing failed, returning null for fallback');
         return null; // Return null so the main flow can handle fallback
     }
+  }
+
+  // NEW: Handle urgent access issues with immediate property data response
+  private async handleUrgentAccessIssue(property: Property, message: string, conversation: Conversation): Promise<ProcessingResult> {
+    console.log('🚨 Handling urgent access issue');
+    
+    let response = "I see you're having trouble getting in. Let me help you right away.\n\n";
+    
+    // Get access instructions from property data
+    if (property.access_instructions) {
+      response += `🔑 Access Instructions:\n${property.access_instructions}\n\n`;
+    }
+    
+    // Add emergency contact if available
+    if (property.emergency_contact) {
+      response += `📞 If you still can't get in, contact:\n${property.emergency_contact}`;
+    } else {
+      response += `📞 If you still need help, please let me know and I'll connect you with the host immediately.`;
+    }
+    
+    return {
+      response: [response],
+      shouldUpdateState: false
+    };
+  }
+
+  // NEW: Check if intent is property-specific (should search knowledge base first)
+  private isPropertyIntent(intent: string): boolean {
+    const propertyIntents = [
+      'ask_access', 'ask_wifi', 'ask_parking', 'ask_checkout_time', 
+      'ask_checkin_time', 'ask_amenity', 'ask_emergency_contact'
+    ];
+    return propertyIntents.includes(intent);
+  }
+
+  // NEW: Check if intent is location-based (should route to AI)
+  private isLocationIntent(intent: string): boolean {
+    const locationIntents = [
+      'ask_food_recommendations', 'ask_coffee_recommendations', 'ask_attractions',
+      'ask_directions', 'ask_grocery_transport'
+    ];
+    return locationIntents.includes(intent);
+  }
+
+  // NEW: Handle property knowledge first for property intents
+  private async handlePropertyKnowledgeFirst(intent: string, message: string, property: Property, conversation: Conversation): Promise<ProcessingResult | null> {
+    const dataResponse = PropertyDataExtractor.extractPropertyData(property, intent, message);
+    
+    if (dataResponse.hasData) {
+      console.log('✅ Property data found:', dataResponse.dataType);
+      
+      // Add conversational context based on intent
+      let response = dataResponse.content;
+      
+      if (intent === 'ask_access' && IntentRecognitionService.detectUrgency(message)) {
+        response = "I see you need access help. " + response;
+        if (property.emergency_contact) {
+          response += `\n\n📞 If you need immediate assistance: ${property.emergency_contact}`;
+        }
+      }
+      
+      return {
+        response: [response],
+        shouldUpdateState: false
+      };
+    }
+    
+    return null;
   }
 
   /**

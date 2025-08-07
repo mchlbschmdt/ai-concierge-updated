@@ -214,7 +214,7 @@ export class IntentRecognitionService {
     return this.matchesKeywords(message, attractionKeywords);
   }
 
-  // NEW: Detect food recommendation intents (excluding coffee and attractions)
+    // NEW: Detect food recommendation intents (excluding coffee and attractions)
   private static detectFoodRecommendationIntent(message: string): boolean {
     // Check for coffee first - if it's coffee, don't classify as food
     if (this.detectCoffeeIntent(message)) {
@@ -232,8 +232,9 @@ export class IntentRecognitionService {
       'grab a bite', 'get food', 'pizza', 'burger', 'sushi', 'italian', 'mexican', 'chinese', 
       'american', 'cuisine', 'quick bite', 'fast food', 'takeout', 'delivery',
       'puerto rican food', 'mofongo', 'seafood', 'authentic', 'local cuisine',
-      'brunch', 'local food', 'traditional food',
-      'recommend a restaurant', 'restaurant near', 'good place to eat', 'dining options'
+      'brunch', 'local food', 'traditional food', 'kids', 'take the kids',
+      'recommend a restaurant', 'restaurant near', 'good place to eat', 'dining options',
+      'breakfast spot', 'local spot', 'good local spot', 'whats a good', 'what\'s a good'
     ];
     
     // Check for recommendation phrases combined with food-related terms
@@ -419,8 +420,15 @@ export class IntentRecognitionService {
       return { intent: 'ask_parking', confidence: 0.9 };
     }
 
-    // Access/Entry
-    if (this.matchesKeywords(message, ['access', 'entry', 'key', 'code', 'door', 'get in'])) {
+    // ENHANCED: Access/Entry with URGENCY detection and expanded keywords
+    if (this.matchesKeywords(message, [
+      'access', 'entry', 'key', 'code', 'door', 'get in', 'enter', 'unit',
+      'not working', 'cant get in', 'can\'t get in', 'locked out', 'trouble getting in',
+      'problem with code', 'code not working', 'cant enter', 'can\'t enter',
+      'door wont open', 'door won\'t open', 'key doesnt work', 'key doesn\'t work',
+      'help getting in', 'stuck outside', 'entrance', 'keypad', 'unlock',
+      'building access', 'apartment access', 'front door', 'main door'
+    ])) {
       return { intent: 'ask_access', confidence: 0.9 };
     }
 
@@ -435,6 +443,17 @@ export class IntentRecognitionService {
     }
 
     return { intent: 'general_inquiry', confidence: 0.5 };
+  }
+
+  // NEW: Detect urgency in message for priority handling
+  static detectUrgency(message: string): boolean {
+    const urgencyKeywords = [
+      'not working', 'cant', 'can\'t', 'doesnt work', 'doesn\'t work',
+      'wont work', 'won\'t work', 'broken', 'problem', 'issue', 'trouble',
+      'help', 'stuck', 'locked out', 'urgent', 'emergency', 'now', 'asap'
+    ];
+    
+    return urgencyKeywords.some(keyword => message.toLowerCase().includes(keyword));
   }
 
   private static matchesKeywords(message: string, keywords: string[]): boolean {
