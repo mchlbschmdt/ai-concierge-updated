@@ -23,10 +23,6 @@ import ResetPassword from "./pages/ResetPassword";
 import GoogleAuthCallback from "./pages/GoogleAuthCallback";
 import TravelGuideAdmin from "./pages/TravelGuideAdmin";
 import Register from "./pages/Register";
-import LaunchPerformance from "./pages/LaunchPerformance";
-import LaunchDrilldown from "./pages/LaunchDrilldown";
-import LaunchComparison from "./pages/LaunchComparison";
-import LaunchRealtime from "./pages/LaunchRealtime";
 
 const queryClient = new QueryClient();
 
@@ -101,26 +97,6 @@ const App = () => (
               <Route path="/travel-admin" element={
                 <ProtectedRoute>
                   <TravelGuideAdmin />
-                </ProtectedRoute>
-              } />
-              <Route path="/launch" element={
-                <ProtectedRoute>
-                  <LaunchPerformance />
-                </ProtectedRoute>
-              } />
-              <Route path="/launch/drilldown" element={
-                <ProtectedRoute>
-                  <LaunchDrilldown />
-                </ProtectedRoute>
-              } />
-              <Route path="/launch/comparison" element={
-                <ProtectedRoute>
-                  <LaunchComparison />
-                </ProtectedRoute>
-              } />
-              <Route path="/launch/realtime" element={
-                <ProtectedRoute>
-                  <LaunchRealtime />
                 </ProtectedRoute>
               } />
             </Routes>
