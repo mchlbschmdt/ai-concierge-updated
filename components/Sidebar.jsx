@@ -12,6 +12,7 @@ const navItems = [
   { label: "Analytics", path: "/dashboard/analytics" },
   { label: "FAQ Editor", path: "/dashboard/faq-editor" },
   { label: "Smart Insights", path: "/dashboard/insights" },
+  { label: "Launch Performance", path: "/launch" },
 ];
 
 export default function Sidebar() {
