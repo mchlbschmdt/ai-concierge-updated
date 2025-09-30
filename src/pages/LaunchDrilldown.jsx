@@ -5,12 +5,13 @@ import { Card } from '@/components/ui/card';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { ArrowLeft } from 'lucide-react';
 import { shopifyLaunchService } from '@/services/shopifyLaunchService';
-import { toast } from '@/hooks/use-toast';
+import { useToast } from '@/components/ui/use-toast';
 
 const COLORS = ['#1b3898', '#8797c7', '#22305b', '#41936a', '#c99420'];
 
 const LaunchDrilldown = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [metrics, setMetrics] = useState(null);
   const [variantData, setVariantData] = useState([]);
