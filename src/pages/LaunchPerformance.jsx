@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { DollarSign, Package, TrendingUp, Clock, ArrowRight } from 'lucide-react';
 import { shopifyLaunchService } from '@/services/shopifyLaunchService';
-import { toast } from '@/hooks/use-toast';
+import { useToast } from '@/components/ui/use-toast';
 
 const LaunchPerformance = () => {
   const [loading, setLoading] = useState(true);
@@ -17,6 +17,7 @@ const LaunchPerformance = () => {
   const [timeframe, setTimeframe] = useState('week1');
   const [selectedProduct, setSelectedProduct] = useState('');
   const [products, setProducts] = useState([]);
+  const { toast } = useToast();
 
   useEffect(() => {
     loadData();
