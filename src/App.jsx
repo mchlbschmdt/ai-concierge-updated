@@ -17,6 +17,7 @@ import MessagesDashboard from "./pages/MessagesDashboard";
 import SmartInsights from "./pages/SmartInsights";
 import EmailManagement from "./pages/EmailManagement";
 import SmsTestingDashboard from "./pages/SmsTestingDashboard";
+import SmsConciergeTest from "./pages/SmsConciergeTest";
 import PropertyAnalytics from "./pages/PropertyAnalytics";
 import FaqEditor from "./pages/FaqEditor";
 import ResetPassword from "./pages/ResetPassword";
@@ -82,6 +83,11 @@ const App = () => (
               <Route path="/sms-testing" element={
                 <ProtectedRoute>
                   <SmsTestingDashboard />
+                </ProtectedRoute>
+              } />
+              <Route path="/sms-concierge-test" element={
+                <ProtectedRoute>
+                  <SmsConciergeTest />
                 </ProtectedRoute>
               } />
               <Route path="/analytics" element={
