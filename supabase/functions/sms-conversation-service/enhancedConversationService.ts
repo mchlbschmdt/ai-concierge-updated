@@ -239,24 +239,50 @@ export class EnhancedConversationService {
     }
   }
 
-  // ✅ NEW: Process multi-query sequentially
+  // ✅ ENHANCED: Process multi-query sequentially with better error handling
   private async processMultiQuerySequentially(phoneNumber: string, parsedQuery: any, conversation: Conversation) {
     console.log('🔄 Processing multi-query sequentially:', parsedQuery.queries);
     
     const responses: string[] = [];
-    // Add immediate acknowledgment first
-    responses.push(parsedQuery.acknowledgmentMessage);
+    const numQueries = parsedQuery.queries.length;
+    
+    // Add immediate acknowledgment
+    responses.push(`Got it! Let me find ${numQueries} things for you...`);
+    
+    let successCount = 0;
     
     for (const query of parsedQuery.queries) {
       try {
+        console.log('🔍 Processing individual query:', query.type);
+        
         // Process each query component
         const response = await this.processIndividualQuery(query, conversation);
-        if (response) {
+        
+        if (response && this.isValidRecommendation(response)) {
+          console.log('✅ Valid response for', query.type);
           responses.push(response);
+          successCount++;
+        } else if (response) {
+          // Response exists but not validated as recommendation
+          console.log('⚠️ Non-recommendation response for', query.type);
+          responses.push(response);
+          successCount++;
+        } else {
+          console.log('❌ No response for', query.type);
+          responses.push(`Still working on ${query.type} options - I'll have those shortly!`);
         }
       } catch (error) {
-        console.error('❌ Error processing query component:', error);
-        responses.push(`I had trouble with your ${query.type} request. Let me know if you'd like me to try again.`);
+        console.error('❌ Error processing query component:', query.type, error);
+        // Don't fail entire multi-query if one part fails
+        responses.push(`Had trouble finding ${query.type}, but here's what else I found:`);
+      }
+    }
+    
+    // Add summary if some failed
+    if (successCount < numQueries) {
+      const property = await PropertyService.getPropertyByPhone(this.supabase, phoneNumber);
+      if (property?.emergency_contact) {
+        responses.push(`For more help: ${property.emergency_contact}`);
       }
     }
     
@@ -413,7 +439,9 @@ export class EnhancedConversationService {
       const requestType = this.categorizeRequestType(intent, message);
       console.log('📋 Categorized request type:', requestType);
       
+      // Try Perplexity first
       try {
+        console.log('🔍 Attempting Perplexity recommendations...');
         const perplexityRecommendation = await PerplexityRecommendationService.getLocalRecommendations(
           property,
           message,
@@ -422,13 +450,12 @@ export class EnhancedConversationService {
           diversificationResult.rejectedOptions
         );
         
-        console.log('✅ Perplexity recommendation received:', perplexityRecommendation);
+        console.log('📊 Perplexity response received:', perplexityRecommendation?.substring(0, 100));
         
         // Check if Perplexity returned valid content
-        if (perplexityRecommendation && perplexityRecommendation.length > 20 && !perplexityRecommendation.includes('error') && !perplexityRecommendation.includes('sorry')) {
-          console.log('✅ Using Perplexity recommendation');
+        if (this.isValidRecommendation(perplexityRecommendation)) {
+          console.log('✅ Using valid Perplexity recommendation');
           
-          // Update conversation with the new recommendation
           await this.updateConversationState(conversation.phone_number, {
             last_recommendations: JSON.stringify([perplexityRecommendation]),
             last_message_type: intent,
@@ -443,20 +470,57 @@ export class EnhancedConversationService {
             response: perplexityRecommendation,
             shouldUpdateState: true
           };
-        } else {
-          console.log('⚠️ Perplexity response invalid, falling back to local data');
-          throw new Error('Invalid Perplexity response');
         }
+        console.log('⚠️ Perplexity response invalid, trying OpenAI');
       } catch (error) {
-        console.log('❌ Perplexity failed, using local property recommendations:', error.message);
+        console.log('❌ Perplexity failed:', error.message, '- Trying OpenAI');
+      }
+      
+      // Try OpenAI as second option (better than local data)
+      try {
+        console.log('🔍 Attempting OpenAI recommendations...');
+        const openaiResponse = await this.recommendationService.getEnhancedRecommendations(
+          property,
+          message,
+          conversation,
+          { intent, confidence: 0.9 }
+        );
         
-        // Fallback to local property recommendations
+        console.log('📊 OpenAI response received:', openaiResponse?.response?.substring(0, 100));
+        
+        if (this.isValidRecommendation(openaiResponse?.response)) {
+          console.log('✅ Using valid OpenAI recommendation');
+          
+          await this.updateConversationState(conversation.phone_number, {
+            last_recommendations: JSON.stringify([openaiResponse.response]),
+            last_message_type: intent,
+            conversation_context: {
+              ...context,
+              lastIntent: intent,
+              last_interaction: new Date().toISOString()
+            }
+          });
+          
+          return {
+            response: openaiResponse.response,
+            shouldUpdateState: true
+          };
+        }
+        console.log('⚠️ OpenAI response invalid, trying local data');
+      } catch (error) {
+        console.log('❌ OpenAI failed:', error.message, '- Trying local property data');
+      }
+      
+      // Try local property data as last resort
+      try {
+        console.log('🔍 Attempting local property data fallback...');
         const localResponse = await this.getLocalRecommendationsFallback(property, requestType, message, context);
         
-        if (localResponse) {
-          console.log('✅ Using local fallback recommendation');
+        console.log('📊 Local response:', localResponse?.substring(0, 100));
+        
+        if (localResponse && this.isValidRecommendation(localResponse)) {
+          console.log('✅ Using valid local recommendation');
           
-          // Update conversation with the fallback recommendation
           await this.updateConversationState(conversation.phone_number, {
             last_recommendations: JSON.stringify([localResponse]),
             last_message_type: intent,
@@ -472,15 +536,16 @@ export class EnhancedConversationService {
             shouldUpdateState: true
           };
         }
-        
-        // If both fail, provide a helpful response
-        const guestName = context?.guest_name;
-        const namePrefix = guestName ? `${guestName}, ` : '';
-        return {
-          response: `${namePrefix}I'd love to help with ${requestType} recommendations! Let me check what I have for ${property.property_name}. What specifically are you in the mood for?`,
-          shouldUpdateState: false
-        };
+      } catch (error) {
+        console.log('❌ Local fallback failed:', error.message);
       }
+      
+      // If everything fails, provide helpful error with emergency contact
+      console.log('❌ All recommendation sources failed, providing helpful error');
+      return {
+        response: this.generateHelpfulError(property, requestType),
+        shouldUpdateState: false
+      };
       
     } catch (error) {
       console.error('❌ Error in enhanced food intent with diversification:', error);
@@ -1527,6 +1592,97 @@ export class EnhancedConversationService {
     await this.conversationManager.updateConversationState(phoneNumber, updates);
   }
 
+  /**
+   * Validate if a recommendation is actually useful content
+   */
+  private isValidRecommendation(recommendation: string | undefined | null): boolean {
+    if (!recommendation || typeof recommendation !== 'string') {
+      return false;
+    }
+    
+    // Must have minimum length
+    if (recommendation.length < 20) {
+      return false;
+    }
+    
+    // Check for error indicators
+    const errorPhrases = [
+      'sorry', 'having trouble', 'try again', 
+      'don\'t have', 'can\'t find', 'unable to',
+      'error', 'failed', 'issue'
+    ];
+    
+    const lower = recommendation.toLowerCase();
+    const hasError = errorPhrases.some(phrase => lower.includes(phrase));
+    
+    if (hasError) {
+      console.log('⚠️ Recommendation contains error phrase');
+      return false;
+    }
+    
+    // Check for actual content (names of places, distances, ratings)
+    // Valid recommendations should have specific indicators:
+    // - Distance indicators (mi, miles, minutes, walk)
+    // - Rating indicators (⭐, stars, rated)
+    // - Proper names (capitalized words)
+    // - Description indicators (great, best, popular, local)
+    
+    const hasDistance = /\d+\.?\d*\s*(mi|miles|min|minutes|walk)/i.test(recommendation);
+    const hasRating = /⭐|stars?|rated|rating/i.test(recommendation);
+    const hasProperNames = /[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+/.test(recommendation);
+    const hasDescriptors = /(great|best|popular|local|famous|authentic|delicious)/i.test(recommendation);
+    
+    // Should have at least 2 of these indicators for valid recommendation
+    const validIndicators = [hasDistance, hasRating, hasProperNames, hasDescriptors].filter(Boolean).length;
+    
+    if (validIndicators >= 2) {
+      console.log('✅ Recommendation validated:', { hasDistance, hasRating, hasProperNames, hasDescriptors });
+      return true;
+    }
+    
+    // For longer content without specific indicators, check if it has meaningful content
+    if (recommendation.length > 50 && hasProperNames) {
+      console.log('✅ Recommendation validated (long with proper names)');
+      return true;
+    }
+    
+    console.log('❌ Recommendation validation failed:', { 
+      length: recommendation.length, 
+      validIndicators,
+      hasDistance, 
+      hasRating, 
+      hasProperNames, 
+      hasDescriptors 
+    });
+    return false;
+  }
+
+  /**
+   * Generate helpful error message with emergency contact
+   */
+  private generateHelpfulError(property: Property, requestType: string): string {
+    const emergency = property.emergency_contact || 'your host';
+    const guestName = '';
+    
+    let response = `I'm having trouble finding ${requestType} recommendations right now. `;
+    
+    // Provide emergency contact for immediate help
+    response += `For immediate assistance, contact ${emergency}. `;
+    
+    // Add context-specific helpful message
+    if (requestType.includes('coffee')) {
+      response += 'Meanwhile, check if your property has coffee amenities!';
+    } else if (requestType.includes('dinner') || requestType.includes('restaurant')) {
+      response += 'I\'ll keep working on getting you great dining options!';
+    } else if (requestType.includes('attractions')) {
+      response += 'I\'ll gather some activity ideas for you!';
+    } else {
+      response += 'Let me know if you need anything else!';
+    }
+    
+    return MessageUtils.ensureSmsLimit(response);
+  }
+
   private shouldAutoConfirmProperty(intent: string, message: string): boolean {
     // Auto-confirm if user asks meaningful questions instead of just Y/N
     const meaningfulIntents = [
@@ -1548,7 +1704,7 @@ export class EnhancedConversationService {
     return hasIntent || hasKeywords;
   }
 
-  // ✅ NEW: Get local recommendations fallback from property data
+  // ✅ ENHANCED: Get local recommendations fallback from property data with smart SMS formatting
   private async getLocalRecommendationsFallback(property: Property, requestType: string, message: string, context: any): Promise<string | null> {
     console.log('🏠 Using local recommendations fallback for:', requestType);
     
@@ -1557,7 +1713,6 @@ export class EnhancedConversationService {
       return null;
     }
     
-    const localRecs = property.local_recommendations.toLowerCase();
     const lowerMessage = message.toLowerCase();
     const lowerRequestType = requestType.toLowerCase();
     
@@ -1565,29 +1720,36 @@ export class EnhancedConversationService {
     let relevantSection = '';
     
     if (lowerRequestType.includes('coffee') || lowerMessage.includes('coffee')) {
-      relevantSection = this.extractSectionFromRecommendations(property.local_recommendations, ['coffee', 'cafe', 'morning']);
+      relevantSection = this.extractSectionFromRecommendations(property.local_recommendations, ['coffee', 'cafe', 'morning', 'starbucks']);
     } else if (lowerRequestType.includes('dinner') || lowerMessage.includes('dinner') || lowerMessage.includes('restaurant')) {
       relevantSection = this.extractSectionFromRecommendations(property.local_recommendations, ['restaurant', 'dining', 'eat', 'food']);
     } else if (lowerRequestType.includes('breakfast') || lowerMessage.includes('breakfast')) {
       relevantSection = this.extractSectionFromRecommendations(property.local_recommendations, ['breakfast', 'morning', 'coffee']);
     } else if (lowerRequestType.includes('attractions') || lowerMessage.includes('attraction') || lowerMessage.includes('activity')) {
       relevantSection = this.extractSectionFromRecommendations(property.local_recommendations, ['attraction', 'beach', 'museum', 'park', 'tour', 'scenic', 'historic', 'rainforest', 'fort', 'old san juan']);
+    } else if (lowerRequestType.includes('grocery') || lowerMessage.includes('grocery') || lowerMessage.includes('store')) {
+      relevantSection = this.extractSectionFromRecommendations(property.local_recommendations, ['grocery', 'groceries', 'aldi', 'publix', 'walmart', 'store']);
     } else {
       // General food/dining fallback
       relevantSection = this.extractSectionFromRecommendations(property.local_recommendations, ['restaurant', 'dining', 'eat', 'food']);
     }
     
-    if (relevantSection) {
-      // Format for SMS and add personal touch
+    if (relevantSection && relevantSection.length > 10) {
+      console.log('✅ Found relevant section:', relevantSection.substring(0, 100));
+      
+      // Smart format for SMS with complete recommendations
+      let formatted = this.formatLocalRecommendationForSMS(relevantSection, requestType);
+      
+      // Add personal touch if guest name available
       const guestName = context?.guest_name;
-      const namePrefix = guestName ? `${guestName}, ` : '';
+      if (guestName) {
+        formatted = `${guestName}, ${formatted}`;
+      }
       
-      // Truncate to SMS length and add helpful context
-      const formattedResponse = `${namePrefix}${this.formatLocalRecommendation(relevantSection, requestType)}`;
-      
-      return formattedResponse.length > 160 ? formattedResponse.substring(0, 157) + '...' : formattedResponse;
+      return MessageUtils.ensureSmsLimit(formatted);
     }
     
+    console.log('❌ No relevant section found in local recommendations');
     return null;
   }
   
@@ -1617,25 +1779,95 @@ export class EnhancedConversationService {
     return relevantLines.join(' ').trim();
   }
   
-  // ✅ NEW: Format local recommendation for SMS
-  private formatLocalRecommendation(content: string, requestType: string): string {
+  // ✅ ENHANCED: Format local recommendation for SMS with smart truncation
+  private formatLocalRecommendationForSMS(content: string, requestType: string): string {
     // Clean up formatting
     let formatted = content
       .replace(/\*\*\*/g, '') // Remove section markers
+      .replace(/--/g, '•')    // Replace -- with bullets
       .replace(/\n+/g, ' ')   // Replace line breaks with spaces
       .replace(/\s+/g, ' ')   // Clean up multiple spaces
       .trim();
     
-    // Add context based on request type
-    if (requestType.includes('coffee')) {
-      formatted = `For coffee: ${formatted}`;
-    } else if (requestType.includes('dinner') || requestType.includes('restaurant')) {
-      formatted = `For dining: ${formatted}`;
-    } else if (requestType.includes('attractions') || requestType.includes('activity')) {
-      formatted = `For activities: ${formatted}`;
+    // Extract first complete recommendation if too long
+    if (formatted.length > 140) {
+      const firstRec = this.extractFirstCompleteRecommendation(formatted);
+      if (firstRec) {
+        formatted = firstRec + ' Want more?';
+      } else {
+        // Truncate at sentence boundary
+        formatted = this.truncateAtSentence(formatted, 140);
+      }
     }
     
-    return formatted;
+    // Add context based on request type
+    let prefix = '';
+    if (requestType.includes('coffee')) {
+      prefix = '☕ ';
+    } else if (requestType.includes('dinner') || requestType.includes('restaurant')) {
+      prefix = '🍽️ ';
+    } else if (requestType.includes('attractions') || requestType.includes('activity')) {
+      prefix = '🎯 ';
+    } else if (requestType.includes('grocery')) {
+      prefix = '🛒 ';
+    }
+    
+    return prefix + formatted;
+  }
+
+  /**
+   * Extract first complete recommendation from text
+   */
+  private extractFirstCompleteRecommendation(text: string): string | null {
+    // Try to split by bullets or dashes
+    const items = text.split(/•|—|--|\n/);
+    
+    for (const item of items) {
+      const trimmed = item.trim();
+      // Look for items that are substantial (>30 chars) and contain location names
+      if (trimmed.length > 30 && trimmed.length < 140) {
+        // Check if it looks like a recommendation (has location name or description)
+        if (/[A-Z][a-z]+/.test(trimmed) || /\d+\s*min/.test(trimmed)) {
+          return trimmed;
+        }
+      }
+    }
+    
+    // If no bullet-separated items, try sentences
+    const sentences = text.split(/\.\s+/);
+    for (const sentence of sentences) {
+      const trimmed = sentence.trim();
+      if (trimmed.length > 30 && trimmed.length < 140) {
+        return trimmed + '.';
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * Truncate text at sentence boundary
+   */
+  private truncateAtSentence(text: string, maxLength: number): string {
+    if (text.length <= maxLength) {
+      return text;
+    }
+    
+    // Find last sentence ending before maxLength
+    const upToMax = text.substring(0, maxLength);
+    const lastPeriod = upToMax.lastIndexOf('.');
+    const lastExclaim = upToMax.lastIndexOf('!');
+    const lastQuestion = upToMax.lastIndexOf('?');
+    
+    const lastSentenceEnd = Math.max(lastPeriod, lastExclaim, lastQuestion);
+    
+    if (lastSentenceEnd > maxLength / 2) {
+      // Good sentence boundary found
+      return text.substring(0, lastSentenceEnd + 1);
+    }
+    
+    // No good boundary, just truncate with ellipsis
+    return text.substring(0, maxLength - 3) + '...';
   }
 
   // ✅ NEW: Helper functions for enhanced recommendation handling

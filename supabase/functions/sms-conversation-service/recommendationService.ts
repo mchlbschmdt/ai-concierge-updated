@@ -9,7 +9,8 @@ export class RecommendationService {
   constructor(private supabase: any, private conversationManager: any) {}
 
   async getEnhancedRecommendations(property: Property, originalMessage: string, conversation: Conversation, intentResult?: any) {
-    console.log(`🎯 Getting enhanced recommendations for: ${originalMessage}`);
+    console.log(`🎯 [OPENAI] Getting enhanced recommendations for: ${originalMessage}`);
+    console.log(`📍 [OPENAI] Property: ${property.property_name}, ${property.address}`);
     
     try {
       const propertyAddress = property?.address || 'the property';
@@ -64,7 +65,7 @@ export class RecommendationService {
         rejectedRestaurants: rejectedRestaurants
       };
 
-      console.log('🔄 Enhanced payload being sent to OpenAI:', enhancedPayload);
+      console.log('🔄 [OPENAI] Enhanced payload being sent:', enhancedPayload);
 
       const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
         method: 'POST',
@@ -75,9 +76,11 @@ export class RecommendationService {
         body: JSON.stringify(enhancedPayload)
       });
 
+      console.log('📊 [OPENAI] Response status:', response.status);
+
       if (response.ok) {
         const data = await response.json();
-        console.log('✅ Enhanced recommendations received');
+        console.log('✅ [OPENAI] Enhanced recommendations received:', data.recommendation?.substring(0, 150) + '...');
         
         // Extract restaurant names for menu context
         const recommendationText = data.recommendation;
@@ -125,10 +128,12 @@ export class RecommendationService {
           shouldUpdateState: false
         };
       } else {
+        const errorText = await response.text();
+        console.error(`❌ [OPENAI] API failed: ${response.status} - ${errorText}`);
         throw new Error(`Enhanced recommendations API failed: ${response.status}`);
       }
     } catch (error) {
-      console.error('❌ Error getting enhanced recommendations:', error);
+      console.error('❌ [OPENAI] Error getting enhanced recommendations:', error);
       
       // Context-aware error fallback
       const context = conversation?.conversation_context || {};

@@ -1,6 +1,7 @@
 
 export async function callOpenAI(enhancedPrompt: string, systemPrompt: string, openAIApiKey: string) {
-  console.log('🚀 Enhanced prompt built, calling OpenAI API...');
+  console.log('🚀 [OPENAI-FUNCTION] Starting OpenAI API call');
+  console.log('📝 [OPENAI-FUNCTION] Prompt length:', enhancedPrompt.length);
 
   // Enhanced system prompt for local recommendations
   const enhancedSystemPrompt = `You are a friendly local concierge who knows all the best spots! You chat like a helpful friend who's excited to share amazing recommendations.
@@ -20,34 +21,41 @@ RECOMMENDATION QUALITY:
 
 ${systemPrompt}`;
 
+  const requestBody = {
+    model: 'gpt-4.1-2025-04-14',
+    messages: [
+      { 
+        role: 'system', 
+        content: enhancedSystemPrompt
+      },
+      { role: 'user', content: enhancedPrompt }
+    ],
+    max_tokens: 600,
+    temperature: 0.7,
+  };
+
+  console.log('🚀 [OPENAI-FUNCTION] Making API request to OpenAI...');
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${openAIApiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      model: 'gpt-4.1-2025-04-14',
-      messages: [
-        { 
-          role: 'system', 
-          content: enhancedSystemPrompt
-        },
-        { role: 'user', content: enhancedPrompt }
-      ],
-      max_tokens: 600,
-      temperature: 0.7,
-    }),
+    body: JSON.stringify(requestBody),
   });
 
-  console.log('📊 OpenAI response status:', response.status);
+  console.log('📊 [OPENAI-FUNCTION] OpenAI response status:', response.status);
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('❌ OpenAI API error:', errorText);
-    throw new Error('Failed to get recommendation from OpenAI');
+    console.error('❌ [OPENAI-FUNCTION] OpenAI API error:', response.status, errorText);
+    throw new Error(`Failed to get recommendation from OpenAI: ${response.status}`);
   }
 
   const data = await response.json();
-  return data.choices[0].message.content;
+  const content = data.choices[0].message.content;
+  
+  console.log('✅ [OPENAI-FUNCTION] OpenAI recommendation received:', content?.substring(0, 150) + '...');
+  
+  return content;
 }

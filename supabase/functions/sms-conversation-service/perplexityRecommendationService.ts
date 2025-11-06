@@ -18,61 +18,75 @@ export class PerplexityRecommendationService {
     requestType: string,
     rejectedOptions: string[] = []
   ): Promise<string> {
-    console.log('🔍 Getting Perplexity recommendations for:', { query, requestType, propertyAddress: property.address });
+    console.log('🔍 [PERPLEXITY] Starting recommendation request:', { 
+      query, 
+      requestType, 
+      propertyAddress: property.address,
+      rejectedOptions 
+    });
     
     const perplexityApiKey = Deno.env.get('PERPLEXITY_API_KEY');
     if (!perplexityApiKey) {
-      console.log('❌ Perplexity API key not found, falling back to property recommendations');
-      return this.getFallbackRecommendation(property, requestType);
+      console.log('❌ [PERPLEXITY] API key not found - returning fallback message');
+      throw new Error('Perplexity API key not configured');
     }
 
     try {
       const prompt = this.buildPerplexityPrompt(property, query, requestType, rejectedOptions);
+      console.log('📝 [PERPLEXITY] Built prompt:', prompt.substring(0, 150) + '...');
       
+      const requestBody = {
+        model: 'llama-3.1-sonar-small-128k-online',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a local concierge providing specific, actionable recommendations. Be concise and include practical details like distance and why locals love each place.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        temperature: 0.3,
+        max_tokens: 300,
+        return_related_questions: false,
+      };
+      
+      console.log('🚀 [PERPLEXITY] Making API request...');
       const response = await fetch(this.PERPLEXITY_API_URL, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${perplexityApiKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          model: 'llama-3.1-sonar-small-128k-online',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are a local concierge providing specific, actionable recommendations. Be concise and include practical details like distance and why locals love each place.'
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          temperature: 0.3,
-          max_tokens: 300,
-          return_related_questions: false,
-        }),
+        body: JSON.stringify(requestBody)
       });
 
+      console.log('📊 [PERPLEXITY] Response status:', response.status);
+
       if (!response.ok) {
-        console.error(`❌ Perplexity API error: ${response.status} ${await response.text()}`);
-        console.log('🔄 Trying OpenAI fallback');
-        return await this.getOpenAIFallback(property, query, requestType, rejectedOptions);
+        const errorText = await response.text();
+        console.error(`❌ [PERPLEXITY] API error: ${response.status} - ${errorText}`);
+        throw new Error(`Perplexity API failed with status ${response.status}`);
       }
 
       const data = await response.json();
       const recommendation = data.choices?.[0]?.message?.content;
       
       if (!recommendation) {
-        console.log('❌ No recommendation returned from Perplexity');
-        return this.getFallbackRecommendation(property, requestType);
+        console.log('❌ [PERPLEXITY] No recommendation in response');
+        throw new Error('Empty recommendation from Perplexity');
       }
 
-      console.log('✅ Perplexity recommendation generated:', recommendation.substring(0, 100) + '...');
-      return this.formatRecommendation(recommendation);
+      console.log('✅ [PERPLEXITY] Raw recommendation received:', recommendation.substring(0, 150) + '...');
+      const formatted = this.formatRecommendation(recommendation);
+      console.log('✅ [PERPLEXITY] Formatted recommendation:', formatted.substring(0, 150) + '...');
+      
+      return formatted;
       
     } catch (error) {
-      console.error('❌ Error calling Perplexity API:', error);
-      return this.getFallbackRecommendation(property, requestType);
+      console.error('❌ [PERPLEXITY] Error:', error.message);
+      throw error; // Re-throw to allow fallback chain to continue
     }
   }
 
