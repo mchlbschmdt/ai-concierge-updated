@@ -20,6 +20,7 @@ import SmsTestingDashboard from "./pages/SmsTestingDashboard";
 import SmsConciergeTest from "./pages/SmsConciergeTest";
 import PropertyAnalytics from "./pages/PropertyAnalytics";
 import FaqEditor from "./pages/FaqEditor";
+import KnowledgeBaseEditor from "./pages/KnowledgeBaseEditor";
 import ResetPassword from "./pages/ResetPassword";
 import GoogleAuthCallback from "./pages/GoogleAuthCallback";
 import TravelGuideAdmin from "./pages/TravelGuideAdmin";
@@ -98,6 +99,11 @@ const App = () => (
               <Route path="/faq-editor" element={
                 <ProtectedRoute>
                   <FaqEditor />
+                </ProtectedRoute>
+              } />
+              <Route path="/knowledge-base" element={
+                <ProtectedRoute>
+                  <KnowledgeBaseEditor />
                 </ProtectedRoute>
               } />
               <Route path="/travel-admin" element={

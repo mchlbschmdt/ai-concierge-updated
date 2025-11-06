@@ -11,7 +11,8 @@ import {
   TestTube, 
   HelpCircle,
   MapPin,
-  Bot
+  Bot,
+  FileText
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -27,6 +28,7 @@ const Sidebar = () => {
     { icon: Mail, label: 'Email Management', path: '/email-management' },
     { icon: TestTube, label: 'SMS Testing', path: '/sms-testing' },
     { icon: Bot, label: 'SMS Concierge Test', path: '/sms-concierge-test' },
+    { icon: FileText, label: 'Knowledge Base', path: '/knowledge-base' },
     { icon: HelpCircle, label: 'FAQ Editor', path: '/faq-editor' },
     { icon: MapPin, label: 'Travel Guide', path: '/travel-admin' },
   ];
