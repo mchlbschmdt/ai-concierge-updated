@@ -7,10 +7,10 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "12.2.3 (519615d)"
+    PostgrestVersion: "13.0.5"
   }
   public: {
     Tables: {
@@ -636,30 +636,27 @@ export type Database = {
     }
     Functions: {
       admin_update_user_password: {
-        Args: { target_user_id: string; new_password: string }
+        Args: { new_password: string; target_user_id: string }
         Returns: undefined
       }
-      hash_security_answer: {
-        Args: { answer: string }
-        Returns: string
-      }
+      hash_security_answer: { Args: { answer: string }; Returns: string }
       rpc_get_curated_links: {
-        Args: { _location_id: string; _categories?: string[] }
+        Args: { _categories?: string[]; _location_id: string }
         Returns: {
-          id: string
           category: string
-          title: string
           description: string
+          id: string
+          title: string
           url: string
           weight: number
         }[]
       }
       rpc_upsert_travel_conversation: {
         Args: {
-          _phone_number: string
-          _name?: string
           _location_id?: string
           _location_json?: Json
+          _name?: string
+          _phone_number: string
           _preferences_json?: Json
           _step?: string
         }
