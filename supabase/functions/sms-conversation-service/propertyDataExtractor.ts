@@ -70,19 +70,85 @@ export class PropertyDataExtractor {
   
   static extractAmenityInfo(property: any, message: string): PropertyDataResponse {
     const lowerMessage = message.toLowerCase();
-    const amenities = property.amenities ? JSON.parse(property.amenities) : [];
+    let amenities = [];
+    
+    try {
+      amenities = property.amenities ? JSON.parse(property.amenities) : [];
+    } catch (e) {
+      // If amenities is already an array or parsing fails
+      amenities = Array.isArray(property.amenities) ? property.amenities : [];
+    }
+    
     const specialNotes = property.special_notes || '';
     
     let response = '';
     let hasData = false;
     
+    // Pool information - SPECIFIC DETECTION
+    if (lowerMessage.includes('pool')) {
+      const hasPool = amenities.some((a: string) => a.toLowerCase().includes('pool'));
+      if (hasPool) {
+        response += '🏊‍♀️ Yes! The property has a pool. ';
+        hasData = true;
+        
+        if (specialNotes.toLowerCase().includes('pool')) {
+          const poolInfo = this.extractPoolInfo(specialNotes);
+          if (poolInfo) response += poolInfo + ' ';
+        }
+      } else {
+        response += '🏊‍♀️ No pool at this property. ';
+        hasData = true;
+      }
+    }
+    
+    // Hot tub information - SPECIFIC DETECTION
+    if (lowerMessage.includes('hot tub') || lowerMessage.includes('jacuzzi') || lowerMessage.includes('spa')) {
+      const hasHotTub = amenities.some((a: string) => a.toLowerCase().includes('hot tub') || a.toLowerCase().includes('spa'));
+      if (hasHotTub) {
+        if (response) response += '\n\n';
+        response += '🛁 Yes! There\'s a hot tub available. ';
+        hasData = true;
+        
+        if (specialNotes.toLowerCase().includes('hot tub')) {
+          const hotTubInfo = this.extractHotTubInfo(specialNotes);
+          if (hotTubInfo) response += hotTubInfo;
+        }
+      } else {
+        if (response) response += '\n\n';
+        response += '🛁 No hot tub at this property. ';
+        hasData = true;
+      }
+    }
+    
+    // Game room information - SPECIFIC DETECTION
+    if (lowerMessage.includes('game room') || lowerMessage.includes('games') || lowerMessage.includes('entertainment')) {
+      const hasGameRoom = amenities.some((a: string) => 
+        a.toLowerCase().includes('game') || a.toLowerCase().includes('entertainment')
+      );
+      
+      if (hasGameRoom) {
+        if (response) response += '\n\n';
+        response += '🎮 Yes! The property has entertainment/game facilities. ';
+        hasData = true;
+      } else {
+        if (response) response += '\n\n';
+        response += '🎮 No dedicated game room at this property. ';
+        hasData = true;
+      }
+    }
+    
     // BBQ Grill information
-    if ((lowerMessage.includes('grill') || lowerMessage.includes('bbq') || lowerMessage.includes('barbecue')) && amenities.includes('BBQ Grill')) {
-      response += '🔥 Yes! There\'s a BBQ grill available for you to use! Perfect for grilling up some dinner. 🍖\n\nWant me to recommend what groceries to pick up for a cookout?';
-      hasData = true;
-    } else if (lowerMessage.includes('grill') || lowerMessage.includes('bbq') || lowerMessage.includes('barbecue')) {
-      response += '🔥 No grill at this property, but I can recommend great BBQ restaurants nearby if you\'re craving grilled food! 🍖';
-      hasData = true;
+    if (lowerMessage.includes('grill') || lowerMessage.includes('bbq') || lowerMessage.includes('barbecue')) {
+      const hasGrill = amenities.some((a: string) => a.toLowerCase().includes('grill') || a.toLowerCase().includes('bbq'));
+      if (hasGrill) {
+        if (response) response += '\n\n';
+        response += '🔥 Yes! There\'s a BBQ grill available for you to use!';
+        hasData = true;
+      } else {
+        if (response) response += '\n\n';
+        response += '🔥 No grill at this property. ';
+        hasData = true;
+      }
     }
     
     // Pool information
@@ -175,7 +241,7 @@ export class PropertyDataExtractor {
     
     if (!checkoutTime && !cleaningInstructions) {
       return {
-        content: 'I don\'t have specific checkout information for this property. Let me get that for you from the host.',
+        content: '',
         hasData: false,
         dataType: 'checkout'
       };
@@ -184,11 +250,16 @@ export class PropertyDataExtractor {
     let response = '';
     
     if (checkoutTime) {
-      response += `⏰ Checkout time is ${checkoutTime}. `;
+      response += `⏰ Checkout time: ${checkoutTime}\n\n`;
     }
     
     if (cleaningInstructions) {
-      response += `📝 Checkout instructions: ${cleaningInstructions}`;
+      response += `📝 Before you leave:\n${cleaningInstructions}\n\n`;
+    }
+    
+    // Add helpful closing
+    if (!cleaningInstructions && checkoutTime) {
+      response += 'Just leave the keys and close the door behind you. Have a safe trip!';
     }
     
     return {
@@ -203,13 +274,13 @@ export class PropertyDataExtractor {
     
     if (!emergencyContact) {
       return {
-        content: 'For any maintenance issues or emergencies, I\'ll help connect you with the property host. What specific issue are you experiencing?',
+        content: '',
         hasData: false,
         dataType: 'emergency'
       };
     }
     
-    const response = `🚨 For maintenance problems or emergencies, contact: ${emergencyContact}`;
+    const response = `🚨 Emergency Contact:\n${emergencyContact}\n\nDon't hesitate to reach out if you need anything!`;
     
     return {
       content: response,
@@ -220,16 +291,22 @@ export class PropertyDataExtractor {
   
   static extractAccessInfo(property: any): PropertyDataResponse {
     const accessInstructions = property.access_instructions || '';
+    const emergencyContact = property.emergency_contact || '';
     
     if (!accessInstructions) {
       return {
-        content: 'I don\'t have the access instructions readily available. Let me get those details for you from the host.',
+        content: '',
         hasData: false,
         dataType: 'access'
       };
     }
     
-    const response = `🔑 Access instructions: ${accessInstructions}`;
+    let response = `🔑 Access Instructions:\n${accessInstructions}`;
+    
+    // Always add emergency contact for access issues
+    if (emergencyContact) {
+      response += `\n\n🚨 Having trouble? Contact: ${emergencyContact}`;
+    }
     
     return {
       content: response,

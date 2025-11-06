@@ -318,13 +318,39 @@ export class IntentRecognitionService {
   }
 
   private static detectSingleIntent(message: string): { intent: string; confidence: number } {
-    // ENHANCED: Property-specific intents with higher priority than food
+    // CRITICAL: Urgent access issues - HIGHEST PRIORITY
     if (this.matchesKeywords(message, [
-      'amenities', 'amenity', 'pool', 'hot tub', 'game room', 'gym', 'fitness',
-      'check out', 'checkout', 'check-out', 'instructions', 'time to leave',
-      'departure', 'when do i leave', 'check out time', 'checkout time'
+      'code not working', 'code doesn\'t work', 'can\'t get in', 'locked out',
+      'trouble entering', 'access problem', 'door won\'t open', 'can\'t access',
+      'code won\'t work', 'having trouble with code'
     ])) {
-      return { intent: 'ask_property_specific', confidence: 0.95 };
+      return { intent: 'ask_access', confidence: 0.98 };
+    }
+    
+    // ENHANCED: Check-out time detection (separate from "leave")
+    if (this.matchesKeywords(message, [
+      'check out time', 'checkout time', 'check-out time',
+      'what time do i check out', 'when do i check out', 'when do i need to leave',
+      'when should i leave', 'departure time', 'check out instructions',
+      'checkout instructions', 'leaving instructions'
+    ])) {
+      return { intent: 'ask_checkout_time', confidence: 0.95 };
+    }
+    
+    // ENHANCED: Amenity detection - separate intent
+    if (this.matchesKeywords(message, [
+      'pool', 'hot tub', 'jacuzzi', 'spa', 'game room', 'games',
+      'gym', 'fitness', 'bbq', 'grill', 'barbecue',
+      'does the property have', 'is there a', 'do you have a'
+    ])) {
+      return { intent: 'ask_amenity', confidence: 0.95 };
+    }
+    
+    // General property-specific questions
+    if (this.matchesKeywords(message, [
+      'amenities', 'property features', 'what does the property have'
+    ])) {
+      return { intent: 'ask_property_specific', confidence: 0.9 };
     }
 
     // ENHANCED: Emergency/Maintenance with highest priority
@@ -397,11 +423,15 @@ export class IntentRecognitionService {
       return { intent: 'ask_emergency_contact', confidence: 0.95 };
     }
 
-    // Property basics
-    if (this.matchesKeywords(message, ['checkout', 'check out', 'check-out', 'when do i leave', 'departure time'])) {
-      return { intent: 'ask_checkout_time', confidence: 0.95 };
+    // Access/Entry (don't confuse with check-out)
+    if (this.matchesKeywords(message, [
+      'access', 'entry', 'how do i get in', 'getting in', 'enter',
+      'access code', 'entry code', 'door code', 'lock code'
+    ])) {
+      return { intent: 'ask_access', confidence: 0.95 };
     }
     
+    // Check-in time
     if (this.matchesKeywords(message, ['checkin', 'check in', 'check-in', 'arrival time', 'when can i arrive', 'early check'])) {
       return { intent: 'ask_checkin_time', confidence: 0.95 };
     }

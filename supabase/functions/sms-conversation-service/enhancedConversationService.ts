@@ -133,6 +133,14 @@ export class EnhancedConversationService {
 
         // ✅ PHASE 1: Enhanced Knowledge-First Response System (HIGHEST PRIORITY)
         console.log('🎯 Processing with enhanced knowledge-first approach:', intentResult.intent);
+        
+        // CRITICAL: Check property data FIRST for all property-related intents
+        const propertyDataResponse = await this.checkPropertyDataFirst(intentResult.intent, message, property, conversation);
+        if (propertyDataResponse) {
+          console.log('✅ Property data response generated');
+          return propertyDataResponse;
+        }
+        
         const enhancedResponse = await this.processWithKnowledgeFirst(intentResult.intent, message, property, conversation);
         if (enhancedResponse && enhancedResponse.response && enhancedResponse.response.length > 10) {
           console.log('✅ Enhanced knowledge-first response generated');
@@ -609,6 +617,156 @@ export class EnhancedConversationService {
       },
       last_message_type: intent
     });
+    
+    return {
+      response: MessageUtils.ensureSmsLimit(response),
+      shouldUpdateState: false
+    };
+  }
+
+  /**
+   * NEW: Check property data FIRST before any AI calls
+   */
+  private async checkPropertyDataFirst(intent: string, message: string, property: Property, conversation: Conversation): Promise<any> {
+    console.log('🔍 Checking property data first for intent:', intent);
+    
+    // CRITICAL: Detect urgent access issues
+    const isUrgent = this.detectUrgentIssue(message);
+    if (isUrgent) {
+      console.log('🚨 URGENT issue detected!');
+      return await this.handleUrgentIssue(message, property);
+    }
+    
+    // Check all property-related intents
+    const propertyIntents = [
+      'ask_checkout_time', 'ask_checkin_time', 'ask_access', 
+      'ask_wifi', 'ask_parking', 'ask_amenity', 'ask_emergency_contact',
+      'ask_property_specific'
+    ];
+    
+    if (propertyIntents.includes(intent)) {
+      const dataResponse = PropertyDataExtractor.extractPropertyData(property, intent, message);
+      
+      if (dataResponse.hasData) {
+        console.log('✅ Property data found:', dataResponse.dataType);
+        
+        // Add conversational wrapper
+        let response = dataResponse.content;
+        
+        // Add helpful follow-up
+        if (intent === 'ask_wifi' && !message.toLowerCase().includes('not working')) {
+          response += '\n\nLet me know if you have any trouble connecting!';
+        } else if (intent === 'ask_checkout_time') {
+          response += '\n\nNeed help with anything else before you leave?';
+        } else if (intent === 'ask_amenity') {
+          response += '\n\nWhat else can I help with?';
+        }
+        
+        await this.conversationManager.updateConversationState(conversation.phone_number, {
+          last_intent: intent,
+          last_response: response
+        });
+        
+        return {
+          response: MessageUtils.ensureSmsLimit(response),
+          shouldUpdateState: false
+        };
+      } else {
+        // No data found - provide helpful fallback
+        console.log('❌ No property data found, providing fallback');
+        return await this.handleMissingPropertyData(intent, property, message);
+      }
+    }
+    
+    return null;
+  }
+  
+  /**
+   * Detect urgent issues that need immediate attention
+   */
+  private detectUrgentIssue(message: string): boolean {
+    const urgentKeywords = [
+      'not working', 'doesn\'t work', 'can\'t get in', 'locked out',
+      'code not working', 'code doesn\'t work', 'won\'t open',
+      'can\'t access', 'trouble entering', 'access problem',
+      'broken', 'emergency', 'urgent', 'help', 'stuck'
+    ];
+    
+    const lowerMessage = message.toLowerCase();
+    return urgentKeywords.some(keyword => lowerMessage.includes(keyword));
+  }
+  
+  /**
+   * Handle urgent issues with immediate response + emergency contact
+   */
+  private async handleUrgentIssue(message: string, property: Property): Promise<any> {
+    const lowerMessage = message.toLowerCase();
+    let response = '';
+    
+    // Detect issue type
+    if (lowerMessage.includes('code') || lowerMessage.includes('access') || lowerMessage.includes('get in') || lowerMessage.includes('locked')) {
+      response = '🚨 I see you\'re having trouble accessing the property. Let me help!\n\n';
+      
+      if (property.access_instructions) {
+        response += `🔑 Access Code: ${property.access_instructions}\n\n`;
+      }
+      
+      response += 'If the code still isn\'t working: ';
+    } else if (lowerMessage.includes('wifi') || lowerMessage.includes('internet')) {
+      response = '🚨 WiFi trouble? Let me help!\n\n';
+      
+      if (property.wifi_name && property.wifi_password) {
+        response += `📶 Network: ${property.wifi_name}\nPassword: ${property.wifi_password}\n\n`;
+        response += 'Try forgetting the network and reconnecting. If still not working: ';
+      }
+    } else {
+      response = '🚨 I see there\'s an issue. ';
+    }
+    
+    // Always provide emergency contact for urgent issues
+    if (property.emergency_contact) {
+      response += `Contact your host immediately: ${property.emergency_contact}`;
+    } else {
+      response += 'Contact your host immediately for assistance.';
+    }
+    
+    return {
+      response: MessageUtils.ensureSmsLimit(response),
+      shouldUpdateState: false
+    };
+  }
+  
+  /**
+   * Handle missing property data gracefully
+   */
+  private async handleMissingPropertyData(intent: string, property: Property, message: string): Promise<any> {
+    let response = '';
+    
+    // Provide emergency contact for critical info
+    if (intent === 'ask_emergency_contact' || intent === 'ask_access') {
+      response = '🚨 ';
+      if (property.emergency_contact) {
+        response += `For any issues, contact: ${property.emergency_contact}`;
+      } else {
+        response += 'I don\'t have the emergency contact info. Let me get that for you.';
+      }
+    } else if (intent === 'ask_checkout_time') {
+      response = 'I don\'t have the checkout time in my records. ';
+      if (property.emergency_contact) {
+        response += `Contact your host for details: ${property.emergency_contact}`;
+      } else {
+        response += 'Let me get that information from your host.';
+      }
+    } else if (intent === 'ask_wifi') {
+      response = '📶 I don\'t have the WiFi details. ';
+      if (property.emergency_contact) {
+        response += `Contact your host: ${property.emergency_contact}`;
+      } else {
+        response += 'Check your welcome email or contact your host.';
+      }
+    } else {
+      response = 'I don\'t have that information right now. Let me help you find what you need! What would you like to know about?';
+    }
     
     return {
       response: MessageUtils.ensureSmsLimit(response),
