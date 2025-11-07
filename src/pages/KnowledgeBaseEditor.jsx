@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, Save, Plus, Trash2, FileText } from 'lucide-react';
+import { Loader2, Save, Plus, Trash2, FileText, Eye } from 'lucide-react';
 
 const KnowledgeBaseEditor = () => {
   const navigate = useNavigate();
@@ -255,13 +255,17 @@ const KnowledgeBaseEditor = () => {
         </div>
 
         <Tabs defaultValue="details" className="w-full">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="details">Details</TabsTrigger>
             <TabsTrigger value="amenities">Amenities</TabsTrigger>
             <TabsTrigger value="rules">House Rules</TabsTrigger>
             <TabsTrigger value="checkout">Checkout</TabsTrigger>
             <TabsTrigger value="resort">Resort</TabsTrigger>
             <TabsTrigger value="faq">FAQs</TabsTrigger>
+            <TabsTrigger value="preview">
+              <Eye className="mr-2 h-4 w-4" />
+              Preview
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="details">
@@ -444,6 +448,93 @@ const KnowledgeBaseEditor = () => {
                 {faqs.length === 0 && (
                   <p className="text-muted-foreground text-center py-8">
                     No FAQs added yet. Click "Add FAQ" to get started.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="preview">
+            <Card>
+              <CardHeader>
+                <CardTitle>Guest View Preview</CardTitle>
+                <CardDescription>
+                  How the knowledge base will appear to guests
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {propertyDetails && (
+                  <div className="prose prose-sm max-w-none">
+                    <h2 className="text-xl font-bold mb-3">Property Details</h2>
+                    <div className="whitespace-pre-wrap text-muted-foreground">
+                      {propertyDetails}
+                    </div>
+                  </div>
+                )}
+
+                {amenities.length > 0 && (
+                  <div className="prose prose-sm max-w-none">
+                    <h2 className="text-xl font-bold mb-3">Amenities & Facilities</h2>
+                    <div className="grid gap-4">
+                      {amenities.map((amenity) => (
+                        <div key={amenity.id} className="border-l-4 border-primary pl-4">
+                          <h3 className="font-semibold text-lg mb-2">{amenity.title}</h3>
+                          <p className="text-muted-foreground whitespace-pre-wrap">
+                            {amenity.description}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {houseRules && (
+                  <div className="prose prose-sm max-w-none">
+                    <h2 className="text-xl font-bold mb-3">House Rules</h2>
+                    <div className="whitespace-pre-wrap text-muted-foreground">
+                      {houseRules}
+                    </div>
+                  </div>
+                )}
+
+                {checkoutInstructions && (
+                  <div className="prose prose-sm max-w-none">
+                    <h2 className="text-xl font-bold mb-3">Checkout Instructions</h2>
+                    <div className="whitespace-pre-wrap text-muted-foreground">
+                      {checkoutInstructions}
+                    </div>
+                  </div>
+                )}
+
+                {resortAmenities && (
+                  <div className="prose prose-sm max-w-none">
+                    <h2 className="text-xl font-bold mb-3">Solara Resort Amenities</h2>
+                    <div className="whitespace-pre-wrap text-muted-foreground">
+                      {resortAmenities}
+                    </div>
+                  </div>
+                )}
+
+                {faqs.length > 0 && (
+                  <div className="prose prose-sm max-w-none">
+                    <h2 className="text-xl font-bold mb-3">Frequently Asked Questions</h2>
+                    <div className="space-y-4">
+                      {faqs.map((faq) => (
+                        <div key={faq.id} className="bg-muted/50 rounded-lg p-4">
+                          <h3 className="font-semibold mb-2">Q: {faq.question}</h3>
+                          <p className="text-muted-foreground whitespace-pre-wrap">
+                            A: {faq.answer}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {!propertyDetails && amenities.length === 0 && !houseRules && 
+                 !checkoutInstructions && !resortAmenities && faqs.length === 0 && (
+                  <p className="text-muted-foreground text-center py-8">
+                    No content to preview. Add content in the other tabs to see the preview.
                   </p>
                 )}
               </CardContent>
