@@ -1,5 +1,5 @@
 
-import React from 'react';
+
 
 export function Toaster() {
   // Simple placeholder for sonner toaster
