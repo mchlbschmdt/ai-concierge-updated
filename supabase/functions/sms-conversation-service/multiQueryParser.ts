@@ -51,9 +51,9 @@ export class MultiQueryParser {
         priority: 2
       },
       {
-        patterns: ['coffee', 'cafe', 'coffee shop'],
+        patterns: ['coffee', 'cafe', 'coffee shop', 'espresso', 'latte'],
         type: 'food' as const,
-        intent: 'ask_food_recommendations',
+        intent: 'ask_coffee_recommendations',
         priority: 2
       },
       {
@@ -65,9 +65,21 @@ export class MultiQueryParser {
       
       // Lower priority - Transport and general
       {
-        patterns: ['grocery', 'groceries', 'supermarket', 'shopping', 'transportation', 'uber', 'taxi'],
+        patterns: ['grocery', 'groceries', 'supermarket', 'shopping', 'publix', 'aldi'],
         type: 'transport' as const,
-        intent: 'ask_grocery_transport',
+        intent: 'ask_grocery',
+        priority: 3
+      },
+      {
+        patterns: ['transportation', 'uber', 'taxi', 'shuttle', 'getting around', 'no car'],
+        type: 'transport' as const,
+        intent: 'ask_transportation_no_car',
+        priority: 3
+      },
+      {
+        patterns: ['garbage', 'trash', 'recycling'],
+        type: 'property_info' as const,
+        intent: 'ask_garbage',
         priority: 3
       }
     ];
@@ -142,17 +154,17 @@ export class MultiQueryParser {
       return this.getSingleQueryAcknowledgment(query.type);
     }
     
-    // Multi-query acknowledgment
+    // Multi-query acknowledgment - keep it concise!
     const queryTypes = queries.map(q => this.getQueryTypeDescription(q.type));
     
     if (queryTypes.length === 2) {
-      return `I'll help you with ${queryTypes[0]} and ${queryTypes[1]}. Let me get that information for you!`;
+      return `Happy to help with both! Let me start with ${queryTypes[0]}...`;
     } else if (queryTypes.length > 2) {
       const lastType = queryTypes.pop();
-      return `I'll help you with ${queryTypes.join(', ')}, and ${lastType}. Let me gather all that information!`;
+      return `Happy to help with all that! Starting with ${queryTypes[0]}...`;
     }
     
-    return "I'll help you with all of those questions! Give me a moment to gather the information.";
+    return "Got it! Let me find all that for you...";
   }
   
   /**

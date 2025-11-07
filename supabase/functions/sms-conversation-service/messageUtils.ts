@@ -2,7 +2,9 @@
 import { Conversation } from './types.ts';
 
 export class MessageUtils {
-  static ensureSmsLimit(text: string, maxLength: number = 160): string[] {
+  // ENHANCED: Better SMS splitting with part indicators (Phase 7)
+  static ensureSmsLimit(text: string, maxLength: number = 155): string[] {
+    // Target 155 chars to leave room for (1/2) indicators
     if (text.length <= maxLength) {
       return [text];
     }
@@ -24,15 +26,22 @@ export class MessageUtils {
       const newlineBreak = remainingText.lastIndexOf('\n', maxLength);
       const spaceBreak = remainingText.lastIndexOf(' ', maxLength);
       
-      // Prefer sentence endings, then word boundaries
-      if (sentenceBreak > maxLength * 0.7) breakPoint = sentenceBreak + 1;
-      else if (questionBreak > maxLength * 0.7) breakPoint = questionBreak + 1;
-      else if (exclamationBreak > maxLength * 0.7) breakPoint = exclamationBreak + 1;
-      else if (newlineBreak > maxLength * 0.7) breakPoint = newlineBreak + 1;
-      else if (spaceBreak > maxLength * 0.7) breakPoint = spaceBreak;
+      // Prefer sentence endings, then newlines, then word boundaries
+      if (sentenceBreak > maxLength * 0.6) breakPoint = sentenceBreak + 1;
+      else if (questionBreak > maxLength * 0.6) breakPoint = questionBreak + 1;
+      else if (exclamationBreak > maxLength * 0.6) breakPoint = exclamationBreak + 1;
+      else if (newlineBreak > maxLength * 0.6) breakPoint = newlineBreak + 1;
+      else if (spaceBreak > maxLength * 0.6) breakPoint = spaceBreak;
       
       segments.push(remainingText.substring(0, breakPoint).trim());
       remainingText = remainingText.substring(breakPoint).trim();
+    }
+    
+    // Add part indicators if multiple segments
+    if (segments.length > 1) {
+      return segments.map((segment, index) => 
+        `(${index + 1}/${segments.length}) ${segment}`
+      );
     }
     
     return segments;

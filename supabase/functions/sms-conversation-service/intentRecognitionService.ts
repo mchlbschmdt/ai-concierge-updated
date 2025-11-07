@@ -337,13 +337,40 @@ export class IntentRecognitionService {
       return { intent: 'ask_checkout_time', confidence: 0.95 };
     }
     
-    // ENHANCED: Amenity detection - separate intent
+    // ENHANCED: Amenity detection - separate intent with more keywords
     if (this.matchesKeywords(message, [
-      'pool', 'hot tub', 'jacuzzi', 'spa', 'game room', 'games',
+      'pool', 'hot tub', 'jacuzzi', 'spa', 'game room', 'games', 'arcade',
       'gym', 'fitness', 'bbq', 'grill', 'barbecue',
-      'does the property have', 'is there a', 'do you have a'
+      'does the property have', 'is there a', 'do you have a',
+      'turn on hot tub', 'heat hot tub', 'hot tub timer'
     ])) {
       return { intent: 'ask_amenity', confidence: 0.95 };
+    }
+    
+    // NEW: Garbage/trash collection
+    if (this.matchesKeywords(message, [
+      'garbage', 'trash', 'recycling', 'pickup', 'collection',
+      'garbage day', 'trash day', 'when is garbage', 'when is trash'
+    ])) {
+      return { intent: 'ask_garbage', confidence: 0.95 };
+    }
+    
+    // NEW: Grocery stores
+    if (this.matchesKeywords(message, [
+      'grocery', 'groceries', 'supermarket', 'store', 'shopping',
+      'where can i buy', 'where to buy', 'publix', 'aldi',
+      'food shopping', 'buy food'
+    ])) {
+      return { intent: 'ask_grocery', confidence: 0.95 };
+    }
+    
+    // NEW: Transportation without car
+    if (this.matchesKeywords(message, [
+      'transportation', 'transport', 'without a car', 'no car',
+      'getting around', 'how do i get', 'shuttle', 'uber', 'lyft',
+      'public transport', 'bus', 'taxi', 'rideshare'
+    ])) {
+      return { intent: 'ask_transportation_no_car', confidence: 0.95 };
     }
     
     // General property-specific questions

@@ -1,13 +1,27 @@
+import { Property1434Handler } from './property1434Data.ts';
+
 export interface PropertyDataResponse {
   content: string;
   hasData: boolean;
-  dataType: 'amenities' | 'checkout' | 'emergency' | 'access' | 'general';
+  dataType: 'amenities' | 'checkout' | 'emergency' | 'access' | 'general' | 'garbage' | 'grocery' | 'transportation';
 }
 
 export class PropertyDataExtractor {
   
-  // NEW: Main property data extraction method
+  // NEW: Main property data extraction method with Property 1434 hardcoded data
   static extractPropertyData(property: any, intent: string, message: string): PropertyDataResponse {
+    // ⭐ PRIORITY: Check if this is property 1434 and use hardcoded data
+    console.log('🏠 Property detection:', { property_id: property?.property_id, code: property?.code });
+    const isProperty1434 = Property1434Handler.isProperty1434(property?.code || property?.property_id);
+    
+    if (isProperty1434) {
+      console.log('✅ Property 1434 detected, using hardcoded data for intent:', intent);
+      const hardcodedResponse = this.getProperty1434Data(intent, message);
+      if (hardcodedResponse.hasData) {
+        console.log('📚 Using hardcoded property data');
+        return hardcodedResponse;
+      }
+    }
     switch (intent) {
       case 'ask_access':
         return this.extractAccessInfo(property);
@@ -23,9 +37,96 @@ export class PropertyDataExtractor {
         return this.extractEmergencyContact(property);
       case 'ask_amenity':
         return this.extractAmenityInfo(property, message);
+      case 'ask_garbage':
+        return this.extractGarbageInfo(property);
+      case 'ask_grocery':
+        return this.extractGroceryInfo(property);
+      case 'ask_transportation_no_car':
+        return this.extractTransportationInfo(property);
+      case 'ask_grocery_transport':
+        return this.extractGroceryTransportInfo(property);
       default:
         return { content: '', hasData: false, dataType: 'general' };
     }
+  }
+  
+  // ⭐ NEW: Get hardcoded data for Property 1434
+  private static getProperty1434Data(intent: string, message: string): PropertyDataResponse {
+    const lowerMessage = message.toLowerCase();
+    
+    // Pool queries
+    if (intent === 'ask_amenity' && lowerMessage.includes('pool')) {
+      return {
+        content: Property1434Handler.getPoolInfo(),
+        hasData: true,
+        dataType: 'amenities'
+      };
+    }
+    
+    // Hot tub queries
+    if (intent === 'ask_amenity' && (lowerMessage.includes('hot tub') || lowerMessage.includes('jacuzzi'))) {
+      return {
+        content: Property1434Handler.getHotTubInfo(),
+        hasData: true,
+        dataType: 'amenities'
+      };
+    }
+    
+    // Game room queries
+    if (intent === 'ask_amenity' && (lowerMessage.includes('game') || lowerMessage.includes('arcade'))) {
+      return {
+        content: Property1434Handler.getGameRoomInfo(),
+        hasData: true,
+        dataType: 'amenities'
+      };
+    }
+    
+    // Checkout queries
+    if (intent === 'ask_checkout_time') {
+      return {
+        content: Property1434Handler.getCheckoutInfo(),
+        hasData: true,
+        dataType: 'checkout'
+      };
+    }
+    
+    // Garbage queries
+    if (intent === 'ask_garbage') {
+      return {
+        content: Property1434Handler.getGarbageInfo(),
+        hasData: true,
+        dataType: 'garbage'
+      };
+    }
+    
+    // Grocery queries
+    if (intent === 'ask_grocery' || intent === 'ask_grocery_transport') {
+      return {
+        content: Property1434Handler.getGroceryInfo(),
+        hasData: true,
+        dataType: 'grocery'
+      };
+    }
+    
+    // Transportation queries
+    if (intent === 'ask_transportation_no_car' || intent === 'ask_grocery_transport') {
+      return {
+        content: Property1434Handler.getTransportationInfo(),
+        hasData: true,
+        dataType: 'transportation'
+      };
+    }
+    
+    // Emergency contact
+    if (intent === 'ask_emergency_contact') {
+      return {
+        content: Property1434Handler.getEmergencyContact(),
+        hasData: true,
+        dataType: 'emergency'
+      };
+    }
+    
+    return { content: '', hasData: false, dataType: 'general' };
   }
 
   // NEW: Extract WiFi info
@@ -315,7 +416,89 @@ export class PropertyDataExtractor {
     };
   }
   
+  // NEW: Extract garbage/trash collection info
+  static extractGarbageInfo(property: any): PropertyDataResponse {
+    // Check if Property 1434
+    if (Property1434Handler.isProperty1434(property?.code || property?.property_id)) {
+      return {
+        content: Property1434Handler.getGarbageInfo(),
+        hasData: true,
+        dataType: 'garbage'
+      };
+    }
+    
+    // Generic response for other properties
+    return {
+      content: 'Please check with your host for garbage collection schedule.',
+      hasData: false,
+      dataType: 'general'
+    };
+  }
+  
+  // NEW: Extract grocery store info
+  static extractGroceryInfo(property: any): PropertyDataResponse {
+    // Check if Property 1434
+    if (Property1434Handler.isProperty1434(property?.code || property?.property_id)) {
+      return {
+        content: Property1434Handler.getGroceryInfo(),
+        hasData: true,
+        dataType: 'grocery'
+      };
+    }
+    
+    // Try to extract from local recommendations
+    const localRecs = property.local_recommendations || '';
+    if (localRecs.includes('grocery') || localRecs.includes('Publix') || localRecs.includes('Aldi')) {
+      const groceryMatch = localRecs.match(/\*\*\*Groceries[^*]*\*\*\*[^*]*/i);
+      if (groceryMatch) {
+        return {
+          content: '🛒 ' + groceryMatch[0].replace(/\*\*\*/g, '').trim(),
+          hasData: true,
+          dataType: 'grocery'
+        };
+      }
+    }
+    
+    return { content: '', hasData: false, dataType: 'general' };
+  }
+  
+  // NEW: Extract transportation info
+  static extractTransportationInfo(property: any): PropertyDataResponse {
+    // Check if Property 1434
+    if (Property1434Handler.isProperty1434(property?.code || property?.property_id)) {
+      return {
+        content: Property1434Handler.getTransportationInfo(),
+        hasData: true,
+        dataType: 'transportation'
+      };
+    }
+    
+    // Try to extract from local recommendations
+    const localRecs = property.local_recommendations || '';
+    if (localRecs.includes('shuttle') || localRecs.includes('transportation')) {
+      const shuttleMatch = localRecs.match(/\*\*\*Disney Shuttle[^*]*\*\*\*[^*]*/i);
+      if (shuttleMatch) {
+        return {
+          content: '🚌 ' + shuttleMatch[0].replace(/\*\*\*/g, '').trim(),
+          hasData: true,
+          dataType: 'transportation'
+        };
+      }
+    }
+    
+    return { content: '', hasData: false, dataType: 'general' };
+  }
+  
   static extractGroceryTransportInfo(property: any): PropertyDataResponse {
+    // Check if Property 1434 first
+    if (Property1434Handler.isProperty1434(property?.code || property?.property_id)) {
+      return {
+        content: `${Property1434Handler.getGroceryInfo()}\n\n${Property1434Handler.getTransportationInfo()}`,
+        hasData: true,
+        dataType: 'general'
+      };
+    }
+    
     const localRecs = property.local_recommendations || '';
     
     let response = '';
@@ -323,7 +506,7 @@ export class PropertyDataExtractor {
     
     // Look for grocery information in local recommendations
     if (localRecs.includes('Aldi') || localRecs.includes('Publix') || localRecs.includes('grocery')) {
-      const groceryInfo = this.extractGroceryInfo(localRecs);
+      const groceryInfo = this.extractGroceryInfoText(localRecs);
       if (groceryInfo) {
         response += groceryInfo + ' ';
         hasData = true;
@@ -332,7 +515,7 @@ export class PropertyDataExtractor {
     
     // Add transportation info
     if (localRecs.includes('shuttle') || localRecs.includes('Disney')) {
-      const transportInfo = this.extractTransportInfo(localRecs);
+      const transportInfo = this.extractTransportInfoText(localRecs);
       if (transportInfo) {
         response += transportInfo;
         hasData = true;
@@ -360,7 +543,8 @@ export class PropertyDataExtractor {
     return hotTubMatch ? hotTubMatch[0] + ' ' : '';
   }
   
-  private static extractGroceryInfo(recommendations: string): string {
+  // Renamed to avoid conflicts
+  private static extractGroceryInfoText(recommendations: string): string {
     const groceryMatch = recommendations.match(/\*\*\*Groceries[^*]*\*\*\*[^*]*/i);
     if (groceryMatch) {
       return groceryMatch[0].replace(/\*\*\*/g, '').trim();
@@ -374,7 +558,7 @@ export class PropertyDataExtractor {
     return '';
   }
   
-  private static extractTransportInfo(recommendations: string): string {
+  private static extractTransportInfoText(recommendations: string): string {
     const shuttleMatch = recommendations.match(/\*\*\*Disney Shuttle[^*]*\*\*\*[^*]*/i);
     if (shuttleMatch) {
       return '🚌 ' + shuttleMatch[0].replace(/\*\*\*/g, '').trim();

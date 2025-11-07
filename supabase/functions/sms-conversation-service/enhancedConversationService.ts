@@ -1070,18 +1070,61 @@ export class EnhancedConversationService {
       return await this.handleRecommendationWithDiversification(recommendationIntent, property, message, conversation);
     }
     
-    // Smart fallback based on intent type with conversational tone
+    // Smart fallback based on intent type with specific actionable messages (Phase 2)
+    const emergencyContact = property?.emergency_contact || 'Mike & Lauren at (321) 340-6333';
+    
     switch (intent) {
       case 'ask_food_recommendations':
+        return {
+          response: [`I couldn't find restaurant info just now. Would you like me to ask your host?\n\n📞 ${emergencyContact}`],
+          shouldUpdateState: false
+        };
+      
       case 'ask_coffee_recommendations':
         return {
-          response: ["I'd love to help you find great local spots! Are you looking for breakfast, lunch, dinner, or something specific like kid-friendly places?"],
+          response: [`I couldn't find coffee shops just now. Would you like me to ask your host?\n\n📞 ${emergencyContact}`],
           shouldUpdateState: false
         };
       
       case 'ask_attractions':
         return {
-          response: ["I can recommend amazing things to do! Are you interested in outdoor activities, cultural attractions, family-friendly spots, or something else?"],
+          response: [`I couldn't find attractions just now. Would you like me to ask your host?\n\n📞 ${emergencyContact}`],
+          shouldUpdateState: false
+        };
+      
+      case 'ask_amenity':
+        return {
+          response: [`I couldn't access amenity details right now.\n\n📞 Please contact: ${emergencyContact}`],
+          shouldUpdateState: false
+        };
+      
+      case 'ask_checkout_time':
+        return {
+          response: [`I couldn't access checkout details right now.\n\n📞 Please contact: ${emergencyContact}`],
+          shouldUpdateState: false
+        };
+      
+      case 'ask_garbage':
+        return {
+          response: [`For garbage collection schedule:\n\n📞 ${emergencyContact}`],
+          shouldUpdateState: false
+        };
+      
+      case 'ask_grocery':
+        return {
+          response: [`For grocery store recommendations:\n\n📞 ${emergencyContact}`],
+          shouldUpdateState: false
+        };
+      
+      case 'ask_transportation_no_car':
+        return {
+          response: [`For transportation options:\n\n📞 ${emergencyContact}`],
+          shouldUpdateState: false
+        };
+      
+      case 'ask_grocery_transport':
+        return {
+          response: [`For grocery and transportation info:\n\n📞 ${emergencyContact}`],
           shouldUpdateState: false
         };
       
@@ -1594,7 +1637,7 @@ export class EnhancedConversationService {
 
   /**
    * RELAXED: Validate if a recommendation is actually useful content
-   * Now requires only 1 indicator instead of 2 for better success rate
+   * Phase 3: Even more lenient validation logic
    */
   private isValidRecommendation(recommendation: string | undefined | null): boolean {
     if (!recommendation || typeof recommendation !== 'string') {
@@ -1603,9 +1646,23 @@ export class EnhancedConversationService {
     }
     
     // PRIMARY CHECK: Length-based validation (most reliable)
-    if (recommendation.length < 30) {
-      console.log('❌ Validation failed: too short (<30 chars)');
+    if (recommendation.length < 20) {
+      console.log('❌ Validation failed: too short (<20 chars)');
       return false;
+    }
+    
+    // Auto-accept if contains emergency contact (always valid)
+    if (recommendation.includes('321') || recommendation.toLowerCase().includes('contact')) {
+      console.log('✅ Auto-accepted: Contains emergency contact');
+      return true;
+    }
+    
+    // Auto-accept if contains property-specific markers
+    const propertyMarkers = ['pool', 'hot tub', 'checkout', 'garbage', 'grocery', 'resort', 'publix', 'aldi'];
+    const hasPropertyMarker = propertyMarkers.some(marker => recommendation.toLowerCase().includes(marker));
+    if (hasPropertyMarker) {
+      console.log('✅ Auto-accepted: Contains property marker');
+      return true;
     }
     
     // Quick pass for longer content (likely valid)
@@ -1630,14 +1687,13 @@ export class EnhancedConversationService {
     }
     
     // RELAXED: Check for actual content indicators
-    // Valid recommendations should have at least ONE of these:
     const hasDistance = /\d+\.?\d*\s*(mi|miles|min|minutes|walk)/i.test(recommendation);
     const hasRating = /⭐|stars?|rated|rating|\d\.\d/i.test(recommendation);
     const hasProperNames = /[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+/.test(recommendation);
     const hasDescriptors = /(great|best|popular|local|famous|authentic|delicious|recommend|try)/i.test(recommendation);
     const hasAddress = /\d+\s+[A-Z][a-z]+\s+(Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Boulevard|Blvd)/i.test(recommendation);
     
-    // RELAXED: Now requires only 1 indicator instead of 2
+    // VERY RELAXED: Accept if has any indicator OR length > 50
     const validIndicators = [hasDistance, hasRating, hasProperNames, hasDescriptors, hasAddress].filter(Boolean).length;
     
     if (validIndicators >= 1) {
@@ -1647,6 +1703,12 @@ export class EnhancedConversationService {
       });
       return true;
     }
+    
+    // Very lenient fallback - accept most responses over 50 chars
+    const isValid = recommendation.length > 50;
+    console.log(isValid ? '✅ Accepted: Length validation passed (>50 chars)' : '❌ Rejected: Too short (<50 chars)');
+    return isValid;
+  }
     
     console.log('❌ Recommendation validation failed:', {
       length: recommendation.length, 
