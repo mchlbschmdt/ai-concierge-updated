@@ -300,7 +300,7 @@ export class EnhancedConversationService {
     });
     
     return {
-      response: MessageUtils.ensureSmsLimit(combinedResponse),
+      messages: MessageUtils.ensureSmsLimit(combinedResponse),
       shouldUpdateState: false
     };
   }
@@ -733,7 +733,7 @@ export class EnhancedConversationService {
         });
         
         return {
-          response: MessageUtils.ensureSmsLimit(response),
+          messages: MessageUtils.ensureSmsLimit(response),
           shouldUpdateState: false
         };
       } else {
@@ -796,7 +796,7 @@ export class EnhancedConversationService {
     }
     
     return {
-      response: MessageUtils.ensureSmsLimit(response),
+      messages: MessageUtils.ensureSmsLimit(response),
       shouldUpdateState: false
     };
   }
@@ -834,7 +834,7 @@ export class EnhancedConversationService {
     }
     
     return {
-      response: MessageUtils.ensureSmsLimit(response),
+      messages: MessageUtils.ensureSmsLimit(response),
       shouldUpdateState: false
     };
   }
@@ -1347,7 +1347,7 @@ export class EnhancedConversationService {
       });
       
       return {
-        response: MessageUtils.ensureSmsLimit(wifiResponse.response),
+        messages: MessageUtils.ensureSmsLimit(wifiResponse.response),
         shouldUpdateState: false
       };
     }
@@ -1383,7 +1383,7 @@ export class EnhancedConversationService {
       });
       
       return {
-        response: MessageUtils.ensureSmsLimit(menuResponse),
+        messages: MessageUtils.ensureSmsLimit(menuResponse),
         shouldUpdateState: false
       };
     }
@@ -1422,7 +1422,7 @@ export class EnhancedConversationService {
       });
       
       return {
-        response: MessageUtils.ensureSmsLimit(combinedResponse),
+        messages: MessageUtils.ensureSmsLimit(combinedResponse),
         shouldUpdateState: false
       };
     }
