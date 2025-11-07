@@ -1714,17 +1714,6 @@ export class EnhancedConversationService {
     console.log(isValid ? '✅ Accepted: Length validation passed (>50 chars)' : '❌ Rejected: Too short (<50 chars)');
     return isValid;
   }
-    
-    console.log('❌ Recommendation validation failed:', {
-      length: recommendation.length, 
-      validIndicators,
-      hasDistance, 
-      hasRating, 
-      hasProperNames, 
-      hasDescriptors 
-    });
-    return false;
-  }
 
   /**
    * Generate helpful error message with emergency contact
