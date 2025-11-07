@@ -135,7 +135,7 @@ export class RecommendationService {
         });
         
         return {
-          response: MessageUtils.ensureSmsLimit(recommendationText),
+          response: MessageUtils.ensureSmsLimit(recommendationText).join('\n'),
           shouldUpdateState: false
         };
       } else {
@@ -168,21 +168,21 @@ export class RecommendationService {
       const errorMessage = error?.message || '';
       if (errorMessage.includes('fetch failed') || errorMessage.includes('network')) {
         return {
-          response: `${namePrefix}I'm having trouble connecting right now. For immediate help, contact your host: ${property?.emergency_contact || 'see your welcome guide'}`,
+          response: MessageUtils.ensureSmsLimit(`${namePrefix}I'm having trouble connecting right now. For immediate help, contact your host: ${property?.emergency_contact || 'see your welcome guide'}`).join('\n'),
           shouldUpdateState: false
         };
       }
       
       if (errorMessage.includes('timeout') || errorMessage.includes('ETIMEDOUT')) {
         return {
-          response: `${namePrefix}That's taking longer than expected. Try again in a moment, or contact your host for quick recommendations: ${property?.emergency_contact || ''}`,
+          response: MessageUtils.ensureSmsLimit(`${namePrefix}That's taking longer than expected. Try again in a moment, or contact your host for quick recommendations: ${property?.emergency_contact || ''}`).join('\n'),
           shouldUpdateState: false
         };
       }
       
       // Generic fallback with property contact
       return {
-        response: `${namePrefix}I'm having trouble getting recommendations right now. Contact your host for local tips: ${property?.emergency_contact || ''}`,
+        response: MessageUtils.ensureSmsLimit(`${namePrefix}I'm having trouble getting recommendations right now. Contact your host for local tips: ${property?.emergency_contact || ''}`).join('\n'),
         shouldUpdateState: false
       };
     }
@@ -458,7 +458,7 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
         });
         
         return {
-          response: MessageUtils.ensureSmsLimit(recommendationText),
+          response: MessageUtils.ensureSmsLimit(recommendationText).join('\n'),
           shouldUpdateState: false
         };
       } else {
@@ -477,7 +477,7 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
       
       // Provide specific, helpful fallback
       return {
-        response: `${namePrefix}I'm having trouble getting those recommendations. Contact your host for local tips: ${property?.emergency_contact || ''}`,
+        response: MessageUtils.ensureSmsLimit(`${namePrefix}I'm having trouble getting those recommendations. Contact your host for local tips: ${property?.emergency_contact || ''}`).join('\n'),
         shouldUpdateState: false
       };
     }

@@ -684,7 +684,7 @@ export class EnhancedConversationService {
     });
     
     return {
-      response: MessageUtils.ensureSmsLimit(response),
+      response: MessageUtils.ensureSmsLimit(response).join('\n'),
       shouldUpdateState: false
     };
   }
@@ -855,13 +855,18 @@ export class EnhancedConversationService {
     
     console.log('🔍 Recommendation service returned:', recommendationResponse);
     
+    // Ensure response is a string before storing
+    const responseString = Array.isArray(recommendationResponse.response) 
+      ? recommendationResponse.response.join('\n')
+      : recommendationResponse.response;
+    
     // Update conversation flow after recommendation
     const conversationFlow = context.conversation_flow || {};
     const updatedFlow = ConversationContextTracker.updateConversationFlow(
       conversationFlow,
       intent,
       message,
-      recommendationResponse.response
+      responseString
     );
     
     // Update conversation state with flow tracking
@@ -871,11 +876,11 @@ export class EnhancedConversationService {
         conversation_flow: updatedFlow
       },
       last_message_type: intent,
-      last_recommendations: recommendationResponse.response
+      last_recommendations: responseString
     });
     
     // Return just the response string, not the full object
-    return recommendationResponse.response;
+    return responseString;
   }
 
   // ENHANCED: Handle property intents with data extraction and graceful fallbacks
@@ -1009,7 +1014,7 @@ export class EnhancedConversationService {
     });
     
     return {
-      response: MessageUtils.ensureSmsLimit(response),
+      response: MessageUtils.ensureSmsLimit(response).join('\n'),
       shouldUpdateState: false
     };
   }

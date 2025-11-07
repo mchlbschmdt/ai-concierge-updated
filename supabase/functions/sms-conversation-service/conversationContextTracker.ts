@@ -19,8 +19,11 @@ export class ConversationContextTracker {
     existingContext: any,
     intent: string,
     messageContent: string,
-    responseGiven: string
+    responseGiven: string | string[]
   ): ConversationFlow {
+    // Normalize to string at the top
+    const responseText = Array.isArray(responseGiven) ? responseGiven.join(' ') : responseGiven;
+    
     const context = existingContext || {};
     const now = new Date().toISOString();
     
@@ -38,8 +41,8 @@ export class ConversationContextTracker {
         newTopic
       ],
       conversationDepth: (context.conversationDepth || 0) + 1,
-      lastSpecificResponse: responseGiven,
-      awaitingFollowUp: this.determineAwaitingFollowUp(intent, responseGiven)
+      lastSpecificResponse: responseText,
+      awaitingFollowUp: this.determineAwaitingFollowUp(intent, responseText)
     };
 
     return flow;
@@ -123,7 +126,11 @@ export class ConversationContextTracker {
     return restaurantReferences.some(ref => message.includes(ref));
   }
   
-  private static extractRestaurantNames(response: string): string[] {
+  private static extractRestaurantNames(response: string | string[]): string[] {
+    // Type guard: convert array to string if needed
+    const responseText = Array.isArray(response) ? response.join(' ') : response;
+    if (typeof responseText !== 'string') return [];
+    
     const names: string[] = [];
     
     // Common restaurant name patterns
@@ -134,7 +141,7 @@ export class ConversationContextTracker {
     ];
     
     patterns.forEach(pattern => {
-      const matches = response.match(pattern);
+      const matches = responseText.match(pattern);
       if (matches) {
         matches.forEach(match => {
           const nameMatch = match.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/);
@@ -148,7 +155,7 @@ export class ConversationContextTracker {
     // Also look for specific restaurant names mentioned
     const commonNames = ['coopershawk', 'cooper hawk', 'paddlefish', 'homecomin', 'boathouse', 'wharf'];
     commonNames.forEach(name => {
-      if (response.toLowerCase().includes(name)) {
+      if (responseText.toLowerCase().includes(name)) {
         names.push(name);
       }
     });
