@@ -398,6 +398,7 @@ export class EnhancedConversationService {
     }
     
     // No diversification needed, proceed normally
+    console.log('✅ No diversification needed, using standard recommendation');
     return await this.handleRecommendationWithContext(intent, property, message, conversation);
   }
 
@@ -879,8 +880,11 @@ export class EnhancedConversationService {
       last_recommendations: responseString
     });
     
-    // Return just the response string, not the full object
-    return responseString;
+    console.log('✅ Returning recommendation with proper format:', { hasResponse: !!responseString });
+    return {
+      response: responseString,
+      shouldUpdateState: false
+    };
   }
 
   // ENHANCED: Handle property intents with data extraction and graceful fallbacks
@@ -968,7 +972,8 @@ export class EnhancedConversationService {
           return groceryTransportResponse.content;
         } else {
           // Route to recommendation service for enhanced response
-          return await this.handleRecommendationWithContext('ask_food_recommendations', property, message, conversation);
+          const recResult = await this.handleRecommendationWithContext('ask_food_recommendations', property, message, conversation);
+          return recResult.response;
         }
       }
     }
@@ -985,7 +990,8 @@ export class EnhancedConversationService {
     
     // Check if this is a special signal to use recommendation service
     if (response === 'USE_RECOMMENDATION_SERVICE') {
-      return await this.handleRecommendationWithContext(intent, property, message, conversation);
+      const recResult = await this.handleRecommendationWithContext(intent, property, message, conversation);
+      return recResult.response;
     }
     
     return response;
