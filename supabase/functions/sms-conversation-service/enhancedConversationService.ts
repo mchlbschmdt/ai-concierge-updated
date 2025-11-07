@@ -1593,16 +1593,25 @@ export class EnhancedConversationService {
   }
 
   /**
-   * Validate if a recommendation is actually useful content
+   * RELAXED: Validate if a recommendation is actually useful content
+   * Now requires only 1 indicator instead of 2 for better success rate
    */
   private isValidRecommendation(recommendation: string | undefined | null): boolean {
     if (!recommendation || typeof recommendation !== 'string') {
+      console.log('❌ Validation failed: null or non-string');
       return false;
     }
     
-    // Must have minimum length
-    if (recommendation.length < 20) {
+    // PRIMARY CHECK: Length-based validation (most reliable)
+    if (recommendation.length < 30) {
+      console.log('❌ Validation failed: too short (<30 chars)');
       return false;
+    }
+    
+    // Quick pass for longer content (likely valid)
+    if (recommendation.length > 100) {
+      console.log('✅ Validation passed: content length >100 chars');
+      return true;
     }
     
     // Check for error indicators
@@ -1616,37 +1625,30 @@ export class EnhancedConversationService {
     const hasError = errorPhrases.some(phrase => lower.includes(phrase));
     
     if (hasError) {
-      console.log('⚠️ Recommendation contains error phrase');
+      console.log('❌ Validation failed: contains error phrase');
       return false;
     }
     
-    // Check for actual content (names of places, distances, ratings)
-    // Valid recommendations should have specific indicators:
-    // - Distance indicators (mi, miles, minutes, walk)
-    // - Rating indicators (⭐, stars, rated)
-    // - Proper names (capitalized words)
-    // - Description indicators (great, best, popular, local)
-    
+    // RELAXED: Check for actual content indicators
+    // Valid recommendations should have at least ONE of these:
     const hasDistance = /\d+\.?\d*\s*(mi|miles|min|minutes|walk)/i.test(recommendation);
-    const hasRating = /⭐|stars?|rated|rating/i.test(recommendation);
+    const hasRating = /⭐|stars?|rated|rating|\d\.\d/i.test(recommendation);
     const hasProperNames = /[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+/.test(recommendation);
-    const hasDescriptors = /(great|best|popular|local|famous|authentic|delicious)/i.test(recommendation);
+    const hasDescriptors = /(great|best|popular|local|famous|authentic|delicious|recommend|try)/i.test(recommendation);
+    const hasAddress = /\d+\s+[A-Z][a-z]+\s+(Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Boulevard|Blvd)/i.test(recommendation);
     
-    // Should have at least 2 of these indicators for valid recommendation
-    const validIndicators = [hasDistance, hasRating, hasProperNames, hasDescriptors].filter(Boolean).length;
+    // RELAXED: Now requires only 1 indicator instead of 2
+    const validIndicators = [hasDistance, hasRating, hasProperNames, hasDescriptors, hasAddress].filter(Boolean).length;
     
-    if (validIndicators >= 2) {
-      console.log('✅ Recommendation validated:', { hasDistance, hasRating, hasProperNames, hasDescriptors });
+    if (validIndicators >= 1) {
+      console.log('✅ Recommendation validated with indicators:', { 
+        hasDistance, hasRating, hasProperNames, hasDescriptors, hasAddress,
+        count: validIndicators 
+      });
       return true;
     }
     
-    // For longer content without specific indicators, check if it has meaningful content
-    if (recommendation.length > 50 && hasProperNames) {
-      console.log('✅ Recommendation validated (long with proper names)');
-      return true;
-    }
-    
-    console.log('❌ Recommendation validation failed:', { 
+    console.log('❌ Recommendation validation failed:', {
       length: recommendation.length, 
       validIndicators,
       hasDistance, 

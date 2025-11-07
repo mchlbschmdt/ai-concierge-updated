@@ -65,8 +65,9 @@ export class RecommendationService {
         rejectedRestaurants: rejectedRestaurants
       };
 
-      console.log('🔄 [OPENAI] Enhanced payload being sent:', enhancedPayload);
+      console.log('🔄 [OPENAI] Enhanced payload being sent:', JSON.stringify(enhancedPayload).substring(0, 200));
 
+      const startTime = Date.now();
       const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
         method: 'POST',
         headers: {
@@ -76,14 +77,24 @@ export class RecommendationService {
         body: JSON.stringify(enhancedPayload)
       });
 
-      console.log('📊 [OPENAI] Response status:', response.status);
+      const responseTime = Date.now() - startTime;
+      console.log(`📊 [OPENAI] Response status: ${response.status}, Time: ${responseTime}ms`);
 
       if (response.ok) {
         const data = await response.json();
-        console.log('✅ [OPENAI] Enhanced recommendations received:', data.recommendation?.substring(0, 150) + '...');
+        console.log('✅ [OPENAI] Raw API response:', JSON.stringify(data).substring(0, 300));
+        
+        // FIX: Handle both { recommendation } and { response } formats
+        const recommendationText = data.recommendation || data.response;
+        
+        if (!recommendationText) {
+          console.error('❌ [OPENAI] API returned OK but no recommendation content:', data);
+          throw new Error('API returned empty recommendation');
+        }
+        
+        console.log('✅ [OPENAI] Enhanced recommendations received:', recommendationText.substring(0, 150) + '...');
         
         // Extract restaurant names for menu context
-        const recommendationText = data.recommendation;
         const restaurantNames = this.extractRestaurantNames(recommendationText);
         
         // Enhanced restaurant memory and preference tracking
@@ -116,32 +127,62 @@ export class RecommendationService {
         }
         
         // Store recommendations in travel database for future use
-        await this.storeTravelRecommendation(propertyAddress, requestType, data.recommendation);
+        await this.storeTravelRecommendation(propertyAddress, requestType, recommendationText);
         
         await this.conversationManager.updateConversationState(conversation.phone_number, {
-          last_recommendations: data.recommendation,
+          last_recommendations: recommendationText,
           conversation_context: updatedContext
         });
         
         return {
-          response: MessageUtils.ensureSmsLimit(data.recommendation),
+          response: MessageUtils.ensureSmsLimit(recommendationText),
           shouldUpdateState: false
         };
       } else {
         const errorText = await response.text();
-        console.error(`❌ [OPENAI] API failed: ${response.status} - ${errorText}`);
-        throw new Error(`Enhanced recommendations API failed: ${response.status}`);
+        const errorDetails = {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText,
+          url: response.url,
+          responseTime: responseTime
+        };
+        console.error('❌ [OPENAI] API failed:', JSON.stringify(errorDetails));
+        throw new Error(`OpenAI API error ${response.status}: ${errorText.substring(0, 100)}`);
       }
     } catch (error) {
       console.error('❌ [OPENAI] Error getting enhanced recommendations:', error);
+      console.error('❌ [OPENAI] Error stack:', error.stack);
+      console.error('❌ [OPENAI] Request details:', { 
+        property: property?.property_name, 
+        message: originalMessage.substring(0, 50),
+        hasApiKey: !!Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+      });
       
-      // Context-aware error fallback
+      // IMPROVED: Better context-aware error fallback with specific error type
       const context = conversation?.conversation_context || {};
       const guestName = context?.guest_name;
       const namePrefix = guestName ? `${guestName}, ` : '';
       
+      // Check error type for specific message
+      const errorMessage = error?.message || '';
+      if (errorMessage.includes('fetch failed') || errorMessage.includes('network')) {
+        return {
+          response: `${namePrefix}I'm having trouble connecting right now. For immediate help, contact your host: ${property?.emergency_contact || 'see your welcome guide'}`,
+          shouldUpdateState: false
+        };
+      }
+      
+      if (errorMessage.includes('timeout') || errorMessage.includes('ETIMEDOUT')) {
+        return {
+          response: `${namePrefix}That's taking longer than expected. Try again in a moment, or contact your host for quick recommendations: ${property?.emergency_contact || ''}`,
+          shouldUpdateState: false
+        };
+      }
+      
+      // Generic fallback with property contact
       return {
-        response: `${namePrefix}let me make sure I get this right—were you asking about dining options, or something else like WiFi or directions?`,
+        response: `${namePrefix}I'm having trouble getting recommendations right now. Contact your host for local tips: ${property?.emergency_contact || ''}`,
         shouldUpdateState: false
       };
     }
@@ -399,30 +440,44 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
       if (response.ok) {
         const data = await response.json();
         
+        // FIX: Handle both response formats
+        const recommendationText = data.recommendation || data.response;
+        
+        if (!recommendationText) {
+          console.error('❌ [OPENAI-CONTEXTUAL] Empty response from API:', data);
+          throw new Error('Empty recommendation from API');
+        }
+        
+        console.log('✅ [OPENAI-CONTEXTUAL] Received:', recommendationText.substring(0, 100));
+        
         // Store in travel database
-        await this.storeTravelRecommendation(propertyAddress, type, data.recommendation);
+        await this.storeTravelRecommendation(propertyAddress, type, recommendationText);
         
         await this.conversationManager.updateConversationState(conversation.phone_number, {
-          last_recommendations: data.recommendation
+          last_recommendations: recommendationText
         });
         
         return {
-          response: MessageUtils.ensureSmsLimit(data.recommendation),
+          response: MessageUtils.ensureSmsLimit(recommendationText),
           shouldUpdateState: false
         };
       } else {
-        throw new Error(`OpenAI API failed: ${response.status}`);
+        const errorText = await response.text();
+        console.error(`❌ [OPENAI-CONTEXTUAL] API error ${response.status}:`, errorText);
+        throw new Error(`OpenAI API failed: ${response.status} - ${errorText.substring(0, 100)}`);
       }
     } catch (error) {
-      console.error('Error getting recommendations:', error);
+      console.error('❌ [OPENAI-CONTEXTUAL] Error getting recommendations:', error);
+      console.error('❌ [OPENAI-CONTEXTUAL] Stack:', error.stack);
       
-      // v3.1 Context-aware error fallback for contextual recommendations
+      // IMPROVED: Better context-aware error fallback
       const context = conversation?.conversation_context || {};
       const guestName = context?.guest_name;
       const namePrefix = guestName ? `${guestName}, ` : '';
       
+      // Provide specific, helpful fallback
       return {
-        response: `${namePrefix}let me make sure I understand—were you looking for restaurants, activities, or something else?`,
+        response: `${namePrefix}I'm having trouble getting those recommendations. Contact your host for local tips: ${property?.emergency_contact || ''}`,
         shouldUpdateState: false
       };
     }
