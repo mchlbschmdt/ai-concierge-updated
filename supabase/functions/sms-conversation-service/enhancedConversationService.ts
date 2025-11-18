@@ -870,11 +870,26 @@ export class EnhancedConversationService {
       responseString
     );
     
-    // Update conversation state with flow tracking
+    // PHASE 2: Track request category and clear memory when category changes
+    const requestCategory = result.requestCategory || context.last_request_category || 'general';
+    const lastCategory = context.last_request_category;
+    
+    console.log('📊 Request category:', requestCategory, '| Last category:', lastCategory);
+    
+    // If category changed, clear previous recommendations to prevent cross-contamination
+    if (lastCategory && lastCategory !== requestCategory && !requestCategory.includes('general')) {
+      console.log('🔄 Category changed from', lastCategory, 'to', requestCategory, '- clearing previous recommendations');
+      updatedFlow.last_recommendations = null;
+      context.last_recommended_restaurant = null;
+      context.last_restaurant_context = null;
+    }
+    
+    // Update conversation state with flow tracking and category
     await this.conversationManager.updateConversationState(conversation.phone_number, {
       conversation_context: {
         ...context,
-        conversation_flow: updatedFlow
+        conversation_flow: updatedFlow,
+        last_request_category: requestCategory
       },
       last_message_type: intent,
       last_recommendations: responseString
