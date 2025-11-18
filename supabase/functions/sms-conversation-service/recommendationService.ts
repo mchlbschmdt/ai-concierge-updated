@@ -168,7 +168,8 @@ export class RecommendationService {
         
         return {
           response: MessageUtils.ensureSmsLimit(finalRecommendation).join('\n'),
-          shouldUpdateState: false
+          shouldUpdateState: false,
+          requestCategory: requestType
         };
       } else {
         const errorText = await response.text();
@@ -201,21 +202,24 @@ export class RecommendationService {
       if (errorMessage.includes('fetch failed') || errorMessage.includes('network')) {
         return {
           response: MessageUtils.ensureSmsLimit(`${namePrefix}I'm having trouble connecting right now. For immediate help, contact your host: ${property?.emergency_contact || 'see your welcome guide'}`).join('\n'),
-          shouldUpdateState: false
+          shouldUpdateState: false,
+          requestCategory: requestType
         };
       }
       
       if (errorMessage.includes('timeout') || errorMessage.includes('ETIMEDOUT')) {
         return {
           response: MessageUtils.ensureSmsLimit(`${namePrefix}That's taking longer than expected. Try again in a moment, or contact your host for quick recommendations: ${property?.emergency_contact || ''}`).join('\n'),
-          shouldUpdateState: false
+          shouldUpdateState: false,
+          requestCategory: requestType
         };
       }
       
       // Generic fallback with property contact
       return {
         response: MessageUtils.ensureSmsLimit(`${namePrefix}I'm having trouble getting recommendations right now. Contact your host for local tips: ${property?.emergency_contact || ''}`).join('\n'),
-        shouldUpdateState: false
+        shouldUpdateState: false,
+        requestCategory: requestType
       };
     }
   }
