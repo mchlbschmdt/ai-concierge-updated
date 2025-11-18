@@ -94,15 +94,47 @@ export class RecommendationService {
         
         console.log('✅ [OPENAI] Enhanced recommendations received:', recommendationText.substring(0, 150) + '...');
         
-        // Extract restaurant names for menu context
-        const restaurantNames = this.extractRestaurantNames(recommendationText);
+        // PHASE 4: Validate recommendation matches intent
+        let finalRecommendation = recommendationText;
+        if (!this.validateRecommendationMatchesIntent(recommendationText, requestType, originalMessage)) {
+          console.log('⚠️ Recommendation validation failed, retrying with enhanced prompt');
+          
+          // Retry with more explicit instructions
+          const retryPayload = {
+            ...enhancedPayload,
+            prompt: this.buildCorrectionPrompt(originalMessage, propertyAddress, requestType, recommendationText)
+          };
+          
+          try {
+            const retryResponse = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+              },
+              body: JSON.stringify(retryPayload)
+            });
+            
+            if (retryResponse.ok) {
+              const retryData = await retryResponse.json();
+              finalRecommendation = retryData.recommendation || retryData.response || recommendationText;
+              console.log('✅ Retry successful with corrected recommendation');
+            }
+          } catch (retryError) {
+            console.error('⚠️ Retry failed, using original recommendation:', retryError);
+          }
+        }
         
-        // Enhanced restaurant memory and preference tracking
+        // Extract restaurant names for menu context
+        const restaurantNames = this.extractRestaurantNames(finalRecommendation);
+        
+        // PHASE 2: Enhanced restaurant memory with category tracking
         let updatedContext = {
           ...context,
           lastRecommendationType: requestType,
           lastGuestContext: guestContext,
-          last_food_preferences: foodFilters.length ? foodFilters : (context.last_food_preferences || [])
+          last_food_preferences: foodFilters.length ? foodFilters : (context.last_food_preferences || []),
+          last_request_category: requestType // Track category for memory management
         };
         
         // Don't overwrite if we already updated context due to rejection
@@ -127,15 +159,15 @@ export class RecommendationService {
         }
         
         // Store recommendations in travel database for future use
-        await this.storeTravelRecommendation(propertyAddress, requestType, recommendationText);
+        await this.storeTravelRecommendation(propertyAddress, requestType, finalRecommendation);
         
         await this.conversationManager.updateConversationState(conversation.phone_number, {
-          last_recommendations: recommendationText,
+          last_recommendations: finalRecommendation,
           conversation_context: updatedContext
         });
         
         return {
-          response: MessageUtils.ensureSmsLimit(recommendationText).join('\n'),
+          response: MessageUtils.ensureSmsLimit(finalRecommendation).join('\n'),
           shouldUpdateState: false
         };
       } else {
@@ -188,9 +220,26 @@ export class RecommendationService {
     }
   }
 
-  // NEW: Build enhanced prompt with better rejection handling
+  // PHASE 1: Enhanced prompt with explicit meal-type detection
   private buildEnhancedPrompt(originalMessage: string, propertyAddress: string, foodFilters: string[], rejectedRestaurants: string[], isRejection: boolean): string {
     let prompt = `${originalMessage}\n\n`;
+    
+    // CRITICAL: Detect meal type and add explicit instructions
+    const lowerMessage = originalMessage.toLowerCase();
+    const mealType = this.detectMealType(lowerMessage);
+    
+    if (mealType === 'breakfast') {
+      prompt += `CRITICAL INSTRUCTION: Guest wants BREAKFAST RESTAURANTS with FULL BREAKFAST MENUS (eggs, pancakes, French toast, omelets, etc.).\n`;
+      prompt += `DO NOT recommend coffee shops or cafés unless they explicitly serve sit-down breakfast meals.\n`;
+      prompt += `Coffee shops are ONLY for coffee/pastry requests, NOT for breakfast restaurant requests.\n\n`;
+    } else if (mealType === 'coffee') {
+      prompt += `CRITICAL INSTRUCTION: Guest wants COFFEE SHOPS or CAFÉS specializing in coffee and pastries.\n`;
+      prompt += `Focus on places known for quality coffee, not full breakfast restaurants.\n\n`;
+    } else if (mealType === 'lunch') {
+      prompt += `CRITICAL INSTRUCTION: Guest wants LUNCH restaurants with full lunch menus.\n\n`;
+    } else if (mealType === 'dinner') {
+      prompt += `CRITICAL INSTRUCTION: Guest wants DINNER restaurants suitable for evening dining.\n\n`;
+    }
     
     // Add specific instructions for rejections
     if (isRejection && rejectedRestaurants.length > 0) {
@@ -211,6 +260,23 @@ export class RecommendationService {
     }
     
     return prompt;
+  }
+
+  // PHASE 1: Detect specific meal type from message
+  private detectMealType(message: string): string {
+    if (message.includes('breakfast') || message.includes('morning meal')) {
+      return 'breakfast';
+    }
+    if (message.includes('coffee') || message.includes('café') || message.includes('cafe')) {
+      return 'coffee';
+    }
+    if (message.includes('lunch') || message.includes('midday')) {
+      return 'lunch';
+    }
+    if (message.includes('dinner') || message.includes('evening meal') || message.includes('supper')) {
+      return 'dinner';
+    }
+    return 'general';
   }
 
   // Extract restaurant names from recommendations
@@ -561,24 +627,97 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
     return days[new Date().getDay()];
   }
 
-  // ENHANCED: Better request categorization for food queries
+  // PHASE 4: Validate recommendation matches intent
+  private validateRecommendationMatchesIntent(response: string, requestType: string, message: string): boolean {
+    const lowerResponse = response.toLowerCase();
+    const lowerMessage = message.toLowerCase();
+    
+    // Check if breakfast request returned only coffee shops
+    if (requestType === 'breakfast_restaurant' && lowerMessage.includes('breakfast')) {
+      // If response contains café/coffee but NOT breakfast-related words, it's wrong
+      const hasCoffeeWords = lowerResponse.includes('café') || lowerResponse.includes('cafe') || lowerResponse.includes('coffee shop');
+      const hasBreakfastWords = lowerResponse.includes('breakfast') || lowerResponse.includes('eggs') || 
+                                 lowerResponse.includes('pancake') || lowerResponse.includes('omelet');
+      
+      if (hasCoffeeWords && !hasBreakfastWords) {
+        console.log('❌ Validation failed: breakfast request returned coffee shops only');
+        return false;
+      }
+    }
+    
+    // Check if coffee request returned breakfast restaurants
+    if (requestType === 'coffee_shop' && lowerMessage.includes('coffee')) {
+      const hasBreakfastRestaurant = lowerResponse.includes('breakfast menu') || lowerResponse.includes('full breakfast');
+      if (hasBreakfastRestaurant && !lowerResponse.includes('coffee')) {
+        console.log('❌ Validation failed: coffee request returned breakfast restaurants');
+        return false;
+      }
+    }
+    
+    console.log('✅ Validation passed: recommendation matches intent');
+    return true;
+  }
+
+  // PHASE 4: Build correction prompt when validation fails
+  private buildCorrectionPrompt(originalMessage: string, propertyAddress: string, requestType: string, previousResponse: string): string {
+    let prompt = `${originalMessage}\n\n`;
+    
+    prompt += `CRITICAL CORRECTION NEEDED:\n`;
+    prompt += `The previous response was incorrect. The guest asked for ${requestType} but received wrong recommendations.\n\n`;
+    
+    if (requestType === 'breakfast_restaurant') {
+      prompt += `The guest wants BREAKFAST RESTAURANTS with FULL BREAKFAST MENUS (eggs, pancakes, French toast, etc.).\n`;
+      prompt += `DO NOT recommend coffee shops or cafés. They want places to SIT DOWN and eat a FULL BREAKFAST MEAL.\n\n`;
+    } else if (requestType === 'coffee_shop') {
+      prompt += `The guest wants COFFEE SHOPS for coffee and pastries only.\n`;
+      prompt += `DO NOT recommend full-service breakfast restaurants.\n\n`;
+    }
+    
+    prompt += `Previous incorrect response:\n${previousResponse}\n\n`;
+    prompt += `Provide DIFFERENT recommendations that match the request type.\n`;
+    prompt += `Use exact GPS distance from ${propertyAddress}.`;
+    
+    return prompt;
+  }
+
+  // PHASE 1: Enhanced categorization with specific meal types
   private categorizeRequest(message: string): string {
     const lowerMessage = message.toLowerCase();
     
-    // Enhanced food detection keywords - MUST MATCH enhancedConversationService.ts
+    // PHASE 1: Detect specific meal types first
+    if (lowerMessage.includes('breakfast') || lowerMessage.includes('morning meal') || lowerMessage.includes('breakfast spot')) {
+      console.log('🍳 Categorized as breakfast_restaurant');
+      return 'breakfast_restaurant';
+    }
+    
+    if (lowerMessage.includes('coffee') || lowerMessage.includes('café') || lowerMessage.includes('cafe') || lowerMessage.includes('espresso')) {
+      console.log('☕ Categorized as coffee_shop');
+      return 'coffee_shop';
+    }
+    
+    if (lowerMessage.includes('lunch') || lowerMessage.includes('midday meal')) {
+      console.log('🥗 Categorized as lunch_dining');
+      return 'lunch_dining';
+    }
+    
+    if (lowerMessage.includes('dinner') || lowerMessage.includes('evening meal') || lowerMessage.includes('supper')) {
+      console.log('🍽️ Categorized as dinner_dining');
+      return 'dinner_dining';
+    }
+    
+    // Enhanced food detection keywords for general food requests
     const foodKeywords = [
-      'food', 'restaurant', 'eat', 'dining', 'hungry', 'meal', 'lunch', 'dinner', 'breakfast',
+      'food', 'restaurant', 'eat', 'dining', 'hungry', 'meal',
       'burger', 'burgers', 'pizza', 'seafood', 'italian', 'mexican', 'chinese', 'steak',
       'bite', 'grab something', 'quick', 'casual', 'upscale', 'fancy', 'rooftop',
       'what\'s good', 'where to eat', 'spot', 'place to eat', 'good food',
-      // CRITICAL: Add continuation patterns that indicate food requests
       'let\'s do', 'give me', 'local', 'options', 'recommendations', 'yeah give me',
       'give me local', 'local options', 'other options', 'something else'
     ];
     
     // Check for food-related terms
     if (foodKeywords.some(keyword => lowerMessage.includes(keyword))) {
-      console.log('🍽️ Categorized as food_recommendations due to keywords');
+      console.log('🍴 Categorized as food_recommendations (general)');
       return 'food_recommendations';
     }
     
