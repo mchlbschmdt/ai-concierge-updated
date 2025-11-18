@@ -1,11 +1,10 @@
 
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { GmailAuthProvider } from "./context/GmailAuthContext";
+import { ToastProvider } from "./context/ToastContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./Login";
 import Dashboard from "./pages/Dashboard";
@@ -34,9 +33,8 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <GmailAuthProvider>
-            <Toaster />
-            <Sonner />
-            <Routes>
+            <ToastProvider>
+              <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/reset-password" element={<ResetPassword />} />
@@ -111,7 +109,8 @@ const App = () => (
                   <TravelGuideAdmin />
                 </ProtectedRoute>
               } />
-            </Routes>
+              </Routes>
+            </ToastProvider>
           </GmailAuthProvider>
         </AuthProvider>
       </BrowserRouter>
