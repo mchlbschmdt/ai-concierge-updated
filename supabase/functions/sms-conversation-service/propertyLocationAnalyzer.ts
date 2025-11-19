@@ -6,6 +6,9 @@ export interface LocationContext {
   propertyType: 'resort' | 'vacation_home' | 'community' | 'standalone';
   distanceToDisney: string | null;
   distanceToUniversal: string | null;
+  region?: string;
+  weatherContext?: any;
+  packingContext?: string[];
 }
 
 export class PropertyLocationAnalyzer {
@@ -59,13 +62,19 @@ export class PropertyLocationAnalyzer {
     const distanceToDisney = this.estimateDistanceToDisney(address, resort, neighborhood);
     const distanceToUniversal = this.estimateDistanceToUniversal(address, resort, neighborhood);
     
+    // Detect region
+    const region = this.detectRegion(lowerAddress);
+    
     return {
       neighborhood,
       resort,
       nearbyAttractions,
       propertyType: resort ? 'resort' : 'vacation_home',
       distanceToDisney,
-      distanceToUniversal
+      distanceToUniversal,
+      region,
+      weatherContext: this.getWeatherContext(region),
+      packingContext: this.getPackingContext(lowerAddress, resort)
     };
   }
   
@@ -160,5 +169,63 @@ export class PropertyLocationAnalyzer {
     };
     
     return amenityMap[resort.toLowerCase()] || [];
+  }
+  
+  private static detectRegion(addressLower: string): string {
+    if (addressLower.includes('florida') || addressLower.includes('fl')) {
+      return 'florida';
+    }
+    if (addressLower.includes('puerto rico') || addressLower.includes('pr')) {
+      return 'puerto_rico';
+    }
+    if (addressLower.includes('california') || addressLower.includes('ca')) {
+      return 'california';
+    }
+    if (addressLower.includes('hawaii') || addressLower.includes('hi')) {
+      return 'hawaii';
+    }
+    return 'other';
+  }
+  
+  private static getWeatherContext(region: string): any {
+    const weatherData: any = {
+      florida: {
+        typical: 'Hot & humid with afternoon thunderstorms',
+        range: '80-95°F summer, 60-75°F winter',
+        tips: 'Bring sunscreen, light clothes, umbrella'
+      },
+      puerto_rico: {
+        typical: 'Tropical, warm year-round',
+        range: '75-85°F',
+        tips: 'Pack sunscreen, swimwear, light breathable clothes'
+      },
+      california: {
+        typical: 'Mild, Mediterranean climate',
+        range: '60-80°F',
+        tips: 'Layers recommended, sunscreen for beach areas'
+      },
+      hawaii: {
+        typical: 'Tropical, warm & humid',
+        range: '75-85°F',
+        tips: 'Swimwear, sunscreen, light clothes, rain jacket'
+      }
+    };
+    
+    return weatherData[region] || null;
+  }
+  
+  private static getPackingContext(addressLower: string, resort: string | null): string[] {
+    const essentials = ['sunscreen', 'comfortable clothes'];
+    const region = this.detectRegion(addressLower);
+    
+    if (region === 'florida' || region === 'puerto_rico' || region === 'hawaii') {
+      essentials.push('swimwear', 'beach towels', 'sunglasses', 'hat');
+    }
+    
+    if (resort) {
+      essentials.push('pool accessories', 'resort casual wear');
+    }
+    
+    return essentials;
   }
 }

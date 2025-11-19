@@ -55,6 +55,18 @@ export class IntentRecognitionService {
       return { intent: 'ask_resort_amenities', confidence: 0.9, isMultiPart: false };
     }
     
+    // NEW: Weather queries
+    if (this.detectWeatherIntent(lowerMessage)) {
+      console.log('🌤️ Weather intent detected:', message);
+      return { intent: 'ask_weather', confidence: 0.92, isMultiPart: false };
+    }
+    
+    // NEW: Packing tips queries
+    if (this.detectPackingTipsIntent(lowerMessage)) {
+      console.log('🎒 Packing tips intent detected:', message);
+      return { intent: 'ask_packing_tips', confidence: 0.9, isMultiPart: false };
+    }
+    
     // NEW: Coffee requests - HIGHEST PRIORITY for food-related queries
     if (this.detectCoffeeIntent(lowerMessage)) {
       console.log('☕ Coffee intent detected:', message);
@@ -384,6 +396,18 @@ export class IntentRecognitionService {
       return { intent: 'ask_resort_amenities', confidence: 0.9 };
     }
     
+    // NEW: Weather
+    if (this.detectWeatherIntent(lowerMessage)) {
+      console.log('🌤️ Weather intent detected:', message);
+      return { intent: 'ask_weather', confidence: 0.92 };
+    }
+    
+    // NEW: Packing tips
+    if (this.detectPackingTipsIntent(lowerMessage)) {
+      console.log('🎒 Packing tips intent detected:', message);
+      return { intent: 'ask_packing_tips', confidence: 0.9 };
+    }
+    
     // NEW: Grocery stores
     if (this.matchesKeywords(message, [
       'grocery', 'groceries', 'supermarket', 'store', 'shopping',
@@ -588,14 +612,63 @@ export class IntentRecognitionService {
   }
   
   static detectResortAmenitiesIntent(lowerMessage: string): boolean {
-    const resortKeywords = ['resort pool', 'resort gym', 'resort spa', 'resort restaurant', 'on-site'];
-    const amenityKeywords = ['pool', 'gym', 'fitness', 'spa', 'restaurant', 'bar'];
+    // Direct resort keywords
+    const resortKeywords = [
+      'resort pool', 'resort gym', 'resort spa', 'resort restaurant', 
+      'resort amenities', 'resort facilities', 'resort features',
+      'community pool', 'community gym', 'community center'
+    ];
     
-    const hasResortKeyword = resortKeywords.some(kw => lowerMessage.includes(kw));
-    const hasAmenityKeyword = amenityKeywords.some(kw => lowerMessage.includes(kw));
-    const hasOnSite = lowerMessage.includes('on-site') || lowerMessage.includes('on site');
+    // Amenity keywords that should trigger when combined with location
+    const amenityKeywords = [
+      'pool', 'gym', 'fitness', 'spa', 'restaurant', 'bar', 
+      'hot tub', 'jacuzzi', 'tennis', 'golf', 'clubhouse',
+      'playground', 'game room', 'business center'
+    ];
     
-    return hasResortKeyword || (hasOnSite && hasAmenityKeyword);
+    // Location keywords
+    const locationKeywords = ['on-site', 'on site', 'in the resort', 'at the resort', 'resort has'];
+    
+    // Check for direct resort mentions
+    const hasDirectResort = resortKeywords.some(kw => lowerMessage.includes(kw));
+    
+    // Check for amenity + location combo
+    const hasAmenity = amenityKeywords.some(kw => lowerMessage.includes(kw));
+    const hasLocation = locationKeywords.some(kw => lowerMessage.includes(kw));
+    
+    // Check for "what amenities" or "what facilities" style questions
+    const amenityOverviewPhrases = [
+      'what amenities', 'what facilities', 'what does the resort have',
+      'resort overview', 'what\'s available', 'what can we use'
+    ];
+    const isOverviewQuestion = amenityOverviewPhrases.some(phrase => lowerMessage.includes(phrase));
+    
+    return hasDirectResort || (hasAmenity && hasLocation) || isOverviewQuestion;
+  }
+  
+  private static detectWeatherIntent(lowerMessage: string): boolean {
+    const weatherKeywords = [
+      'weather', 'forecast', 'temperature', 'rain', 'sunny', 'hot', 'cold',
+      'what\'s the weather', 'how\'s the weather', 'weather like',
+      'should i bring umbrella', 'is it raining', 'going to rain',
+      'what to expect weather', 'climate', 'how hot', 'how cold',
+      'weather forecast', 'today\'s weather', 'tomorrow\'s weather'
+    ];
+    
+    return weatherKeywords.some(kw => lowerMessage.includes(kw));
+  }
+  
+  private static detectPackingTipsIntent(lowerMessage: string): boolean {
+    const packingKeywords = [
+      'what to pack', 'what should i bring', 'what to bring',
+      'packing list', 'pack for', 'what do i need',
+      'should i bring', 'do i need to bring',
+      'what clothes', 'what to wear', 'dress code',
+      'essentials', 'what\'s needed', 'bring sunscreen',
+      'beach gear', 'pool stuff', 'swim', 'sunscreen'
+    ];
+    
+    return packingKeywords.some(kw => lowerMessage.includes(kw));
   }
 
   private static matchesKeywords(message: string, keywords: string[]): boolean {

@@ -774,6 +774,7 @@ export class EnhancedConversationService {
       'ask_checkout_time', 'ask_checkin_time', 'ask_access', 
       'ask_wifi', 'ask_parking', 'ask_amenity', 'ask_emergency_contact',
       'ask_property_specific', 'ask_additional_services', 'ask_resort_amenities',
+      'ask_weather', 'ask_packing_tips',
       'troubleshoot_tv', 'troubleshoot_wifi', 'troubleshoot_equipment', 'troubleshoot_general'
     ];
     
@@ -787,6 +788,10 @@ export class EnhancedConversationService {
         extractionResult = PropertyDataExtractorEnhanced.extractAdditionalServices(property, message, conversationContext);
       } else if (intent === 'ask_resort_amenities') {
         extractionResult = PropertyDataExtractorEnhanced.extractResortAmenities(property, message, conversationContext);
+      } else if (intent === 'ask_weather') {
+        extractionResult = PropertyDataExtractorEnhanced.extractWeatherInfo(property, message, conversationContext);
+      } else if (intent === 'ask_packing_tips') {
+        extractionResult = PropertyDataExtractorEnhanced.extractPackingTips(property, message, conversationContext);
       } else {
         // Use original extractor for standard intents
         const dataResponse = PropertyDataExtractor.extractPropertyData(property, intent, message);
@@ -1010,6 +1015,10 @@ export class EnhancedConversationService {
       return 'Let me know if you need anything else!';
     } else if (intent === 'ask_resort_amenities') {
       return 'Would you like more details about any of these amenities?';
+    } else if (intent === 'ask_weather') {
+      return 'Need packing tips based on the weather? Just ask!';
+    } else if (intent === 'ask_packing_tips') {
+      return 'Want to know about local attractions or dining options? I\'m here to help!';
     }
     
     return 'Hope that helps! Let me know if you need anything else! 😊';
