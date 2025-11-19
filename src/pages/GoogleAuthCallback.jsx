@@ -2,12 +2,12 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/context/ToastContext";
 import { useGmailAuth } from "@/context/GmailAuthContext";
 
 export default function GoogleAuthCallback() {
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const { showToast } = useToast();
   const { updateAuthState } = useGmailAuth();
   const [error, setError] = useState(null);
 
@@ -58,28 +58,21 @@ export default function GoogleAuthCallback() {
         
         const result = response.data;
         
-        toast({
-          title: "Authentication Successful",
-          description: `Connected to Gmail as ${result.email}`
-        });
+        showToast(`Connected to Gmail as ${result.email}`, "success");
         
         // Update auth state
         updateAuthState(result.email);
         
         // Redirect to dashboard
-        navigate('/dashboard');
+        navigate('/');
       } catch (err) {
         console.error("Authentication error:", err);
         setError(err.message);
         
-        toast({
-          variant: "destructive",
-          title: "Authentication Failed",
-          description: err.message || "An error occurred during authentication"
-        });
+        showToast(err.message || "An error occurred during authentication", "error");
         
         // Redirect to dashboard after error
-        setTimeout(() => navigate('/dashboard'), 3000);
+        setTimeout(() => navigate('/'), 3000);
       }
     };
     
