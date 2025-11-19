@@ -493,6 +493,7 @@ export type Database = {
         Row: {
           content: string
           created_at: string
+          external_message_id: string | null
           id: string
           role: string
           sms_conversation_id: string
@@ -501,6 +502,7 @@ export type Database = {
         Insert: {
           content: string
           created_at?: string
+          external_message_id?: string | null
           id?: string
           role: string
           sms_conversation_id: string
@@ -509,6 +511,7 @@ export type Database = {
         Update: {
           content?: string
           created_at?: string
+          external_message_id?: string | null
           id?: string
           role?: string
           sms_conversation_id?: string

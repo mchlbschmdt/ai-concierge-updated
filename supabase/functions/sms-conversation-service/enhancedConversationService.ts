@@ -32,12 +32,45 @@ export class EnhancedConversationService {
     this.propertyService = new PropertyService(supabase);
   }
 
-  async processMessage(phoneNumber: string, message: string) {
+  async processMessage(phoneNumber: string, message: string, messageTimestamp?: string) {
     try {
-      console.log('🚀 Enhanced Conversation Service V2.4 - Processing:', { phoneNumber, message });
+      console.log('🚀 Enhanced Conversation Service V2.5 - Processing:', { phoneNumber, message });
 
-      // PHASE 1: Property Context Switching Detection (NEW)
+      // PHASE 0: Get conversation and check conversation depth
       let conversation = await this.conversationManager.getOrCreateConversation(phoneNumber);
+      
+      // Check conversation depth to prevent loops
+      const conversationContext = conversation.conversation_context as any || {};
+      const conversationDepth = conversationContext.conversation_flow?.conversationDepth || 0;
+      
+      if (conversationDepth > 50) {
+        console.warn(`⚠️ Conversation depth (${conversationDepth}) exceeds threshold, suggesting reset`);
+        conversationContext.needs_reset = true;
+        
+        // Auto-reset if depth is extremely high
+        if (conversationDepth > 100) {
+          console.log('🔄 Auto-resetting conversation due to excessive depth');
+          await this.conversationManager.resetConversation(phoneNumber);
+          conversation = await this.conversationManager.getOrCreateConversation(phoneNumber);
+        }
+      }
+      
+      // Validate message ordering to prevent out-of-order processing
+      if (messageTimestamp && conversation.last_interaction_timestamp) {
+        const lastTimestamp = new Date(conversation.last_interaction_timestamp).getTime();
+        const currentTimestamp = new Date(messageTimestamp).getTime();
+        
+        if (currentTimestamp < lastTimestamp) {
+          console.log('⏭️ Out-of-order message detected, skipping older message');
+          return {
+            success: true,
+            response: null,
+            reason: 'out_of_order'
+          };
+        }
+      }
+
+      // PHASE 1: Property Context Switching Detection
       const currentProperty = await PropertyService.getPropertyByPhone(this.supabase, phoneNumber);
       
       const propertySwitchResult = PropertyContextSwitcher.detectPropertySwitch(message, currentProperty);

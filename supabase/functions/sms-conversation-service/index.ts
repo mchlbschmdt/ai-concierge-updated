@@ -67,8 +67,12 @@ serve(async (req) => {
 
       // Handle processMessage action
       if (body.action === 'processMessage' && body.phoneNumber && body.message) {
-        const result = await conversationService.processMessage(body.phoneNumber, body.message);
-        console.log('✅ Enhanced processing result V2.2:', result);
+        const result = await conversationService.processMessage(
+          body.phoneNumber, 
+          body.message,
+          body.messageTimestamp // Pass timestamp for ordering validation
+        );
+        console.log('✅ Enhanced processing result V2.5:', result);
         
         return new Response(JSON.stringify(result), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
