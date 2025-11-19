@@ -1107,7 +1107,58 @@ export class EnhancedConversationService {
     };
   }
 
-  // ✅ NEW: Handle recommendations with full conversation context
+  // ✅ NEW: Handle location/direction queries WITHOUT food AI
+  private async handleLocationInfoWithContext(intent: string, property: Property, message: string, conversation: Conversation) {
+    console.log('🗺️ Processing location/direction query (NO FOOD AI):', intent);
+    
+    const context = conversation.conversation_context || {};
+    const locationContext = PropertyLocationAnalyzer.analyzePropertyLocation(property.address);
+    const lowerMessage = message.toLowerCase();
+    
+    let response = '';
+    
+    // Parse what attraction/destination they're asking about
+    if (lowerMessage.includes('disney') || lowerMessage.includes('magic kingdom') || 
+        lowerMessage.includes('epcot') || lowerMessage.includes('animal kingdom') || 
+        lowerMessage.includes('hollywood studios')) {
+      response = locationContext.distanceToDisney 
+        ? `You're about ${locationContext.distanceToDisney} from Disney World. Driving or rideshare is best—no easy walking route from ${locationContext.neighborhood || 'your area'}.`
+        : "Disney World is about 10-15 minutes away by car. I'd recommend using a rideshare or driving!";
+    } else if (lowerMessage.includes('universal')) {
+      response = locationContext.distanceToUniversal
+        ? `You're about ${locationContext.distanceToUniversal} from Universal Studios. Best to drive or take an Uber.`
+        : "Universal is about 20-30 minutes away. You'll want to drive or use rideshare to get there!";
+    } else if (lowerMessage.includes('old san juan') || lowerMessage.includes('san juan')) {
+      response = "Old San Juan is about 45 minutes from your property. Great for a day trip—lots of history and amazing food!";
+    } else if (locationContext.nearbyAttractions.length > 0) {
+      response = `You're close to ${locationContext.nearbyAttractions.join(' and ')}. ${locationContext.distanceToDisney || 'About 10-15 minutes by car'} to the main parks!`;
+    } else {
+      response = "Let me help with directions! Could you specify which attraction or area you're asking about?";
+    }
+    
+    // Clear any food recommendations from memory since this is a location query
+    const updatedContext = {
+      ...context,
+      last_request_category: 'directions',
+      last_recommended_restaurant: null,
+      last_restaurant_context: null
+    };
+    
+    await this.conversationManager.updateConversationState(conversation.phone_number, {
+      conversation_context: updatedContext,
+      last_message_type: intent,
+      last_intent: intent,
+      last_response: response
+    });
+    
+    console.log('✅ Location response generated (NO FOOD):', response.substring(0, 50));
+    return {
+      response,
+      shouldUpdateState: false
+    };
+  }
+
+  // ✅ Handle recommendations with full conversation context
   private async handleRecommendationWithContext(intent: string, property: Property, message: string, conversation: Conversation) {
     console.log('🎯 Processing recommendation with context:', intent);
     
@@ -1143,8 +1194,17 @@ export class EnhancedConversationService {
     
     console.log('📊 Request category:', requestCategory, '| Last category:', lastCategory);
     
-    // If category changed, clear previous recommendations to prevent cross-contamination
-    if (lastCategory && lastCategory !== requestCategory && !requestCategory.includes('general')) {
+    // If we moved away from food categories, clear restaurant memory
+    const movedAwayFromFood = lastCategory && 
+      (lastCategory.includes('food') || lastCategory.includes('dining') || 
+       lastCategory.includes('breakfast') || lastCategory.includes('lunch') || 
+       lastCategory.includes('dinner') || lastCategory.includes('coffee')) &&
+      !(requestCategory.includes('food') || requestCategory.includes('dining') ||
+        requestCategory.includes('breakfast') || requestCategory.includes('lunch') || 
+        requestCategory.includes('dinner') || requestCategory.includes('coffee'));
+    
+    // If category changed OR moved away from food, clear previous recommendations
+    if (movedAwayFromFood || (lastCategory && lastCategory !== requestCategory && !requestCategory.includes('general'))) {
       console.log('🔄 Category changed from', lastCategory, 'to', requestCategory, '- clearing previous recommendations');
       updatedFlow.last_recommendations = null;
       context.last_recommended_restaurant = null;
@@ -2301,7 +2361,13 @@ export class EnhancedConversationService {
       }
     }
     
-    // PRIORITY 3: Location/recommendation queries - route to external AI
+    // PRIORITY 3: Direction/distance queries - use direct location handler (NO food AI!)
+    if (this.isDirectionIntent(intent)) {
+      console.log('🗺️ Direction intent detected, using location analyzer');
+      return await this.handleLocationInfoWithContext(intent, property, message, conversation);
+    }
+    
+    // PRIORITY 4: Food/recommendation queries - route to restaurant AI
     if (this.isLocationIntent(intent)) {
       console.log('🌍 Location intent detected, routing to external AI');
       return await this.handleRecommendationWithContext(intent, property, message, conversation);
@@ -2390,11 +2456,16 @@ export class EnhancedConversationService {
     return propertyIntents.includes(intent);
   }
 
+  // NEW: Check if intent is direction-based (should use location analyzer, NOT food AI)
+  private isDirectionIntent(intent: string): boolean {
+    const directionIntents = ['ask_directions', 'ask_attractions'];
+    return directionIntents.includes(intent);
+  }
+
   // NEW: Check if intent is location-based (should route to AI)
   private isLocationIntent(intent: string): boolean {
     const locationIntents = [
-      'ask_food_recommendations', 'ask_coffee_recommendations', 'ask_attractions',
-      'ask_directions', 'ask_grocery_transport'
+      'ask_food_recommendations', 'ask_coffee_recommendations', 'ask_grocery_transport'
     ];
     return locationIntents.includes(intent);
   }

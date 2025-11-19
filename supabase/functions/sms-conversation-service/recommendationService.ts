@@ -938,7 +938,20 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
   private categorizeRequest(message: string): string {
     const lowerMessage = message.toLowerCase();
     
-    // PHASE 1: Detect specific meal types first
+    // PRIORITY: Detect directions/distance queries first (not food!)
+    const directionKeywords = ['how far', 'distance', 'how long to get', 'directions to', 'drive to', 'how far away', 'how many miles'];
+    const parkKeywords = ['disney', 'universal', 'epcot', 'magic kingdom', 'animal kingdom', 'hollywood studios', 'old san juan', 'theme park', 'park'];
+    
+    if (directionKeywords.some(keyword => lowerMessage.includes(keyword))) {
+      if (parkKeywords.some(keyword => lowerMessage.includes(keyword))) {
+        console.log('🎢 Categorized as park_distance');
+        return 'park_distance';
+      }
+      console.log('🗺️ Categorized as directions');
+      return 'directions';
+    }
+    
+    // PHASE 2: Detect specific meal types
     if (lowerMessage.includes('breakfast') || lowerMessage.includes('morning meal') || lowerMessage.includes('breakfast spot')) {
       console.log('🍳 Categorized as breakfast_restaurant');
       return 'breakfast_restaurant';
