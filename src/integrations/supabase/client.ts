@@ -6,7 +6,36 @@ import type { Database } from './types';
 const SUPABASE_URL = "https://zutwyyepahbbvrcbsbke.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dHd5eWVwYWhiYnZyY2JzYmtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0MDg3MDMsImV4cCI6MjA2MDk4NDcwM30.kUje38W2D2vXjYos6laaZ_rOzADLGiftoHAztFqSP9g";
 
+// Custom storage that checks sessionStorage first (for "remember me" functionality)
+const customStorage = {
+  getItem: (key: string) => {
+    const sessionValue = sessionStorage.getItem(key);
+    if (sessionValue) return sessionValue;
+    return localStorage.getItem(key);
+  },
+  setItem: (key: string, value: string) => {
+    // Check if we should use sessionStorage (when remember me is false)
+    const rememberMe = localStorage.getItem('rememberMe');
+    if (rememberMe === 'false') {
+      sessionStorage.setItem(key, value);
+    } else {
+      localStorage.setItem(key, value);
+    }
+  },
+  removeItem: (key: string) => {
+    sessionStorage.removeItem(key);
+    localStorage.removeItem(key);
+  }
+};
+
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  auth: {
+    storage: customStorage,
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true
+  }
+});
