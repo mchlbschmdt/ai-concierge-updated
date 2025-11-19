@@ -1138,7 +1138,7 @@ export class EnhancedConversationService {
     );
     
     // PHASE 2: Track request category and clear memory when category changes
-    const requestCategory = result.requestCategory || context.last_request_category || 'general';
+    const requestCategory = recommendationResponse.requestCategory || context.last_request_category || 'general';
     const lastCategory = context.last_request_category;
     
     console.log('📊 Request category:', requestCategory, '| Last category:', lastCategory);

@@ -131,50 +131,59 @@ export class PropertyDataExtractorEnhanced {
   }
   
   static extractResortAmenities(property: Property, message: string, conversationContext?: any): { response: string; hasData: boolean } {
+    const lowerMessage = message.toLowerCase();
     let response = '';
     let hasData = false;
     
-    // Check if we've already shared resort amenities
+    // Check if we've already shared resort info
     const recentShare = ConversationMemoryManager.wasTopicRecentlyShared(conversationContext, 'resort_amenities');
     if (recentShare.shared) {
       return {
-        response: `As I mentioned, ${recentShare.summary}. Need more details about any of these?`,
+        response: `As I mentioned, ${recentShare.summary}. Would you like details about a specific amenity?`,
         hasData: true
       };
     }
     
-    // Search knowledge base and local recommendations for resort amenities
+    // First check if property has location context with resort info
+    if (property.location_context?.resort) {
+      const resortName = property.location_context.resort;
+      const amenities = property.resort_amenities || [];
+      
+      if (amenities.length > 0) {
+        response = `${resortName} offers:\n`;
+        response += amenities.slice(0, 4).map(a => `• ${a}`).join('\n');
+        
+        if (amenities.length > 4) {
+          response += `\n...and more! What would you like to know about?`;
+        } else {
+          response += `\n\nWould you like details about any of these?`;
+        }
+        
+        hasData = true;
+        return { response, hasData };
+      }
+    }
+    
+    // Fallback: Check knowledge base for resort/community info
     if (property.knowledge_base) {
       const kb = property.knowledge_base;
+      const resortInfo = this.extractSpecificInfo(kb, 'resort', 'community', 'amenity', 'pool', 'facility');
       
-      // Look for resort-specific information
-      const resortMatches = [
-        kb.match(/resort pool[^.\n]*[.\n]/gi),
-        kb.match(/resort gym[^.\n]*[.\n]/gi),
-        kb.match(/resort spa[^.\n]*[.\n]/gi),
-        kb.match(/resort restaurant[^.\n]*[.\n]/gi),
-        kb.match(/on-?site[^.\n]*[.\n]/gi)
-      ].filter(m => m !== null);
-      
-      if (resortMatches.length > 0) {
-        response += '🏨 Resort amenities: ';
-        resortMatches.forEach(matches => {
-          if (matches) {
-            matches.forEach(match => {
-              response += `${match.trim()} `;
-            });
-          }
-        });
+      if (resortInfo) {
+        response = resortInfo;
         hasData = true;
       }
     }
     
-    // Also check local_recommendations for resort info
-    if (property.local_recommendations && property.local_recommendations.toLowerCase().includes('resort')) {
-      const resortInfo = this.extractSpecificInfo(property.local_recommendations, 'resort');
-      if (resortInfo) {
-        response += resortInfo;
-        hasData = true;
+    // Check local recommendations for resort info
+    if (!hasData && property.local_recommendations) {
+      const localRec = property.local_recommendations.toLowerCase();
+      if (localRec.includes('resort') || localRec.includes('community')) {
+        const resortInfo = this.extractSpecificInfo(property.local_recommendations, 'resort', 'community', 'pool', 'amenity');
+        if (resortInfo) {
+          response = resortInfo;
+          hasData = true;
+        }
       }
     }
     

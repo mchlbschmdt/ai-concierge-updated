@@ -1,5 +1,6 @@
 
 import { Property } from './types.ts';
+import { PropertyLocationAnalyzer } from './propertyLocationAnalyzer.ts';
 
 export class PropertyService {
   constructor(private supabase: any) {}
@@ -40,7 +41,7 @@ export class PropertyService {
 
       if (property) {
         console.log('✅ PropertyService: Found property for phone:', property.property_name);
-        return {
+        const baseProperty = {
           property_id: property.id,
           property_name: property.property_name,
           address: property.address,
@@ -59,6 +60,8 @@ export class PropertyService {
           special_notes: property.special_notes,
           knowledge_base: property.knowledge_base
         };
+        
+        return this.enrichPropertyWithLocationContext(baseProperty);
       }
 
       console.log('❌ PropertyService: Property not found for ID:', conversation.property_id);
@@ -192,5 +195,21 @@ export class PropertyService {
       console.error("❌ PropertyService: Error in linkPhoneToProperty:", error);
       return false;
     }
+  }
+  
+  /**
+   * Enrich property with location context for better recommendations
+   */
+  static enrichPropertyWithLocationContext(property: Property): Property {
+    const locationContext = PropertyLocationAnalyzer.analyzePropertyLocation(property.address);
+    const resortAmenities = locationContext.resort 
+      ? PropertyLocationAnalyzer.getResortAmenities(locationContext.resort)
+      : [];
+    
+    return {
+      ...property,
+      location_context: locationContext,
+      resort_amenities: resortAmenities
+    };
   }
 }

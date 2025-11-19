@@ -56,6 +56,46 @@ export interface RecommendationItem {
 
 export class ConversationMemoryManager {
   
+  /**
+   * Track question context for follow-up detection
+   */
+  static trackQuestionContext(context: any, question: string, answer: string, topic: string): any {
+    return {
+      ...context,
+      last_question: {
+        question,
+        answer,
+        topic,
+        timestamp: new Date().toISOString()
+      }
+    };
+  }
+  
+  /**
+   * Detect if message is a follow-up question
+   */
+  static isFollowUpQuestion(message: string): boolean {
+    const lowerMessage = message.toLowerCase().trim();
+    const followUpPatterns = [
+      /^(what|how|tell me) (about|more)/i,
+      /^and /i,
+      /^also /i,
+      /anything else/i,
+      /what else/i,
+      /^can (i|you|we)/i,
+      /^is (it|there)/i,
+      /^do (i|you|we)/i
+    ];
+    return followUpPatterns.some(pattern => pattern.test(lowerMessage));
+  }
+  
+  /**
+   * Get last question context for follow-ups
+   */
+  static getLastQuestionContext(context: any): { question: string; answer: string; topic: string } | null {
+    return context?.last_question || null;
+  }
+  
   static updateMemory(
     context: any,
     intent: string,  
