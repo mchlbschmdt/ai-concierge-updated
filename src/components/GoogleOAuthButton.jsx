@@ -2,12 +2,12 @@
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/context/ToastContext";
 import { supabase } from "../integrations/supabase/client";
 
 export default function GoogleOAuthButton() {
   const [isLoading, setIsLoading] = useState(false);
-  const { toast } = useToast();
+  const { showToast } = useToast();
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
@@ -27,11 +27,7 @@ export default function GoogleOAuthButton() {
       // After approval, they'll be redirected back to our app
     } catch (error) {
       console.error("Google authentication error:", error);
-      toast({
-        title: "Authentication Failed",
-        description: error.message || "Failed to connect to Google",
-        variant: "destructive"
-      });
+      showToast(error.message || "Failed to connect to Google", "error");
       setIsLoading(false);
     }
   };
