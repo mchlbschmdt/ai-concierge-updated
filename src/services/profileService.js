@@ -132,5 +132,70 @@ export const profileService = {
     
     if (error) throw error;
     return data;
+  },
+
+  // Skipped steps management
+  async getSkippedSteps(userId) {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('skipped_onboarding_steps')
+        .eq('id', userId)
+        .single();
+
+      if (error) throw error;
+      return data?.skipped_onboarding_steps || [];
+    } catch (error) {
+      console.error('Error fetching skipped steps:', error);
+      throw error;
+    }
+  },
+
+  async addSkippedStep(userId, stepName) {
+    try {
+      const currentSteps = await this.getSkippedSteps(userId);
+      
+      // Don't add if already exists
+      if (currentSteps.includes(stepName)) {
+        return currentSteps;
+      }
+
+      const updatedSteps = [...currentSteps, stepName];
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          skipped_onboarding_steps: updatedSteps,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', userId);
+
+      if (error) throw error;
+      return updatedSteps;
+    } catch (error) {
+      console.error('Error adding skipped step:', error);
+      throw error;
+    }
+  },
+
+  async removeSkippedStep(userId, stepName) {
+    try {
+      const currentSteps = await this.getSkippedSteps(userId);
+      const updatedSteps = currentSteps.filter(step => step !== stepName);
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          skipped_onboarding_steps: updatedSteps,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', userId);
+
+      if (error) throw error;
+      return updatedSteps;
+    } catch (error) {
+      console.error('Error removing skipped step:', error);
+      throw error;
+    }
   }
 };

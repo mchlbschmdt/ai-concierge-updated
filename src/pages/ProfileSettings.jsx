@@ -1,12 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { profileService } from '@/services/profileService';
+import { profileCompletionService } from '@/services/profileCompletionService';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AvatarUpload } from '@/components/profile/AvatarUpload';
 import { PasswordChangeForm } from '@/components/profile/PasswordChangeForm';
+import { ProfileCompletionCard } from '@/components/profile/ProfileCompletionCard';
+import { ResumeOnboardingSection } from '@/components/profile/ResumeOnboardingSection';
 import SecurityQuestionsSetup from '@/components/SecurityQuestionsSetup';
 import { User, Lock, Shield, Settings, Calendar, Trash2 } from 'lucide-react';
 
@@ -18,10 +21,17 @@ export default function ProfileSettings() {
   const [fullName, setFullName] = useState('');
   const [avatarFile, setAvatarFile] = useState(null);
   const [showSecurityQuestions, setShowSecurityQuestions] = useState(false);
+  const [completion, setCompletion] = useState(null);
+  const [skippedSteps, setSkippedSteps] = useState([]);
+  
+  // Refs for scrolling to incomplete sections
+  const profileTabRef = useRef(null);
+  const securityTabRef = useRef(null);
 
   useEffect(() => {
     if (currentUser?.id) {
       loadProfile();
+      loadProfileCompletion();
     }
   }, [currentUser]);
 
@@ -30,9 +40,53 @@ export default function ProfileSettings() {
       const data = await profileService.getUserProfile(currentUser.id);
       setProfile(data);
       setFullName(data.full_name || '');
+      setSkippedSteps(data.skipped_onboarding_steps || []);
     } catch (error) {
       console.error('Error loading profile:', error);
       showToast('Failed to load profile', 'error');
+    }
+  };
+
+  const loadProfileCompletion = async () => {
+    try {
+      const data = await profileCompletionService.calculateCompletion(currentUser.id);
+      setCompletion(data);
+    } catch (error) {
+      console.error('Error loading profile completion:', error);
+    }
+  };
+
+  const handleStepComplete = async (stepName) => {
+    try {
+      await profileService.removeSkippedStep(currentUser.id, stepName);
+      await loadProfile();
+      await loadProfileCompletion();
+      showToast('Great! Keep going to complete your profile.', 'success');
+    } catch (error) {
+      console.error('Error completing step:', error);
+      showToast('Failed to update progress', 'error');
+    }
+  };
+
+  const handleCompleteProfileClick = () => {
+    if (!completion) return;
+    
+    // Find first incomplete item and navigate to it
+    const incompleteItem = completion.incompleteItems[0];
+    if (!incompleteItem) return;
+
+    // Scroll to appropriate tab/section
+    if (incompleteItem.name === 'security_questions') {
+      // If skipped, it's in resume section, otherwise in security tab
+      if (skippedSteps.includes('security_questions')) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        document.querySelector('[value="security"]')?.click();
+      }
+    } else {
+      // Profile tab for name/avatar, or properties page for properties
+      document.querySelector('[value="profile"]')?.click();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
@@ -53,6 +107,7 @@ export default function ProfileSettings() {
       }
 
       await loadProfile();
+      await loadProfileCompletion();
       showToast('Profile updated successfully', 'success');
     } catch (error) {
       console.error('Error updating profile:', error);
@@ -108,6 +163,23 @@ export default function ProfileSettings() {
           Manage your account settings and preferences
         </p>
       </div>
+
+      {/* Profile Completion Card */}
+      {completion && (
+        <ProfileCompletionCard
+          completion={completion}
+          onCompleteClick={handleCompleteProfileClick}
+        />
+      )}
+
+      {/* Resume Onboarding Section */}
+      {skippedSteps.length > 0 && (
+        <ResumeOnboardingSection
+          skippedSteps={skippedSteps}
+          onStepComplete={handleStepComplete}
+          currentUserId={currentUser.id}
+        />
+      )}
 
       <Tabs defaultValue="profile" className="w-full">
         <TabsList className="grid w-full grid-cols-4">

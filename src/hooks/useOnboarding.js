@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { profileService } from '@/services/profileService';
 import { useToast } from '@/context/ToastContext';
@@ -8,6 +8,7 @@ export const useOnboarding = () => {
   const { showToast } = useToast();
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [skippedSteps, setSkippedSteps] = useState([]);
   const [formData, setFormData] = useState({
     fullName: '',
     avatarFile: null,
@@ -39,9 +40,41 @@ export const useOnboarding = () => {
     }
   }, [currentStep]);
 
-  const skipStep = useCallback(() => {
-    nextStep();
-  }, [nextStep]);
+  const skipStep = useCallback(async (stepName) => {
+    // If no step name provided, just go to next step (backward compatibility)
+    if (!stepName) {
+      nextStep();
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await profileService.addSkippedStep(currentUser.id, stepName);
+      setSkippedSteps(prev => [...prev, stepName]);
+      showToast('Step skipped. You can complete it later from Profile Settings.', 'info');
+      nextStep();
+    } catch (error) {
+      console.error('Error skipping step:', error);
+      showToast('Failed to skip step', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUser, nextStep, showToast]);
+
+  // Load skipped steps on mount
+  useEffect(() => {
+    const loadSkippedSteps = async () => {
+      if (currentUser?.id) {
+        try {
+          const steps = await profileService.getSkippedSteps(currentUser.id);
+          setSkippedSteps(steps);
+        } catch (error) {
+          console.error('Error loading skipped steps:', error);
+        }
+      }
+    };
+    loadSkippedSteps();
+  }, [currentUser]);
 
   const saveProgress = useCallback(async (stepData) => {
     if (!currentUser?.id) return;
@@ -94,6 +127,7 @@ export const useOnboarding = () => {
     formData,
     loading,
     progress,
+    skippedSteps,
     updateFormData,
     nextStep,
     prevStep,
