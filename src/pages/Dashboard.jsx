@@ -14,28 +14,28 @@ export default function Dashboard() {
       title: "Add Property",
       description: "Register a new property in your portfolio",
       icon: Plus,
-      path: "/dashboard/add-property",
+      path: "/add-property",
       color: "bg-blue-500 hover:bg-blue-600"
     },
     {
       title: "Manage Properties",
       description: "View and edit your property details",
       icon: Building,
-      path: "/dashboard/properties-manager",
+      path: "/properties",
       color: "bg-green-500 hover:bg-green-600"
     },
     {
       title: "Guest Management",
       description: "Add and manage guest information",
       icon: Users,
-      path: "/dashboard/guests-manager",
+      path: "/guests",
       color: "bg-purple-500 hover:bg-purple-600"
     },
     {
       title: "Email Management",
       description: "Handle guest communications",
       icon: Mail,
-      path: "/dashboard/email-management",
+      path: "/email-management",
       color: "bg-orange-500 hover:bg-orange-600"
     }
   ];
