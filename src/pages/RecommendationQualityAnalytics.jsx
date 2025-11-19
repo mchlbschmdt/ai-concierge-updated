@@ -536,7 +536,8 @@ const RecommendationQualityAnalytics = () => {
                       )}
                     </td>
                   </tr>
-                ))}
+                );
+              })}
               </tbody>
             </table>
             {recentRejections.length === 0 && (
