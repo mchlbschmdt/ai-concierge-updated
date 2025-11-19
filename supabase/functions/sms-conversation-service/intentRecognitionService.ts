@@ -339,6 +339,8 @@ export class IntentRecognitionService {
   }
 
   private static detectSingleIntent(message: string): { intent: string; confidence: number } {
+    const lowerMessage = message.toLowerCase();
+    
     // CRITICAL: Urgent access issues - HIGHEST PRIORITY
     if (this.matchesKeywords(message, [
       'code not working', 'code doesn\'t work', 'can\'t get in', 'locked out',
