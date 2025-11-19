@@ -519,4 +519,76 @@ export class PropertyDataExtractorEnhanced {
     
     return relevantSentences.slice(0, 2).join('. ') + (relevantSentences.length > 0 ? '.' : '');
   }
+  
+  static extractResortAmenityInfo(property: Property, message: string, conversationContext?: any): { response: string; hasData: boolean } {
+    const lowerMessage = message.toLowerCase();
+    let response = '';
+    let hasData = false;
+    
+    // Get location context
+    const locationContext = PropertyLocationAnalyzer.analyzePropertyLocation(property.address);
+    
+    // Waterpark detection
+    if (lowerMessage.includes('water park') || lowerMessage.includes('waterpark')) {
+      if (locationContext.resort === 'reunion') {
+        response += '🏊 Reunion Resort Waterpark:\n';
+        response += '• 5-acre water park with lazy river\n';
+        response += '• Multiple pools & water slides\n';
+        response += '• Splash zone for kids\n';
+        response += '• Access included with your stay\n\n';
+        response += '📍 Location: Near the main clubhouse\n';
+        response += '💡 Tip: Bring towels and sunscreen!';
+        hasData = true;
+      } else {
+        response += '🏊 Your property is located at ' + (locationContext.resort || locationContext.neighborhood || 'an Orlando-area resort') + '.\n\n';
+        response += 'For water park access details, I recommend contacting the resort front desk or checking your welcome materials. Would you like me to provide the property contact info?';
+        hasData = true;
+      }
+    }
+    
+    // Resort pool (different from property pool)
+    if ((lowerMessage.includes('resort pool') || lowerMessage.includes('main pool')) && 
+        !lowerMessage.includes('property pool')) {
+      if (locationContext.resort === 'reunion') {
+        response += '🏊 Seven Eagles Pool (Main Resort Pool):\n';
+        response += '• Infinity-edge pool with stunning views\n';
+        response += '• 2 hot tubs/spas\n';
+        response += '• Pool bar & food service\n';
+        response += '• Gym located nearby\n\n';
+        response += '💡 Highly recommended for the best pool experience!';
+        hasData = true;
+      }
+    }
+    
+    // Resort gym/fitness
+    if (lowerMessage.includes('gym') || lowerMessage.includes('fitness') || lowerMessage.includes('workout')) {
+      if (property.local_recommendations && property.local_recommendations.toLowerCase().includes('gym')) {
+        const gymMatch = property.local_recommendations.match(/gym[^.\n]{0,150}[.\n]/gi);
+        if (gymMatch) {
+          response += '💪 ' + gymMatch[0].trim();
+          hasData = true;
+        }
+      } else if (locationContext.resort === 'reunion') {
+        response += '💪 Fitness Center:\n';
+        response += '• Located near Seven Eagles pool\n';
+        response += '• Full cardio & weight equipment\n';
+        response += '• Open to all resort guests';
+        hasData = true;
+      }
+    }
+    
+    // Resort restaurants
+    if ((lowerMessage.includes('resort restaurant') || lowerMessage.includes('on property') && lowerMessage.includes('eat')) &&
+        !lowerMessage.includes('off property')) {
+      if (property.local_recommendations && property.local_recommendations.toLowerCase().includes('dining on property')) {
+        const diningMatch = property.local_recommendations.match(/\*\*\*Dining On Property\*\*\*[^*]+/i);
+        if (diningMatch) {
+          response += '🍽️ ' + diningMatch[0].replace(/\*\*\*/g, '').trim();
+          hasData = true;
+        }
+      }
+    }
+    
+    return { response: response.trim(), hasData };
+  }
 }
