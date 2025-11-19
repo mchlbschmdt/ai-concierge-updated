@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AvatarUpload } from '@/components/profile/AvatarUpload';
 import { PasswordChangeForm } from '@/components/profile/PasswordChangeForm';
-import { SecurityQuestionsSetup } from '@/components/SecurityQuestionsSetup';
+import SecurityQuestionsSetup from '@/components/SecurityQuestionsSetup';
 import { User, Lock, Shield, Settings, Calendar, Trash2 } from 'lucide-react';
 
 export default function ProfileSettings() {
