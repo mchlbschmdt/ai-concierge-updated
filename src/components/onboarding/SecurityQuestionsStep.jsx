@@ -1,7 +1,7 @@
 import React from 'react';
 import { Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { SecurityQuestionsSetup } from '@/components/SecurityQuestionsSetup';
+import SecurityQuestionsSetup from '@/components/SecurityQuestionsSetup';
 
 export const SecurityQuestionsStep = ({ onNext, onSkip }) => {
   return (
