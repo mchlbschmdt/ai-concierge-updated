@@ -12,7 +12,8 @@ import {
   HelpCircle,
   MapPin,
   Bot,
-  FileText
+  FileText,
+  TrendingUp
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -25,6 +26,7 @@ const Sidebar = () => {
     { icon: MessageSquare, label: 'Messages', path: '/messages' },
     { icon: BarChart3, label: 'Analytics', path: '/analytics' },
     { icon: BarChart3, label: 'Smart Insights', path: '/insights' },
+    { icon: TrendingUp, label: 'Quality Analytics', path: '/quality-analytics' },
     { icon: Mail, label: 'Email Management', path: '/email-management' },
     { icon: TestTube, label: 'SMS Testing', path: '/sms-testing' },
     { icon: Bot, label: 'SMS Concierge Test', path: '/sms-concierge-test' },
