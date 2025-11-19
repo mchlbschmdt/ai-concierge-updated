@@ -21,6 +21,7 @@ export default function Login() {
   const [showSecurityQuestions, setShowSecurityQuestions] = useState(false);
   const [showDirectPasswordReset, setShowDirectPasswordReset] = useState(false);
   const [verifiedUserId, setVerifiedUserId] = useState(null);
+  const [rememberMe, setRememberMe] = useState(true);
   const navigate = useNavigate();
   const { showToast } = useToast();
 
@@ -43,6 +44,9 @@ export default function Login() {
 
       // Sanitize email
       const sanitizedEmail = email.trim().toLowerCase();
+
+      // Set remember me preference before login
+      localStorage.setItem('rememberMe', String(rememberMe));
 
       const { data, error } = await supabase.auth.signInWithPassword({
         email: sanitizedEmail,
@@ -340,7 +344,20 @@ export default function Login() {
             </button>
           </div>
 
-          <button 
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="rememberMe"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            />
+            <label htmlFor="rememberMe" className="text-sm text-gray-700 cursor-pointer">
+              Remember me
+            </label>
+          </div>
+
+          <button
             type="submit" 
             disabled={isLoading}
             className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
