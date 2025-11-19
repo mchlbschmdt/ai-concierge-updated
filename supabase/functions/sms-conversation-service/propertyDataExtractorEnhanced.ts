@@ -190,6 +190,153 @@ export class PropertyDataExtractorEnhanced {
     return { response: response.trim(), hasData };
   }
   
+  static extractWeatherInfo(property: Property, message: string, conversationContext?: any): { response: string; hasData: boolean } {
+    const lowerMessage = message.toLowerCase();
+    let response = '';
+    let hasData = false;
+    
+    // Check if we've already shared weather info recently
+    const recentShare = ConversationMemoryManager.wasTopicRecentlyShared(conversationContext, 'weather_info');
+    if (recentShare.shared) {
+      return {
+        response: `As I mentioned earlier, ${recentShare.summary}. Is there something specific about the weather you'd like to know?`,
+        hasData: true
+      };
+    }
+    
+    // Step 1: Check knowledge base for weather/climate information
+    if (property.knowledge_base) {
+      const kb = property.knowledge_base;
+      
+      // Look for weather-related information
+      const weatherMatch = kb.match(/(?:weather|climate|temperature|season)[^.\n]{0,200}[.\n]/gi);
+      
+      if (weatherMatch && weatherMatch.length > 0) {
+        response += `🌤️ ${weatherMatch[0].trim()}\n\n`;
+        hasData = true;
+      }
+    }
+    
+    // Step 2: Check special notes for seasonal/weather tips
+    if (property.special_notes) {
+      const weatherInfo = this.extractSpecificInfo(
+        property.special_notes, 
+        'weather', 'temperature', 'rain', 'season', 'climate', 'hot', 'humid'
+      );
+      if (weatherInfo) {
+        response += weatherInfo + '\n\n';
+        hasData = true;
+      }
+    }
+    
+    // Step 3: Use location context for weather information
+    if (property.address) {
+      const locationContext = property.location_context as any;
+      
+      if (locationContext?.region === 'florida') {
+        if (!hasData) {
+          response += `🌤️ Florida weather: `;
+        }
+        response += `Typical weather: Hot & humid (80-95°F) with afternoon thunderstorms in summer. Milder & drier (60-75°F) in winter. Bring sunscreen, light clothes, and an umbrella for afternoon showers.`;
+        hasData = true;
+      } else if (locationContext?.region === 'puerto_rico') {
+        if (!hasData) {
+          response += `🌤️ Puerto Rico weather: `;
+        }
+        response += `Tropical climate year-round (75-85°F). Warm & humid with brief rain showers. Pack light, breathable clothes, sunscreen, and swimwear. Rainy season is May-November.`;
+        hasData = true;
+      }
+    }
+    
+    return { response: response.trim(), hasData };
+  }
+  
+  static extractPackingTips(property: Property, message: string, conversationContext?: any): { response: string; hasData: boolean } {
+    const lowerMessage = message.toLowerCase();
+    let response = '';
+    let hasData = false;
+    
+    // Check if we've already shared packing tips recently
+    const recentShare = ConversationMemoryManager.wasTopicRecentlyShared(conversationContext, 'packing_tips');
+    if (recentShare.shared) {
+      return {
+        response: `I shared packing suggestions earlier. ${recentShare.summary}. Need anything else?`,
+        hasData: true
+      };
+    }
+    
+    // Step 1: Check knowledge base for packing suggestions
+    if (property.knowledge_base) {
+      const kb = property.knowledge_base;
+      
+      // Look for packing-related information
+      const packingMatch = kb.match(/(?:pack|bring|essentials|need)[^.\n]{0,200}[.\n]/gi);
+      
+      if (packingMatch && packingMatch.length > 0) {
+        const relevantMatches = packingMatch.filter(match => 
+          match.toLowerCase().includes('bring') || 
+          match.toLowerCase().includes('pack') ||
+          match.toLowerCase().includes('need')
+        );
+        
+        if (relevantMatches.length > 0) {
+          response += `🎒 From the property guide:\n${relevantMatches.slice(0, 2).join('\n')}\n\n`;
+          hasData = true;
+        }
+      }
+    }
+    
+    // Step 2: Check special notes for packing tips
+    if (property.special_notes) {
+      const packingInfo = this.extractSpecificInfo(
+        property.special_notes, 
+        'pack', 'bring', 'essential', 'need', 'provide', 'supplied'
+      );
+      if (packingInfo) {
+        response += packingInfo + '\n\n';
+        hasData = true;
+      }
+    }
+    
+    // Step 3: Check what amenities are provided to suggest what NOT to pack
+    let providedItems: string[] = [];
+    const amenitiesStr = typeof property.amenities === 'string' ? property.amenities : JSON.stringify(property.amenities || '');
+    const amenitiesLower = amenitiesStr.toLowerCase();
+    
+    if (amenitiesLower.includes('towel')) providedItems.push('towels');
+    if (amenitiesLower.includes('shampoo') || amenitiesLower.includes('toiletries')) providedItems.push('toiletries');
+    if (amenitiesLower.includes('coffee')) providedItems.push('coffee maker');
+    if (amenitiesLower.includes('washer')) providedItems.push('laundry facilities');
+    
+    if (providedItems.length > 0 && !hasData) {
+      response += `✅ Provided at property: ${providedItems.join(', ')}.\n\n`;
+      hasData = true;
+    }
+    
+    // Step 4: Location-based packing suggestions
+    if (property.address) {
+      const locationContext = property.location_context as any;
+      
+      // Pool/beach property packing tips
+      if (amenitiesLower.includes('pool') || 
+          locationContext?.nearbyAttractions?.some((a: string) => a.includes('beach'))) {
+        if (!hasData) {
+          response += `🎒 Essential packing tips:\n`;
+        }
+        response += `• Swimwear & beach towels\n• Sunscreen (SPF 30+)\n• Sunglasses & hat\n• Light, breathable clothing\n`;
+        hasData = true;
+      }
+      
+      // Theme park proximity packing tips
+      if (locationContext?.distanceToDisney || locationContext?.distanceToUniversal) {
+        response += `\n🎢 Theme park tips:\n• Comfortable walking shoes\n• Portable phone charger\n• Small backpack\n• Refillable water bottle`;
+        hasData = true;
+      }
+    }
+    
+    return { response: response.trim(), hasData };
+  }
+  
   private static extractSpecificInfo(text: string, ...keywords: string[]): string {
     const sentences = text.split(/[.!?]+/);
     const relevantSentences: string[] = [];
