@@ -12,6 +12,7 @@ import IntentTag from "@/components/conversations/IntentTag";
 import ConversationStats from "@/components/conversations/ConversationStats";
 import ConversationFilters from "@/components/conversations/ConversationFilters";
 import ConversationDetailModal from "@/components/conversations/ConversationDetailModal";
+import QuickSmsTest from "@/components/QuickSmsTest";
 import { formatDistanceToNow } from "date-fns";
 
 export default function SmsConversationsAdmin() {
@@ -157,6 +158,8 @@ export default function SmsConversationsAdmin() {
         </div>
 
         <ConversationStats conversations={conversations} />
+
+        <QuickSmsTest />
 
         <Card>
           <CardHeader>
