@@ -24,6 +24,7 @@ import ResetPassword from "./pages/ResetPassword";
 import GoogleAuthCallback from "./pages/GoogleAuthCallback";
 import TravelGuideAdmin from "./pages/TravelGuideAdmin";
 import Register from "./pages/Register";
+import RecommendationQualityAnalytics from "./pages/RecommendationQualityAnalytics";
 
 const queryClient = new QueryClient();
 
@@ -109,7 +110,12 @@ const App = () => (
                   <TravelGuideAdmin />
                 </ProtectedRoute>
               } />
-              </Routes>
+              <Route path="/quality-analytics" element={
+                <ProtectedRoute>
+                  <RecommendationQualityAnalytics />
+                </ProtectedRoute>
+              } />
+            </Routes>
             </ToastProvider>
           </GmailAuthProvider>
         </AuthProvider>
