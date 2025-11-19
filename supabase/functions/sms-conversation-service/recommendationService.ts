@@ -96,8 +96,28 @@ export class RecommendationService {
         
         // PHASE 4: Validate recommendation matches intent
         let finalRecommendation = recommendationText;
-        if (!this.validateRecommendationMatchesIntent(recommendationText, requestType, originalMessage)) {
-          console.log('⚠️ Recommendation validation failed, retrying with enhanced prompt');
+        const validationResult = this.validateRecommendationMatchesIntent(
+          recommendationText, 
+          requestType, 
+          originalMessage
+        );
+
+        if (!validationResult.isValid) {
+          console.log('⚠️ Recommendation validation failed, logging and retrying');
+          
+          // Log the rejection for quality improvement
+          await this.logCategoryMismatch(
+            conversation,
+            property,
+            requestType,
+            originalMessage,
+            recommendationText,
+            validationResult.reason || 'Category mismatch detected',
+            {
+              keywordsFound: validationResult.details?.found || [],
+              keywordsMissing: validationResult.details?.missing || []
+            }
+          );
           
           // Retry with more explicit instructions
           const retryPayload = {
@@ -117,11 +137,46 @@ export class RecommendationService {
             
             if (retryResponse.ok) {
               const retryData = await retryResponse.json();
-              finalRecommendation = retryData.recommendation || retryData.response || recommendationText;
-              console.log('✅ Retry successful with corrected recommendation');
+              const correctedRecommendation = retryData.recommendation || retryData.response;
+              
+              if (correctedRecommendation) {
+                console.log('✅ Retry successful with corrected recommendations');
+                finalRecommendation = correctedRecommendation;
+                
+                // Update rejection log with successful retry
+                await this.updateRejectionWithRetryResult(
+                  conversation,
+                  requestType,
+                  originalMessage,
+                  true,
+                  correctedRecommendation
+                );
+              } else {
+                finalRecommendation = recommendationText;
+                await this.updateRejectionWithRetryResult(
+                  conversation,
+                  requestType,
+                  originalMessage,
+                  false
+                );
+              }
+            } else {
+              console.error('❌ Retry failed');
+              await this.updateRejectionWithRetryResult(
+                conversation,
+                requestType,
+                originalMessage,
+                false
+              );
             }
           } catch (retryError) {
-            console.error('⚠️ Retry failed, using original recommendation:', retryError);
+            console.error('❌ Retry error:', retryError);
+            await this.updateRejectionWithRetryResult(
+              conversation,
+              requestType,
+              originalMessage,
+              false
+            );
           }
         }
         
@@ -631,74 +686,198 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
     return days[new Date().getDay()];
   }
 
-  // PHASE 4: Validate recommendation matches intent
-  private validateRecommendationMatchesIntent(response: string, requestType: string, message: string): boolean {
+  // PHASE 4: Validate recommendation matches intent with detailed tracking
+  private validateRecommendationMatchesIntent(
+    response: string, 
+    requestType: string, 
+    message: string
+  ): { isValid: boolean; reason?: string; details?: { found: string[]; missing: string[] } } {
     const lowerResponse = response.toLowerCase();
     const lowerMessage = message.toLowerCase();
     
     // Check if breakfast request returned only coffee shops
     if (requestType === 'breakfast_restaurant' && lowerMessage.includes('breakfast')) {
-      const hasCoffeeWords = lowerResponse.includes('café') || lowerResponse.includes('cafe') || lowerResponse.includes('coffee shop');
-      const hasBreakfastWords = lowerResponse.includes('breakfast') || lowerResponse.includes('eggs') || 
-                                 lowerResponse.includes('pancake') || lowerResponse.includes('omelet');
+      const coffeeWords = ['café', 'cafe', 'coffee shop'];
+      const breakfastWords = ['breakfast', 'eggs', 'pancake', 'omelet'];
       
-      if (hasCoffeeWords && !hasBreakfastWords) {
+      const foundCoffee = coffeeWords.filter(w => lowerResponse.includes(w));
+      const foundBreakfast = breakfastWords.filter(w => lowerResponse.includes(w));
+      
+      if (foundCoffee.length > 0 && foundBreakfast.length === 0) {
         console.log(`❌ ${requestType} validation failed: breakfast request returned coffee shops only`);
-        return false;
+        return {
+          isValid: false,
+          reason: 'breakfast request returned coffee shops only',
+          details: { found: foundCoffee, missing: breakfastWords }
+        };
       }
     }
     
     // Check if coffee request returned breakfast restaurants
     if (requestType === 'coffee_shop' && lowerMessage.includes('coffee')) {
-      const hasBreakfastRestaurant = lowerResponse.includes('breakfast menu') || lowerResponse.includes('full breakfast');
-      if (hasBreakfastRestaurant && !lowerResponse.includes('coffee')) {
+      const breakfastWords = ['breakfast menu', 'full breakfast'];
+      const coffeeWords = ['coffee', 'espresso', 'latte'];
+      
+      const foundBreakfast = breakfastWords.filter(w => lowerResponse.includes(w));
+      const foundCoffee = coffeeWords.filter(w => lowerResponse.includes(w));
+      
+      if (foundBreakfast.length > 0 && foundCoffee.length === 0) {
         console.log(`❌ ${requestType} validation failed: coffee request returned breakfast restaurants`);
-        return false;
+        return {
+          isValid: false,
+          reason: 'coffee request returned breakfast restaurants',
+          details: { found: foundBreakfast, missing: coffeeWords }
+        };
       }
     }
     
     // Check if lunch request returned fine dining/dinner establishments
     if (requestType === 'lunch_dining') {
-      const hasDinnerWords = lowerResponse.includes('fine dining') || lowerResponse.includes('upscale') || 
-                             lowerResponse.includes('evening') || lowerResponse.includes('reservations recommended');
-      const hasLunchWords = lowerResponse.includes('lunch') || lowerResponse.includes('sandwich') || 
-                           lowerResponse.includes('salad') || lowerResponse.includes('quick') || lowerResponse.includes('casual');
+      const dinnerWords = ['fine dining', 'upscale', 'evening', 'reservations recommended'];
+      const lunchWords = ['lunch', 'sandwich', 'salad', 'quick', 'casual'];
       
-      if (hasDinnerWords && !hasLunchWords) {
+      const foundDinner = dinnerWords.filter(w => lowerResponse.includes(w));
+      const foundLunch = lunchWords.filter(w => lowerResponse.includes(w));
+      
+      if (foundDinner.length > 0 && foundLunch.length === 0) {
         console.log(`❌ ${requestType} validation failed: lunch request returned fine dining establishments`);
-        return false;
+        return {
+          isValid: false,
+          reason: 'lunch request returned fine dining establishments',
+          details: { found: foundDinner, missing: lunchWords }
+        };
       }
     }
     
     // Check if dinner request returned fast-casual/lunch spots
     if (requestType === 'dinner_dining') {
-      const hasLunchWords = lowerResponse.includes('quick bite') || lowerResponse.includes('fast casual') || 
-                           lowerResponse.includes('sandwich shop');
-      const hasDinnerWords = lowerResponse.includes('dinner') || lowerResponse.includes('evening') || 
-                            lowerResponse.includes('entree') || lowerResponse.includes('full service');
+      const lunchWords = ['quick bite', 'fast casual', 'sandwich shop'];
+      const dinnerWords = ['dinner', 'evening', 'entree', 'full service'];
       
-      if (hasLunchWords && !hasDinnerWords) {
+      const foundLunch = lunchWords.filter(w => lowerResponse.includes(w));
+      const foundDinner = dinnerWords.filter(w => lowerResponse.includes(w));
+      
+      if (foundLunch.length > 0 && foundDinner.length === 0) {
         console.log(`❌ ${requestType} validation failed: dinner request returned fast-casual lunch spots`);
-        return false;
+        return {
+          isValid: false,
+          reason: 'dinner request returned fast-casual lunch spots',
+          details: { found: foundLunch, missing: dinnerWords }
+        };
       }
     }
     
     // Check if activities request returned restaurants
     if (requestType === 'activities') {
-      const hasRestaurantWords = lowerResponse.includes('restaurant') || lowerResponse.includes('dining') || 
-                                  lowerResponse.includes('café') || lowerResponse.includes('eatery') || lowerResponse.includes('menu');
-      const hasActivityWords = lowerResponse.includes('museum') || lowerResponse.includes('park') || 
-                              lowerResponse.includes('beach') || lowerResponse.includes('tour') || 
-                              lowerResponse.includes('hike') || lowerResponse.includes('attraction') || lowerResponse.includes('scenic');
+      const restaurantWords = ['restaurant', 'dining', 'café', 'eatery', 'menu'];
+      const activityWords = ['museum', 'park', 'beach', 'tour', 'hike', 'attraction', 'scenic'];
       
-      if (hasRestaurantWords && !hasActivityWords) {
+      const foundRestaurant = restaurantWords.filter(w => lowerResponse.includes(w));
+      const foundActivity = activityWords.filter(w => lowerResponse.includes(w));
+      
+      if (foundRestaurant.length > 0 && foundActivity.length === 0) {
         console.log(`❌ ${requestType} validation failed: activities request returned restaurants instead of attractions`);
-        return false;
+        return {
+          isValid: false,
+          reason: 'activities request returned restaurants instead of attractions',
+          details: { found: foundRestaurant, missing: activityWords }
+        };
       }
     }
     
     console.log(`✅ ${requestType} validation passed: recommendation matches intent`);
-    return true;
+    return { isValid: true };
+  }
+
+  // Quality tracking: Log category mismatches for analysis
+  private async logCategoryMismatch(
+    conversation: any,
+    property: any,
+    requestType: string,
+    originalMessage: string,
+    rejectedContent: string,
+    rejectionReason: string,
+    validationDetails: {
+      keywordsFound: string[],
+      keywordsMissing: string[]
+    }
+  ): Promise<void> {
+    try {
+      const context = conversation?.conversation_context || {};
+      
+      const { error } = await this.supabase
+        .from('recommendation_rejections')
+        .insert({
+          conversation_id: conversation.id,
+          phone_number: conversation.phone_number,
+          property_id: property?.id || conversation.property_id,
+          requested_category: requestType,
+          original_message: originalMessage,
+          rejection_reason: rejectionReason,
+          mismatched_content: rejectedContent,
+          validation_keywords_found: validationDetails.keywordsFound,
+          validation_keywords_missing: validationDetails.keywordsMissing,
+          retry_attempted: false,
+          session_metadata: {
+            guest_name: context.guest_name,
+            time_of_day: this.getTimeOfDay(),
+            day_of_week: this.getDayOfWeek(),
+            conversation_turn: context.conversation_turn || 0
+          }
+        });
+      
+      if (error) {
+        console.error('❌ Failed to log rejection:', error);
+      } else {
+        console.log('📊 Rejection logged for quality analysis');
+      }
+    } catch (err) {
+      console.error('❌ Error logging rejection:', err);
+      // Don't throw - logging failure shouldn't break the flow
+    }
+  }
+
+  private async updateRejectionWithRetryResult(
+    conversation: any,
+    requestType: string,
+    originalMessage: string,
+    retrySuccessful: boolean,
+    correctedContent?: string
+  ): Promise<void> {
+    try {
+      // Find the most recent rejection for this conversation and request
+      const { data: rejection, error: fetchError } = await this.supabase
+        .from('recommendation_rejections')
+        .select('id')
+        .eq('conversation_id', conversation.id)
+        .eq('requested_category', requestType)
+        .eq('original_message', originalMessage)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (fetchError || !rejection) {
+        console.warn('⚠️ Could not find rejection to update');
+        return;
+      }
+      
+      const { error: updateError } = await this.supabase
+        .from('recommendation_rejections')
+        .update({
+          retry_attempted: true,
+          retry_successful: retrySuccessful,
+          corrected_content: correctedContent
+        })
+        .eq('id', rejection.id);
+      
+      if (updateError) {
+        console.error('❌ Failed to update rejection retry result:', updateError);
+      } else {
+        console.log(`📊 Rejection retry result logged: ${retrySuccessful ? 'SUCCESS' : 'FAILED'}`);
+      }
+    } catch (err) {
+      console.error('❌ Error updating rejection:', err);
+    }
   }
 
   // PHASE 4: Build correction prompt when validation fails

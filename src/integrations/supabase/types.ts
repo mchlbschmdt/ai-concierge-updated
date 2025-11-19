@@ -399,6 +399,60 @@ export type Database = {
         }
         Relationships: []
       }
+      recommendation_rejections: {
+        Row: {
+          conversation_id: string | null
+          corrected_content: string | null
+          created_at: string | null
+          id: string
+          mismatched_content: string
+          original_message: string
+          phone_number: string
+          property_id: string | null
+          rejection_reason: string
+          requested_category: string
+          retry_attempted: boolean | null
+          retry_successful: boolean | null
+          session_metadata: Json | null
+          validation_keywords_found: string[] | null
+          validation_keywords_missing: string[] | null
+        }
+        Insert: {
+          conversation_id?: string | null
+          corrected_content?: string | null
+          created_at?: string | null
+          id?: string
+          mismatched_content: string
+          original_message: string
+          phone_number: string
+          property_id?: string | null
+          rejection_reason: string
+          requested_category: string
+          retry_attempted?: boolean | null
+          retry_successful?: boolean | null
+          session_metadata?: Json | null
+          validation_keywords_found?: string[] | null
+          validation_keywords_missing?: string[] | null
+        }
+        Update: {
+          conversation_id?: string | null
+          corrected_content?: string | null
+          created_at?: string | null
+          id?: string
+          mismatched_content?: string
+          original_message?: string
+          phone_number?: string
+          property_id?: string | null
+          rejection_reason?: string
+          requested_category?: string
+          retry_attempted?: boolean | null
+          retry_successful?: boolean | null
+          session_metadata?: Json | null
+          validation_keywords_found?: string[] | null
+          validation_keywords_missing?: string[] | null
+        }
+        Relationships: []
+      }
       service_connections: {
         Row: {
           connection_details: Json
