@@ -271,6 +271,7 @@ export type Database = {
           security_question_2: string | null
           security_question_3: string | null
           skip_onboarding: boolean | null
+          skipped_onboarding_steps: Json | null
           updated_at: string
         }
         Insert: {
@@ -288,6 +289,7 @@ export type Database = {
           security_question_2?: string | null
           security_question_3?: string | null
           skip_onboarding?: boolean | null
+          skipped_onboarding_steps?: Json | null
           updated_at?: string
         }
         Update: {
@@ -305,6 +307,7 @@ export type Database = {
           security_question_2?: string | null
           security_question_3?: string | null
           skip_onboarding?: boolean | null
+          skipped_onboarding_steps?: Json | null
           updated_at?: string
         }
         Relationships: []

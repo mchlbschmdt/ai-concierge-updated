@@ -17,6 +17,7 @@ export default function Onboarding() {
     formData,
     loading,
     progress,
+    skippedSteps,
     updateFormData,
     nextStep,
     prevStep,
@@ -63,19 +64,21 @@ export default function Onboarding() {
             />
           )}
 
+          {/* Step 2: Security Questions (skippable) */}
           {currentStep === 2 && (
             <SecurityQuestionsStep
               onNext={nextStep}
-              onSkip={skipStep}
+              onSkip={() => skipStep('security_questions')}
             />
           )}
 
+          {/* Step 3: First Property (skippable) */}
           {currentStep === 3 && (
             <FirstPropertyStep
               formData={formData}
               updateFormData={updateFormData}
               onNext={nextStep}
-              onSkip={skipStep}
+              onSkip={() => skipStep('first_property')}
             />
           )}
 
