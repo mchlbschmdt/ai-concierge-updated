@@ -530,9 +530,11 @@ export type Database = {
           conversation_state: string
           created_at: string
           id: string
+          last_intent: string | null
           last_interaction_timestamp: string | null
           last_message_type: string | null
           last_recommendations: string | null
+          last_response: string | null
           phone_number: string
           preferences: Json | null
           property_confirmed: boolean | null
@@ -545,9 +547,11 @@ export type Database = {
           conversation_state?: string
           created_at?: string
           id?: string
+          last_intent?: string | null
           last_interaction_timestamp?: string | null
           last_message_type?: string | null
           last_recommendations?: string | null
+          last_response?: string | null
           phone_number: string
           preferences?: Json | null
           property_confirmed?: boolean | null
@@ -560,9 +564,11 @@ export type Database = {
           conversation_state?: string
           created_at?: string
           id?: string
+          last_intent?: string | null
           last_interaction_timestamp?: string | null
           last_message_type?: string | null
           last_recommendations?: string | null
+          last_response?: string | null
           phone_number?: string
           preferences?: Json | null
           property_confirmed?: boolean | null
