@@ -1,5 +1,6 @@
 import { Property } from './types.ts';
 import { ConversationMemoryManager } from './conversationMemoryManager.ts';
+import { PropertyLocationAnalyzer } from './propertyLocationAnalyzer.ts';
 
 export class PropertyDataExtractorEnhanced {
   
