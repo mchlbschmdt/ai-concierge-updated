@@ -397,14 +397,88 @@ export class ConversationMemoryManager {
     };
   }
   
-  static trackSharedInformation(context: any, sharedContent: { topic: string; content: string; summary: string }): void {
-    if (!context.shared_information) {
-      context.shared_information = [];
+  /**
+   * Check if information on a topic was recently shared
+   * @param context - Conversation context
+   * @param topic - Topic to check (e.g., 'wifi', 'parking', 'checkout')
+   * @param withinMinutes - Time window in minutes (default: 5)
+   * @returns Object with shared status and details
+   */
+  static hasAlreadySharedInformation(
+    context: any, 
+    topic: string, 
+    withinMinutes: number = 5
+  ): { shared: boolean; summary?: string; minutesAgo?: number } {
+    if (!context?.shared_information || context.shared_information.length === 0) {
+      return { shared: false };
+    }
+    
+    const timeWindow = new Date(Date.now() - withinMinutes * 60 * 1000);
+    
+    const recentShare = context.shared_information.find((info: any) => 
+      info.topic === topic && new Date(info.timestamp) > timeWindow
+    );
+    
+    if (recentShare) {
+      const minutesAgo = Math.floor((Date.now() - new Date(recentShare.timestamp).getTime()) / (60 * 1000));
+      return { 
+        shared: true, 
+        summary: recentShare.response_summary,
+        minutesAgo 
+      };
+    }
+    
+    return { shared: false };
+  }
+  
+  /**
+   * Abbreviate a response when information was recently shared
+   * @param fullResponse - The full response text
+   * @param topic - The topic being discussed
+   * @param previousSummary - Summary of what was shared before
+   * @returns Abbreviated response
+   */
+  static abbreviateResponse(fullResponse: string, topic: string, previousSummary?: string): string {
+    const topicPhrases: Record<string, string> = {
+      'wifi_info': 'the WiFi details',
+      'checkout_info': 'the checkout time',
+      'checkin_info': 'the check-in time',
+      'parking_info': 'parking information',
+      'amenity_info': 'those amenity details',
+      'access_info': 'the access instructions',
+      'pool_info': 'the pool information',
+      'hot_tub_info': 'the hot tub details',
+      'garbage_info': 'the trash schedule',
+      'grocery_info': 'the nearby stores',
+      'emergency_contact': 'the contact information'
+    };
+    
+    const phrase = topicPhrases[topic] || 'that information';
+    
+    // If we have a previous summary, reference it
+    if (previousSummary) {
+      return `As I mentioned earlier, ${previousSummary.toLowerCase()}. Is there something specific you'd like to know more about?`;
+    }
+    
+    // Extract key info from full response for brief reminder
+    const firstSentence = fullResponse.split(/[.!?]\s/)[0];
+    if (firstSentence && firstSentence.length < 150) {
+      return `Just to remind you: ${firstSentence}. Need anything else?`;
+    }
+    
+    return `I shared ${phrase} just a moment ago. What else can I help with?`;
+  }
+  
+  static trackSharedInformation(context: any, sharedContent: { topic: string; content: string; summary: string }): any {
+    const updatedContext = { ...context };
+    
+    if (!updatedContext.shared_information) {
+      updatedContext.shared_information = [];
     }
     
     const contentHash = this.hashContent(sharedContent.content);
     
-    context.shared_information.unshift({
+    updatedContext.shared_information.unshift({
       topic: sharedContent.topic,
       content_hash: contentHash,
       timestamp: new Date().toISOString(),
@@ -412,7 +486,9 @@ export class ConversationMemoryManager {
     });
     
     // Keep last 10 shared information items
-    context.shared_information = context.shared_information.slice(0, 10);
+    updatedContext.shared_information = updatedContext.shared_information.slice(0, 10);
+    
+    return updatedContext;
   }
   
   static wasTopicRecentlyShared(context: any, topic: string): { shared: boolean; summary?: string } {
