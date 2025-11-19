@@ -25,6 +25,7 @@ import GoogleAuthCallback from "./pages/GoogleAuthCallback";
 import TravelGuideAdmin from "./pages/TravelGuideAdmin";
 import Register from "./pages/Register";
 import RecommendationQualityAnalytics from "./pages/RecommendationQualityAnalytics";
+import SmsConversationsAdmin from "./pages/SmsConversationsAdmin";
 
 const queryClient = new QueryClient();
 
@@ -115,7 +116,12 @@ const App = () => (
                   <RecommendationQualityAnalytics />
                 </ProtectedRoute>
               } />
-            </Routes>
+              <Route path="/sms-conversations" element={
+                <ProtectedRoute>
+                  <SmsConversationsAdmin />
+                </ProtectedRoute>
+              } />
+              </Routes>
             </ToastProvider>
           </GmailAuthProvider>
         </AuthProvider>

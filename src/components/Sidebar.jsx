@@ -13,7 +13,8 @@ import {
   MapPin,
   Bot,
   FileText,
-  TrendingUp
+  TrendingUp,
+  MessagesSquare
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -24,6 +25,7 @@ const Sidebar = () => {
     { icon: Building2, label: 'Properties', path: '/properties' },
     { icon: Users, label: 'Guests', path: '/guests' },
     { icon: MessageSquare, label: 'Messages', path: '/messages' },
+    { icon: MessagesSquare, label: 'SMS Conversations', path: '/sms-conversations' },
     { icon: BarChart3, label: 'Analytics', path: '/analytics' },
     { icon: BarChart3, label: 'Smart Insights', path: '/insights' },
     { icon: TrendingUp, label: 'Quality Analytics', path: '/quality-analytics' },
