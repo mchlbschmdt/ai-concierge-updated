@@ -3,15 +3,15 @@ import React from "react";
 import { Link, useLocation } from "react-router-dom";
 
 const navItems = [
-  { label: "Dashboard", path: "/dashboard" },
-  { label: "Guests", path: "/dashboard/guests" },
-  { label: "Guest Manager", path: "/dashboard/guests-manager" },
-  { label: "Properties", path: "/dashboard/properties" },
-  { label: "Property Manager", path: "/dashboard/properties-manager" },
-  { label: "Messages", path: "/dashboard/messages" },
-  { label: "Analytics", path: "/dashboard/analytics" },
-  { label: "FAQ Editor", path: "/dashboard/faq-editor" },
-  { label: "Smart Insights", path: "/dashboard/insights" },
+  { label: "Dashboard", path: "/" },
+  { label: "Guests", path: "/guests" },
+  { label: "Guest Manager", path: "/guests" },
+  { label: "Properties", path: "/properties" },
+  { label: "Property Manager", path: "/properties" },
+  { label: "Messages", path: "/messages" },
+  { label: "Analytics", path: "/analytics" },
+  { label: "FAQ Editor", path: "/faq-editor" },
+  { label: "Smart Insights", path: "/insights" },
 ];
 
 export default function Sidebar() {
