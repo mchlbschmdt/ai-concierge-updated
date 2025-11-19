@@ -19,6 +19,9 @@ import { RecommendationDiversifier } from './recommendationDiversifier.ts';
 import { PerplexityRecommendationService } from './perplexityRecommendationService.ts';
 import { EnhancedPropertyKnowledgeService } from './enhancedPropertyKnowledgeService.ts';
 import { EnhancedIntentRouter } from './enhancedIntentRouter.ts';
+import { TroubleshootingDetectionService } from './troubleshootingDetectionService.ts';
+import { HostContactService } from './hostContactService.ts';
+import { PropertyDataExtractorEnhanced } from './propertyDataExtractorEnhanced.ts';
 import { Conversation, Property } from './types.ts';
 
 export class EnhancedConversationService {
@@ -725,47 +728,80 @@ export class EnhancedConversationService {
 
   /**
    * NEW: Check property data FIRST before any AI calls
+   * Enhanced with troubleshooting detection and host contact service
    */
   private async checkPropertyDataFirst(intent: string, message: string, property: Property, conversation: Conversation): Promise<any> {
     console.log('🔍 Checking property data first for intent:', intent);
     
-    // CRITICAL: Detect urgent access issues
-    const isUrgent = this.detectUrgentIssue(message);
-    if (isUrgent) {
-      console.log('🚨 URGENT issue detected!');
-      return await this.handleUrgentIssue(message, property);
+    const conversationContext = conversation.conversation_context as any || {};
+    
+    // STEP 1: Detect if this is a troubleshooting request
+    const troubleshootingResult = TroubleshootingDetectionService.detectTroubleshootingIntent(message);
+    
+    if (troubleshootingResult.isTroubleshooting) {
+      console.log('🔧 Troubleshooting detected:', troubleshootingResult);
+      return await this.handleTroubleshootingRequest(message, property, conversation, troubleshootingResult);
     }
     
-    // Check all property-related intents
+    // STEP 2: Check if topic was recently shared (prevent repetition)
+    const topic = this.extractTopicFromIntent(intent, message);
+    const recentShare = ConversationMemoryManager.wasTopicRecentlyShared(conversationContext, topic);
+    
+    if (recentShare.shared) {
+      console.log('✅ Topic was recently shared, providing brief reminder');
+      return {
+        messages: [`As I mentioned, ${recentShare.summary}. Is there something specific you'd like to know more about?`],
+        shouldUpdateState: false
+      };
+    }
+    
+    // STEP 3: Check all property-related intents (including new ones)
     const propertyIntents = [
       'ask_checkout_time', 'ask_checkin_time', 'ask_access', 
       'ask_wifi', 'ask_parking', 'ask_amenity', 'ask_emergency_contact',
-      'ask_property_specific'
+      'ask_property_specific', 'ask_additional_services', 'ask_resort_amenities',
+      'troubleshoot_tv', 'troubleshoot_wifi', 'troubleshoot_equipment', 'troubleshoot_general'
     ];
     
     if (propertyIntents.includes(intent)) {
-      const dataResponse = PropertyDataExtractor.extractPropertyData(property, intent, message);
+      // Try enhanced extractors for new intents
+      let extractionResult = null;
       
-      if (dataResponse.hasData) {
-        console.log('✅ Property data found:', dataResponse.dataType);
+      if (intent === 'troubleshoot_tv' || message.toLowerCase().includes('tv')) {
+        extractionResult = PropertyDataExtractorEnhanced.extractTvInfo(property, message, conversationContext);
+      } else if (intent === 'ask_additional_services') {
+        extractionResult = PropertyDataExtractorEnhanced.extractAdditionalServices(property, message, conversationContext);
+      } else if (intent === 'ask_resort_amenities') {
+        extractionResult = PropertyDataExtractorEnhanced.extractResortAmenities(property, message, conversationContext);
+      } else {
+        // Use original extractor for standard intents
+        const dataResponse = PropertyDataExtractor.extractPropertyData(property, intent, message);
+        extractionResult = { response: dataResponse.content, hasData: dataResponse.hasData };
+      }
+      
+      if (extractionResult && extractionResult.hasData && extractionResult.response) {
+        console.log('✅ Property data found');
         
-        // Add conversational wrapper
-        let response = dataResponse.content;
+        let response = extractionResult.response;
+        
+        // Track shared information
+        const summary = response.length > 100 ? response.substring(0, 97) + '...' : response;
+        const updatedContext = { ...conversationContext };
+        ConversationMemoryManager.trackSharedInformation(updatedContext, {
+          topic,
+          content: response,
+          summary
+        });
         
         // Add helpful follow-up
-        if (intent === 'ask_wifi' && !message.toLowerCase().includes('not working')) {
-          response += '\n\nLet me know if you have any trouble connecting!';
-        } else if (intent === 'ask_checkout_time') {
-          response += '\n\nNeed help with anything else before you leave?';
-        } else if (intent === 'ask_amenity') {
-          response += '\n\nWhat else can I help with?';
-        }
+        response += '\n\n' + this.getContextualFollowUp(intent, message);
         
-        // Log intent and response (non-critical - don't let this block the user response)
+        // Update conversation context
         try {
           await this.conversationManager.updateConversationState(conversation.phone_number, {
             last_intent: intent,
-            last_response: response
+            last_response: response,
+            conversation_context: updatedContext
           });
         } catch (logError) {
           console.warn('⚠️ Non-critical: Failed to log intent/response:', logError);
@@ -776,13 +812,188 @@ export class EnhancedConversationService {
           shouldUpdateState: false
         };
       } else {
-        // No data found - provide helpful fallback
-        console.log('❌ No property data found, providing fallback');
-        return await this.handleMissingPropertyData(intent, property, message);
+        // STEP 4: Search knowledge base if structured data not found
+        console.log('📚 Searching knowledge base for information');
+        const kbResult = EnhancedPropertyKnowledgeService.searchPropertyKnowledge(property, message);
+        
+        if (kbResult.found && kbResult.content) {
+          console.log('✅ Knowledge base match found');
+          
+          let response = kbResult.content;
+          
+          // Track shared information
+          const summary = response.length > 100 ? response.substring(0, 97) + '...' : response;
+          const updatedContext = { ...conversationContext };
+          ConversationMemoryManager.trackSharedInformation(updatedContext, {
+            topic,
+            content: response,
+            summary
+          });
+          
+          response += '\n\n' + this.getContextualFollowUp(intent, message);
+          
+          try {
+            await this.conversationManager.updateConversationState(conversation.phone_number, {
+              conversation_context: updatedContext
+            });
+          } catch (logError) {
+            console.warn('⚠️ Non-critical: Failed to update context:', logError);
+          }
+          
+          return {
+            messages: MessageUtils.ensureSmsLimit(response),
+            shouldUpdateState: false
+          };
+        }
+        
+        // STEP 5: Offer host contact if no information found
+        console.log('❌ No property data or knowledge found, offering host contact');
+        return await this.handleMissingPropertyDataWithHostContact(intent, property, message, conversationContext);
       }
     }
     
     return null;
+  }
+  
+  /**
+   * Handle troubleshooting requests with proper escalation
+   */
+  private async handleTroubleshootingRequest(
+    message: string, 
+    property: Property, 
+    conversation: Conversation,
+    troubleshootingResult: any
+  ): Promise<any> {
+    console.log('🔧 Handling troubleshooting request:', troubleshootingResult.category);
+    
+    const conversationContext = conversation.conversation_context as any || {};
+    let response = '';
+    let hasData = false;
+    
+    // Try to extract troubleshooting info from knowledge base
+    if (troubleshootingResult.equipmentType) {
+      const troubleshootingInfo = PropertyDataExtractorEnhanced.extractEquipmentTroubleshooting(
+        property, 
+        message, 
+        troubleshootingResult.equipmentType,
+        conversationContext
+      );
+      
+      if (troubleshootingInfo.hasData) {
+        response = troubleshootingInfo.response;
+        hasData = true;
+      }
+    }
+    
+    // Generate host contact offer based on context
+    const hostContactOffer = HostContactService.generateHostContactOffer(property, {
+      knowledgeFound: hasData,
+      isTroubleshooting: true,
+      isUrgent: troubleshootingResult.urgency === 'critical' || troubleshootingResult.urgency === 'high',
+      category: troubleshootingResult.category,
+      equipmentType: troubleshootingResult.equipmentType
+    }, conversationContext);
+    
+    if (hasData) {
+      response += '\n\n' + hostContactOffer;
+    } else {
+      response = hostContactOffer;
+    }
+    
+    // Track that we offered host contact
+    const updatedContext = { ...conversationContext };
+    updatedContext.last_host_contact_offer_timestamp = new Date().toISOString();
+    
+    try {
+      await this.conversationManager.updateConversationState(conversation.phone_number, {
+        conversation_context: updatedContext
+      });
+    } catch (error) {
+      console.warn('⚠️ Failed to update context:', error);
+    }
+    
+    return {
+      messages: MessageUtils.ensureSmsLimit(response),
+      shouldUpdateState: false
+    };
+  }
+  
+  /**
+   * Handle missing property data by offering host contact
+   */
+  private async handleMissingPropertyDataWithHostContact(
+    intent: string, 
+    property: Property, 
+    message: string,
+    conversationContext: any
+  ): Promise<any> {
+    const topic = this.extractTopicFromIntent(intent, message);
+    
+    const hostContactOffer = HostContactService.generateHostContactOffer(property, {
+      knowledgeFound: false,
+      isTroubleshooting: false,
+      isUrgent: false,
+      topic
+    }, conversationContext);
+    
+    // Track that we offered host contact
+    const updatedContext = { ...conversationContext };
+    updatedContext.last_host_contact_offer_timestamp = new Date().toISOString();
+    
+    return {
+      messages: [hostContactOffer],
+      shouldUpdateState: false
+    };
+  }
+  
+  /**
+   * Extract topic from intent for memory tracking
+   */
+  private extractTopicFromIntent(intent: string, message: string): string {
+    const lowerMessage = message.toLowerCase();
+    
+    // Extract specific topics from common queries
+    if (lowerMessage.includes('wifi')) return 'wifi_info';
+    if (lowerMessage.includes('parking')) return 'parking_info';
+    if (lowerMessage.includes('pool')) return 'pool_info';
+    if (lowerMessage.includes('checkout')) return 'checkout_info';
+    if (lowerMessage.includes('tv')) return 'tv_info';
+    
+    // Fall back to intent-based topics
+    const intentTopicMap: Record<string, string> = {
+      'ask_wifi': 'wifi_info',
+      'ask_parking': 'parking_info',
+      'ask_amenity': 'amenity_info',
+      'ask_checkout_time': 'checkout_info',
+      'ask_access': 'access_info',
+      'ask_additional_services': 'additional_services',
+      'ask_resort_amenities': 'resort_amenities',
+      'troubleshoot_tv': 'troubleshoot_tv',
+      'troubleshoot_wifi': 'troubleshoot_wifi'
+    };
+    
+    return intentTopicMap[intent] || 'general_info';
+  }
+  
+  /**
+   * Get contextual follow-up based on intent
+   */
+  private getContextualFollowUp(intent: string, message: string): string {
+    const lowerMessage = message.toLowerCase();
+    
+    if (intent === 'ask_wifi' && !lowerMessage.includes('not working')) {
+      return 'Let me know if you have any trouble connecting!';
+    } else if (intent === 'ask_checkout_time') {
+      return 'Need help with anything else before you leave?';
+    } else if (intent === 'ask_amenity') {
+      return 'What else can I help with?';
+    } else if (intent === 'ask_additional_services') {
+      return 'Let me know if you need anything else!';
+    } else if (intent === 'ask_resort_amenities') {
+      return 'Would you like more details about any of these amenities?';
+    }
+    
+    return 'Hope that helps! Let me know if you need anything else! 😊';
   }
   
   /**

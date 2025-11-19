@@ -34,6 +34,25 @@ export class IntentRecognitionService {
       return { intent: 'ask_menu', confidence: 0.9, isMultiPart: false };
     }
     
+    // NEW: Troubleshooting intents - HIGH PRIORITY
+    if (this.detectTroubleshootingIntent(lowerMessage)) {
+      const category = this.detectTroubleshootingCategory(lowerMessage);
+      console.log(`🔧 Troubleshooting intent detected (${category}):`, message);
+      return { intent: `troubleshoot_${category}`, confidence: 0.95, isMultiPart: false };
+    }
+    
+    // NEW: Additional services intent
+    if (this.detectAdditionalServicesIntent(lowerMessage)) {
+      console.log('🛎️ Additional services intent detected:', message);
+      return { intent: 'ask_additional_services', confidence: 0.9, isMultiPart: false };
+    }
+    
+    // NEW: Resort amenities intent
+    if (this.detectResortAmenitiesIntent(lowerMessage)) {
+      console.log('🏨 Resort amenities intent detected:', message);
+      return { intent: 'ask_resort_amenities', confidence: 0.9, isMultiPart: false };
+    }
+    
     // NEW: Coffee requests - HIGHEST PRIORITY for food-related queries
     if (this.detectCoffeeIntent(lowerMessage)) {
       console.log('☕ Coffee intent detected:', message);
@@ -507,10 +526,66 @@ export class IntentRecognitionService {
     const urgencyKeywords = [
       'not working', 'cant', 'can\'t', 'doesnt work', 'doesn\'t work',
       'wont work', 'won\'t work', 'broken', 'problem', 'issue', 'trouble',
-      'help', 'stuck', 'locked out', 'urgent', 'emergency', 'now', 'asap'
+      'emergency', 'urgent', 'help', 'please help', 'need help', 'asap'
     ];
     
-    return urgencyKeywords.some(keyword => message.toLowerCase().includes(keyword));
+    const lowerMessage = message.toLowerCase();
+    return urgencyKeywords.some(keyword => lowerMessage.includes(keyword));
+  }
+  
+  static isTravelCode(message: string): boolean {
+    return message.toLowerCase().trim() === 'travel';
+  }
+  
+  static detectTroubleshootingIntent(lowerMessage: string): boolean {
+    const troubleshootingKeywords = [
+      'not working', 'broken', "won't", "can't", "doesn't work",
+      'issue', 'problem', 'trouble', 'help with', 'fix', 'repair'
+    ];
+    
+    const informationKeywords = [
+      'how to', 'where is', 'do you have', 'is there', 'what is'
+    ];
+    
+    const hasTroubleshooting = troubleshootingKeywords.some(kw => lowerMessage.includes(kw));
+    const isInformationOnly = informationKeywords.some(kw => lowerMessage.includes(kw)) && !hasTroubleshooting;
+    
+    return hasTroubleshooting && !isInformationOnly;
+  }
+  
+  static detectTroubleshootingCategory(lowerMessage: string): string {
+    if (lowerMessage.includes('tv') || lowerMessage.includes('remote') || lowerMessage.includes('streaming')) {
+      return 'tv';
+    }
+    if (lowerMessage.includes('wifi') || lowerMessage.includes('internet')) {
+      return 'wifi';
+    }
+    if (lowerMessage.includes('washer') || lowerMessage.includes('dryer') || 
+        lowerMessage.includes('dishwasher') || lowerMessage.includes('appliance')) {
+      return 'equipment';
+    }
+    return 'general';
+  }
+  
+  static detectAdditionalServicesIntent(lowerMessage: string): boolean {
+    const serviceKeywords = [
+      'laundry service', 'housekeeping', 'cleaning service',
+      'extra towels', 'room service', 'maintenance request',
+      'additional services', 'concierge'
+    ];
+    
+    return serviceKeywords.some(kw => lowerMessage.includes(kw));
+  }
+  
+  static detectResortAmenitiesIntent(lowerMessage: string): boolean {
+    const resortKeywords = ['resort pool', 'resort gym', 'resort spa', 'resort restaurant', 'on-site'];
+    const amenityKeywords = ['pool', 'gym', 'fitness', 'spa', 'restaurant', 'bar'];
+    
+    const hasResortKeyword = resortKeywords.some(kw => lowerMessage.includes(kw));
+    const hasAmenityKeyword = amenityKeywords.some(kw => lowerMessage.includes(kw));
+    const hasOnSite = lowerMessage.includes('on-site') || lowerMessage.includes('on site');
+    
+    return hasResortKeyword || (hasOnSite && hasAmenityKeyword);
   }
 
   private static matchesKeywords(message: string, keywords: string[]): boolean {
