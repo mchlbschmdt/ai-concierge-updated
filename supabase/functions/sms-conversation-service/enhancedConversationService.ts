@@ -738,12 +738,37 @@ export class EnhancedConversationService {
 
   /**
    * NEW: Check property data FIRST before any AI calls
-   * Enhanced with troubleshooting detection and host contact service
+   * Enhanced with service request and general knowledge routing
    */
   private async checkPropertyDataFirst(intent: string, message: string, property: Property, conversation: Conversation): Promise<any> {
     console.log('🔍 Checking property data first for intent:', intent);
     
     const conversationContext = conversation.conversation_context as any || {};
+    
+    // HIGHEST PRIORITY: Service requests (action-based, require host coordination)
+    if (intent.startsWith('request_')) {
+      console.log('🛎️ Service request detected, routing to host coordination');
+      return await this.handleServiceRequest(intent, property, message, conversationContext, conversation.phone_number);
+    }
+    
+    // HIGH PRIORITY: General knowledge queries (external to property)
+    if (intent === 'ask_general_knowledge') {
+      console.log('🌐 General knowledge query, routing to AI service');
+      return await this.handleGeneralKnowledgeQuery(property, message, conversationContext, conversation.phone_number);
+    }
+    
+    // Check for repetition BEFORE property data extraction
+    const topic = this.extractTopicFromIntent(intent, message);
+    const recentShare = ConversationMemoryManager.hasAlreadySharedInformation(conversationContext, topic, 5);
+    
+    if (recentShare.shared) {
+      console.log(`✅ Topic "${topic}" was shared ${recentShare.minutesAgo} minutes ago - providing abbreviated response`);
+      const abbreviated = ConversationMemoryManager.abbreviateResponse('', topic, recentShare.summary);
+      return {
+        messages: [abbreviated],
+        shouldUpdateState: false
+      };
+    }
     
     // STEP 1: Detect if this is a troubleshooting request
     const troubleshootingResult = TroubleshootingDetectionService.detectTroubleshootingIntent(message);
@@ -755,19 +780,6 @@ export class EnhancedConversationService {
       const result = await this.handleTroubleshootingRequest(message, property, conversation, troubleshootingResult);
       console.log('✅ Troubleshooting handler complete - blocking further processing');
       return result;
-    }
-    
-    // STEP 2: Check if topic was recently shared (prevent repetition)
-    const topic = this.extractTopicFromIntent(intent, message);
-    const recentShare = ConversationMemoryManager.hasAlreadySharedInformation(conversationContext, topic, 5);
-    
-    if (recentShare.shared) {
-      console.log(`✅ Topic "${topic}" was shared ${recentShare.minutesAgo} minutes ago - providing abbreviated response`);
-      const abbreviated = ConversationMemoryManager.abbreviateResponse('', topic, recentShare.summary);
-      return {
-        messages: [abbreviated],
-        shouldUpdateState: false
-      };
     }
     
     // STEP 3: Check all property-related intents (including new ones)
@@ -2664,6 +2676,232 @@ export class EnhancedConversationService {
     if (propertyContextResponse) {
       return await this.updateConversationAndRespond(phoneNumber, intentResult.intent, propertyContextResponse, conversation);
     }
+
+    // For any other intents, continue with standard flow
+    return null;
+  }
+
+  /**
+   * Handle service requests that require host coordination
+   */
+  private async handleServiceRequest(
+    intent: string,
+    property: Property,
+    message: string,
+    conversationContext: any,
+    phoneNumber: string
+  ): Promise<any> {
+    const hostContact = property.emergency_contact || '+1 (321) 340-6333';
+    const hostNames = 'Lauren & Mike';
+    
+    let response = '';
+    
+    switch (intent) {
+      case 'request_pool_heat_service':
+        response = `I can help you coordinate pool heating! 🏊‍♀️\n\n` +
+          `Pool heating is $25 per day and needs to be arranged through ${hostNames}.\n\n` +
+          `Please text them at ${hostContact} to add this to your reservation, or I can notify them for you. ` +
+          `Would you like me to send them a message?`;
+        break;
+        
+      case 'request_amenity_access':
+        const amenityType = this.detectRequestedAmenity(message);
+        
+        if (amenityType === 'waterpark' || amenityType === 'resort_amenities') {
+          response = `Great choice! Resort amenity access includes the waterpark, pools, golf, gym, tennis, and more. 🎉\n\n` +
+            `**Cost:** $65 per day (covers your entire group for the length of stay)\n\n` +
+            `${hostNames} will submit your names to Reunion Resort to activate your access. ` +
+            `Contact them at ${hostContact} to get this set up!\n\n` +
+            `Your resort access card is located inside the home - you'll need it for gym access and security gate re-entry.`;
+        } else {
+          response = `I can help coordinate that! Please contact ${hostNames} at ${hostContact} to arrange access. ` +
+            `They'll get everything set up for you.`;
+        }
+        break;
+        
+      case 'request_additional_service':
+        const serviceType = this.detectRequestedService(message);
+        response = `${hostNames} offer ${serviceType} services! Contact them at ${hostContact} for pricing and availability. ` +
+          `They'll be happy to coordinate this for your stay. 🌟`;
+        break;
+        
+      default:
+        response = `I can help coordinate that with ${hostNames}. Contact them at ${hostContact} for assistance!`;
+    }
+    
+    // Track this as shared information
+    const updatedContext = ConversationMemoryManager.trackSharedInformation(conversationContext, {
+      topic: 'service_request_' + intent,
+      content: response,
+      summary: `Service request: ${intent}`
+    });
+    
+    await this.conversationManager.updateConversationState(phoneNumber, {
+      conversation_context: updatedContext,
+      last_intent: intent,
+      last_response: response
+    });
+    
+    return {
+      messages: MessageUtils.ensureSmsLimit(response),
+      shouldUpdateState: false
+    };
+  }
+
+  /**
+   * Handle general knowledge queries (external to property)
+   */
+  private async handleGeneralKnowledgeQuery(
+    property: Property,
+    message: string,
+    conversationContext: any,
+    phoneNumber: string
+  ): Promise<any> {
+    console.log('🌐 Routing general knowledge query to AI service');
+    
+    // Build context-aware prompt for OpenAI
+    const locationContext = PropertyLocationAnalyzer.analyzePropertyLocation(property.address);
+    
+    const systemPrompt = `You are a helpful local travel concierge for guests staying near ${locationContext.nearbyAttractions.join(', ')}. 
+Property location: ${property.address}
+
+Provide CURRENT, ACCURATE information about:
+- Theme park hours (Disney, Universal, etc.)
+- Ticket purchasing options
+- Crowd calendars and best times to visit
+- General Orlando area attractions and dining
+
+Keep responses concise (under 300 characters) and practical. Include specific details like hours, prices, or booking websites when relevant.`;
+    
+    // Route to recommendation service's OpenAI integration
+    const aiResponse = await RecommendationService.getGeneralInformation(
+      message,
+      systemPrompt,
+      locationContext
+    );
+    
+    if (aiResponse && aiResponse.content) {
+      // Track shared information
+      const updatedContext = ConversationMemoryManager.trackSharedInformation(conversationContext, {
+        topic: 'general_knowledge',
+        content: aiResponse.content,
+        summary: 'General info: ' + message.substring(0, 50)
+      });
+      
+      await this.conversationManager.updateConversationState(phoneNumber, {
+        conversation_context: updatedContext,
+        last_intent: 'ask_general_knowledge',
+        last_response: aiResponse.content
+      });
+      
+      return {
+        messages: MessageUtils.ensureSmsLimit(aiResponse.content),
+        shouldUpdateState: false
+      };
+    }
+    
+    // Fallback
+    return {
+      messages: ["I'd recommend checking the official websites or apps for the most current information. Is there anything specific about your property or local area I can help with?"],
+      shouldUpdateState: false
+    };
+  }
+
+  /**
+   * Detect requested amenity type from message
+   */
+  private detectRequestedAmenity(message: string): string {
+    const lowerMsg = message.toLowerCase();
+    
+    if (lowerMsg.includes('waterpark') || lowerMsg.includes('water park')) {
+      return 'waterpark';
+    }
+    if (lowerMsg.includes('gym') || lowerMsg.includes('fitness')) {
+      return 'gym';
+    }
+    if (lowerMsg.includes('golf')) {
+      return 'golf';
+    }
+    if (lowerMsg.includes('resort amenities') || lowerMsg.includes('resort access')) {
+      return 'resort_amenities';
+    }
+    
+    return 'general';
+  }
+
+  /**
+   * Detect requested service type from message
+   */
+  private detectRequestedService(message: string): string {
+    const lowerMsg = message.toLowerCase();
+    
+    if (lowerMsg.includes('grocery') || lowerMsg.includes('groceries')) {
+      return 'grocery delivery';
+    }
+    if (lowerMsg.includes('chef') || lowerMsg.includes('cooking')) {
+      return 'private chef';
+    }
+    if (lowerMsg.includes('massage') || lowerMsg.includes('spa')) {
+      return 'massage/spa';
+    }
+    if (lowerMsg.includes('clean')) {
+      return 'cleaning';
+    }
+    
+    return 'additional';
+  }
+
+  /**
+   * Get topic from intent for repetition tracking
+   */
+  private extractTopicFromIntent(intent: string, message: string): string {
+    const intentTopicMap: Record<string, string> = {
+      'ask_wifi': 'wifi',
+      'ask_parking': 'parking',
+      'ask_checkout_time': 'checkout',
+      'ask_checkin_time': 'checkin',
+      'ask_access': 'access',
+      'ask_amenity': 'amenities',
+      'ask_emergency_contact': 'emergency_contact',
+      'ask_weather': 'weather',
+      'ask_packing_tips': 'packing',
+      'ask_best_time_to_visit': 'best_time_visit',
+      'ask_transportation': 'transportation',
+      'ask_local_events': 'local_events',
+      'ask_resort_amenities': 'resort_amenities',
+      'request_pool_heat_service': 'pool_heat',
+      'request_amenity_access': 'amenity_access',
+      'ask_general_knowledge': 'general_info'
+    };
+    
+    return intentTopicMap[intent] || intent;
+  }
+
+  /**
+   * Extract destination from transportation query
+   */
+  private extractDestinationFromMessage(message: string): string | null {
+    const lowerMsg = message.toLowerCase();
+    
+    if (lowerMsg.includes('disney')) return 'Disney';
+    if (lowerMsg.includes('universal')) return 'Universal';
+    if (lowerMsg.includes('airport') || lowerMsg.includes('mco')) return 'airport';
+    if (lowerMsg.includes('downtown')) return 'downtown';
+    
+    return null;
+  }
+
+  /**
+   * Update conversation state helper
+   */
+  private async updateConversationState(phoneNumber: string, updates: any): Promise<void> {
+    try {
+      await this.conversationManager.updateConversationState(phoneNumber, updates);
+    } catch (error) {
+      console.error('❌ Error updating conversation state:', error);
+    }
+  }
+}
 
     // Fallback response
     return {

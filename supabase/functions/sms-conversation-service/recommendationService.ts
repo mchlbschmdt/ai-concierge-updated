@@ -1035,4 +1035,59 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
     console.log('🏷️ Categorized as general for message:', lowerMessage);
     return 'general';
   }
+  /**
+   * Get general information from OpenAI for queries external to the property
+   */
+  static async getGeneralInformation(
+    query: string,
+    systemPrompt: string,
+    locationContext: any
+  ): Promise<{ content: string | null }> {
+    try {
+      const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+      if (!openaiApiKey) {
+        console.error('❌ OpenAI API key not configured');
+        return { content: null };
+      }
+
+      console.log('🌐 Calling OpenAI for general information:', query.substring(0, 50));
+
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openaiApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: query }
+          ],
+          temperature: 0.7,
+          max_tokens: 200 // Keep concise for SMS
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ OpenAI API error:', response.status, errorText);
+        return { content: null };
+      }
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content;
+
+      if (!content) {
+        console.error('❌ No content in OpenAI response');
+        return { content: null };
+      }
+
+      console.log('✅ OpenAI general information received');
+      return { content: content.trim() };
+    } catch (error) {
+      console.error('❌ Error getting general information from OpenAI:', error);
+      return { content: null };
+    }
+  }
 }

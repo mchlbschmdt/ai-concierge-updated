@@ -34,6 +34,19 @@ export class IntentRecognitionService {
       return { intent: 'ask_menu', confidence: 0.9, isMultiPart: false };
     }
     
+    // HIGHEST PRIORITY: Service requests (action-based, require host coordination)
+    const serviceIntent = this.detectServiceRequestIntent(lowerMessage);
+    if (serviceIntent) {
+      console.log('🛎️ Service request detected:', serviceIntent);
+      return { intent: serviceIntent, confidence: 0.95, isMultiPart: false };
+    }
+    
+    // HIGH PRIORITY: General knowledge queries (external to property)
+    if (this.detectGeneralKnowledgeIntent(lowerMessage)) {
+      console.log('🌐 General knowledge query detected:', message);
+      return { intent: 'ask_general_knowledge', confidence: 0.93, isMultiPart: false };
+    }
+    
     // NEW: Troubleshooting intents - HIGH PRIORITY
     // When troubleshooting is detected, return ONLY troubleshooting intent
     // Do NOT allow other intents to be triggered
@@ -811,6 +824,60 @@ export class IntentRecognitionService {
     if (lowerMessage.includes('teen')) kidAges.push('teen');
     
     return { hasKids, kidAges };
+  }
+
+  /**
+   * Detect service requests (action-based, require host coordination)
+   * HIGHEST PRIORITY - must be checked before general amenity detection
+   */
+  private static detectServiceRequestIntent(lowerMessage: string): string | null {
+    // Pool heating service
+    if (/(turn on|activate|enable|start|pay for|add|want|need)\s+(the\s+)?(pool heat|heated pool|pool heating)/i.test(lowerMessage)) {
+      return 'request_pool_heat_service';
+    }
+    
+    // Amenity access booking (waterpark, gym, golf, resort amenities)
+    if (/(book|access|use|want to use|need access|get access to)\s+(the\s+)?(waterpark|water park|gym|golf|resort amenities)/i.test(lowerMessage)) {
+      return 'request_amenity_access';
+    }
+    
+    // Additional services (grocery, chef, massage, cleaning)
+    if (/(book|schedule|arrange|want|need)\s+(grocery|groceries|chef|massage|cleaning)/i.test(lowerMessage)) {
+      return 'request_additional_service';
+    }
+    
+    return null;
+  }
+  
+  /**
+   * Detect general knowledge queries (external to property)
+   * These should be routed to AI instead of property data
+   */
+  private static detectGeneralKnowledgeIntent(lowerMessage: string): boolean {
+    const generalPatterns = [
+      // Theme park hours and schedules
+      /\b(disney|disneyland|magic kingdom|epcot|hollywood studios|animal kingdom)\s+(park\s+)?(hours?|times?|schedule|open|close)/i,
+      /\b(universal|islands of adventure|volcano bay)\s+(park\s+)?(hours?|times?|schedule|open|close)/i,
+      /\bwhat time does (disney|universal|the park)/i,
+      /\bwhen does (disney|universal|the park) (open|close)/i,
+      
+      // Ticket purchasing
+      /\b(buy|purchase|get|where to buy)\s+(disney|universal|park|theme park)?\s*tickets?/i,
+      /\bticket prices?\s+(for|to)\s+(disney|universal)/i,
+      /\bhow (much|to get|to buy)\s+(disney|universal)?\s*tickets?/i,
+      
+      // Best time to visit / crowd info (when not property-specific)
+      /\bbest (time|day|month)\s+to (visit|go to)\s+(disney|universal|the parks?)/i,
+      /\bhow busy is (disney|universal|the park)/i,
+      /\b(crowd|wait time)s?\s+(at|for|calendar)\s+(disney|universal)/i,
+      
+      // General area dining and attractions
+      /\b(restaurants?|dining|places to eat)\s+(in|near|around)\s+(orlando|kissimmee|the area)/i,
+      /\b(things to do|attractions|activities)\s+(in|near|around)\s+(orlando|kissimmee|the area)/i,
+      /\bbest (restaurants?|places to eat)\s+(in|near)\s+orlando/i
+    ];
+    
+    return generalPatterns.some(pattern => pattern.test(lowerMessage));
   }
 
   private static matchesKeywords(message: string, keywords: string[]): boolean {
