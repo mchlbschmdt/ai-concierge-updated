@@ -788,7 +788,7 @@ export class EnhancedConversationService {
       } else if (intent === 'ask_additional_services') {
         extractionResult = PropertyDataExtractorEnhanced.extractAdditionalServices(property, message, conversationContext);
       } else if (intent === 'ask_resort_amenities') {
-        extractionResult = PropertyDataExtractorEnhanced.extractResortAmenities(property, message, conversationContext);
+        extractionResult = PropertyDataExtractorEnhanced.extractResortAmenityInfo(property, message, conversationContext);
       } else if (intent === 'ask_weather') {
         extractionResult = PropertyDataExtractorEnhanced.extractWeatherInfo(property, message, conversationContext);
       } else if (intent === 'ask_packing_tips') {

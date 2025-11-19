@@ -697,27 +697,57 @@ export class IntentRecognitionService {
   }
   
   private static detectBestTimeToVisitIntent(lowerMessage: string): boolean {
+    // Direct "best time" keywords
     const bestTimeKeywords = [
       'best time to visit', 'best time to go', 'when should we visit',
       'when should we go', 'best day to visit', 'best day to go',
-      'least crowded', 'avoid crowds', 'best time for',
-      'when is it less busy', 'what day is best', 'cheapest time',
-      'off peak', 'off-peak', 'slow days', 'quiet days',
-      'early morning', 'rope drop', 'park hours'
+      'what time is best', 'best time for', 'optimal time',
+      'off peak', 'off-peak', 'slow days', 'quiet days'
     ];
     
-    const parkKeywords = ['disney', 'universal', 'magic kingdom', 'epcot', 
-                         'hollywood studios', 'animal kingdom', 'seaworld',
-                         'islands of adventure', 'theme park', 'park'];
+    // Crowd-related keywords
+    const crowdKeywords = [
+      'least crowded', 'avoid crowds', 'beat the crowds', 'less crowded',
+      'when is it less busy', 'avoid lines', 'shortest wait', 'less busy',
+      'not as crowded', 'fewer people', 'skip the crowds'
+    ];
+    
+    // Timing keywords
+    const timingKeywords = [
+      'early morning', 'rope drop', 'park hours', 'opening time',
+      'what time should', 'arrive early', 'get there early'
+    ];
+    
+    // Park keywords
+    const parkKeywords = [
+      'disney', 'universal', 'magic kingdom', 'epcot', 
+      'hollywood studios', 'animal kingdom', 'seaworld',
+      'islands of adventure', 'theme park', 'park', 'parks'
+    ];
     
     const hasBestTime = bestTimeKeywords.some(kw => lowerMessage.includes(kw));
+    const hasCrowd = crowdKeywords.some(kw => lowerMessage.includes(kw));
+    const hasTiming = timingKeywords.some(kw => lowerMessage.includes(kw));
     const hasPark = parkKeywords.some(kw => lowerMessage.includes(kw));
     
-    return hasBestTime || (hasPark && (
-      lowerMessage.includes('when') || 
-      lowerMessage.includes('time') ||
-      lowerMessage.includes('day')
-    ));
+    // Match if:
+    // 1. Direct "best time" phrase, OR
+    // 2. Crowd-related + park mention, OR
+    // 3. Timing question + park mention
+    return hasBestTime || 
+           (hasCrowd && hasPark) || 
+           (hasTiming && hasPark && (lowerMessage.includes('when') || lowerMessage.includes('time')));
+  }
+  
+  private static detectResortAmenitiesIntent(lowerMessage: string): boolean {
+    const resortKeywords = [
+      'waterpark', 'water park', 'resort pool', 'resort gym', 'fitness center',
+      'resort restaurant', 'resort amenities', 'resort facilities',
+      'on property', 'at the resort', 'resort has', 'does the resort',
+      'clubhouse', 'resort shuttle', 'resort activities'
+    ];
+    
+    return resortKeywords.some(kw => lowerMessage.includes(kw));
   }
   
   private static detectTransportationIntent(lowerMessage: string): boolean {

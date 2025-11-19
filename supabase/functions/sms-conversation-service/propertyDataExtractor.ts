@@ -323,8 +323,9 @@ export class PropertyDataExtractor {
       }
     }
     
-    // Air conditioning information
-    if ((lowerMessage.includes('ac') || lowerMessage.includes('air conditioning') || lowerMessage.includes('cooling')) && amenities.includes('Air Conditioning')) {
+    // Air conditioning information - use word boundaries to prevent "access" false positives
+    const acRegex = /\b(ac|a\/c)\b/i;
+    if ((acRegex.test(lowerMessage) || lowerMessage.includes('air conditioning') || lowerMessage.includes('cooling')) && amenities.includes('Air Conditioning')) {
       response += '❄️ Yes! Air conditioning is available to keep you comfortable! 🌡️';
       
       if (specialNotes.includes('HVAC') || specialNotes.includes('A/C')) {
