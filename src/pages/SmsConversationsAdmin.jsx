@@ -6,13 +6,15 @@ import Layout from "@/components/Layout";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Search, Download, RefreshCw } from "lucide-react";
+import { Search, Download, RefreshCw, MessageSquare, TestTube, History } from "lucide-react";
 import ConversationStateBadge from "@/components/conversations/ConversationStateBadge";
 import IntentTag from "@/components/conversations/IntentTag";
 import ConversationStats from "@/components/conversations/ConversationStats";
 import ConversationFilters from "@/components/conversations/ConversationFilters";
 import ConversationDetailModal from "@/components/conversations/ConversationDetailModal";
 import QuickSmsTest from "@/components/QuickSmsTest";
+import PropertyComparisonTest from "@/components/PropertyComparisonTest";
+import TestResultsHistory from "@/components/TestResultsHistory";
 import { formatDistanceToNow } from "date-fns";
 
 export default function SmsConversationsAdmin() {
@@ -30,6 +32,7 @@ export default function SmsConversationsAdmin() {
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [activeTab, setActiveTab] = useState("conversations");
   const itemsPerPage = 20;
 
   useEffect(() => {
@@ -157,25 +160,66 @@ export default function SmsConversationsAdmin() {
           </div>
         </div>
 
-        <ConversationStats conversations={conversations} />
+        {/* Tab Navigation */}
+        <div className="border-b border-border">
+          <nav className="-mb-px flex space-x-8">
+            <button
+              onClick={() => setActiveTab("conversations")}
+              className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
+                activeTab === "conversations"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <MessageSquare className="h-4 w-4" />
+              Conversations
+            </button>
+            <button
+              onClick={() => setActiveTab("testing")}
+              className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
+                activeTab === "testing"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <TestTube className="h-4 w-4" />
+              Testing Suite
+            </button>
+            <button
+              onClick={() => setActiveTab("history")}
+              className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
+                activeTab === "history"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <History className="h-4 w-4" />
+              Test History
+            </button>
+          </nav>
+        </div>
 
-        <QuickSmsTest />
+        {/* Conversations Tab */}
+        {activeTab === "conversations" && (
+          <>
+            <ConversationStats conversations={conversations} />
+            <QuickSmsTest />
 
-        <Card>
-          <CardHeader>
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-dark h-4 w-4" />
-                <Input
-                  placeholder="Search by phone number or intent..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-              <ConversationFilters filters={filters} onFiltersChange={setFilters} />
-            </div>
-          </CardHeader>
+            <Card>
+              <CardHeader>
+                <div className="flex flex-col md:flex-row gap-4">
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-dark h-4 w-4" />
+                    <Input
+                      placeholder="Search by phone number or intent..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                  <ConversationFilters filters={filters} onFiltersChange={setFilters} />
+                </div>
+              </CardHeader>
 
           <CardContent>
             {loading ? (
@@ -263,37 +307,55 @@ export default function SmsConversationsAdmin() {
               </div>
             )}
 
+            {/* Pagination */}
             {totalPages > 1 && (
-              <div className="flex justify-center items-center gap-4 mt-6">
-                <Button
-                  variant="outline"
-                  onClick={() => setPage(Math.max(1, page - 1))}
-                  disabled={page === 1}
-                >
-                  Previous
-                </Button>
-                <span className="text-sm text-gray-dark">
-                  Page {page} of {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  onClick={() => setPage(Math.min(totalPages, page + 1))}
-                  disabled={page === totalPages}
-                >
-                  Next
-                </Button>
+              <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
+                <div className="text-sm text-muted-foreground">
+                  Page {page} of {totalPages} ({totalCount} total conversations)
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page === totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>
         </Card>
+        </>
+      )}
 
-        {selectedConversation && (
-          <ConversationDetailModal
-            conversation={selectedConversation}
-            onClose={() => setSelectedConversation(null)}
-            onRefresh={loadConversations}
-          />
-        )}
+      {/* Testing Suite Tab */}
+      {activeTab === "testing" && (
+        <div className="space-y-6">
+          <QuickSmsTest />
+          <PropertyComparisonTest />
+        </div>
+      )}
+
+      {/* Test History Tab */}
+      {activeTab === "history" && (
+        <TestResultsHistory />
+      )}
+
+      {selectedConversation && (
+        <ConversationDetailModal
+          conversation={selectedConversation}
+          onClose={() => setSelectedConversation(null)}
+          onRefresh={loadConversations}
+        />
+      )}
       </div>
     </Layout>
   );
