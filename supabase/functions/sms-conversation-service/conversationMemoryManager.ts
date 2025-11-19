@@ -11,6 +11,15 @@ export interface ConversationMemory {
   global_recommendation_blacklist?: string[]; // Persistent across resets
   last_recommended_restaurant?: string; // Phase 6: Track for menu queries
   last_food_query_type?: string; // Phase 6: Track food preferences
+  shared_information?: SharedInformation[]; // Track content shared to prevent repetition
+  last_host_contact_offer_timestamp?: string; // Track when we last offered host contact
+}
+
+export interface SharedInformation {
+  topic: string; // e.g., 'wifi', 'parking', 'pool_heat'
+  content_hash: string; // Hash of the content shared
+  timestamp: string;
+  response_summary: string; // Brief summary of what was shared
 }
 
 export interface GuestPreferences {
@@ -66,10 +75,18 @@ export class ConversationMemoryManager {
     if (!updatedContext.conversation_flow) {
       updatedContext.conversation_flow = {};
     }
+    if (!updatedContext.shared_information) {
+      updatedContext.shared_information = [];
+    }
 
     // Update recent intents (keep last 5)
     updatedContext.recent_intents.unshift(intent);
     updatedContext.recent_intents = updatedContext.recent_intents.slice(0, 5);
+    
+    // Track shared information to prevent repetition
+    if (additionalData?.sharedContent) {
+      this.trackSharedInformation(updatedContext, additionalData.sharedContent);
+    }
 
     // Update recommendation history
     if (this.isRecommendationIntent(intent)) {
@@ -326,6 +343,78 @@ export class ConversationMemoryManager {
   // NEW: Get list of rejected restaurants
   static getRejectedRestaurants(context: any): string[] {
     return context?.rejected_restaurants || [];
+  }
+
+  static clearRecommendationMemory(context: any): any {
+    return {
+      ...context,
+      recommendation_history: {
+        ...context.recommendation_history,
+        food_recommendations: [],
+        activities: [],
+        last_recommendation_timestamp: new Date().toISOString()
+      }
+    };
+  }
+  
+  static trackSharedInformation(context: any, sharedContent: { topic: string; content: string; summary: string }) {
+    if (!context.shared_information) {
+      context.shared_information = [];
+    }
+    
+    const contentHash = this.hashContent(sharedContent.content);
+    
+    context.shared_information.unshift({
+      topic: sharedContent.topic,
+      content_hash: contentHash,
+      timestamp: new Date().toISOString(),
+      response_summary: sharedContent.summary
+    });
+    
+    // Keep last 10 shared information items
+    context.shared_information = context.shared_information.slice(0, 10);
+  }
+  
+  static wasTopicRecentlyShared(context: any, topic: string): { shared: boolean; summary?: string } {
+    if (!context.shared_information || context.shared_information.length === 0) {
+      return { shared: false };
+    }
+    
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    
+    const recentShare = context.shared_information.find((info: any) => 
+      info.topic === topic && new Date(info.timestamp) > fiveMinutesAgo
+    );
+    
+    if (recentShare) {
+      return { shared: true, summary: recentShare.response_summary };
+    }
+    
+    return { shared: false };
+  }
+  
+  static wasContentRecentlyShared(context: any, content: string): boolean {
+    if (!context.shared_information || context.shared_information.length === 0) {
+      return false;
+    }
+    
+    const contentHash = this.hashContent(content);
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    
+    return context.shared_information.some((info: any) =>
+      info.content_hash === contentHash && new Date(info.timestamp) > fiveMinutesAgo
+    );
+  }
+  
+  private static hashContent(content: string): string {
+    // Simple hash function for content comparison
+    let hash = 0;
+    for (let i = 0; i < content.length; i++) {
+      const char = content.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return hash.toString(36);
   }
 
   // Property location anchoring
