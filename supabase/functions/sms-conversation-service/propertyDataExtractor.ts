@@ -171,6 +171,19 @@ export class PropertyDataExtractor {
   
   static extractAmenityInfo(property: any, message: string): PropertyDataResponse {
     const lowerMessage = message.toLowerCase();
+    
+    // CRITICAL FIX: Block amenity extraction for troubleshooting messages
+    const troubleshootingKeywords = [
+      'not working', 'broken', 'issue', 'problem', 'trouble', 'help with',
+      'won\'t work', 'doesn\'t work', 'isn\'t working', 'can\'t get', 'won\'t turn on',
+      'not turning on', 'stopped working', 'fix', 'repair', 'malfunction'
+    ];
+    
+    if (troubleshootingKeywords.some(keyword => lowerMessage.includes(keyword))) {
+      console.log('🚫 Blocking amenity extraction for troubleshooting message');
+      return { content: '', hasData: false, dataType: 'amenities' };
+    }
+    
     let amenities = [];
     
     try {
@@ -231,9 +244,16 @@ export class PropertyDataExtractor {
           if (poolInfo) response += poolInfo + ' ';
         }
         
-        // Add Seven Eagles pool recommendation if available
-        if (property.local_recommendations && property.local_recommendations.includes('Seven Eagles pool')) {
-          response += 'For the best pool experience, check out the Seven Eagles pool on the resort—it has spas and gorgeous views!';
+        // Only add Seven Eagles recommendation for GENERAL pool questions
+        // NOT for specific questions like "is pool heat included?"
+        const isSpecificQuestion = lowerMessage.includes('pool heat') || 
+                                   lowerMessage.includes('heated') || 
+                                   lowerMessage.includes('heating') ||
+                                   lowerMessage.includes('temperature') ||
+                                   lowerMessage.includes('how to');
+        
+        if (!isSpecificQuestion && property.local_recommendations && property.local_recommendations.includes('Seven Eagles pool')) {
+          response += '\n\nFor the best pool experience, check out the Seven Eagles pool on the resort—it has spas and gorgeous views!';
         }
       } else {
         response += '🏊‍♀️ No pool at this property. ';

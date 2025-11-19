@@ -739,8 +739,12 @@ export class EnhancedConversationService {
     const troubleshootingResult = TroubleshootingDetectionService.detectTroubleshootingIntent(message);
     
     if (troubleshootingResult.isTroubleshooting) {
-      console.log('🔧 Troubleshooting detected:', troubleshootingResult);
-      return await this.handleTroubleshootingRequest(message, property, conversation, troubleshootingResult);
+      console.log('🔧 Troubleshooting detected - handling exclusively:', troubleshootingResult);
+      // CRITICAL: Return immediately to prevent any further processing
+      // This ensures no amenity extraction or other handlers run
+      const result = await this.handleTroubleshootingRequest(message, property, conversation, troubleshootingResult);
+      console.log('✅ Troubleshooting handler complete - blocking further processing');
+      return result;
     }
     
     // STEP 2: Check if topic was recently shared (prevent repetition)
@@ -864,7 +868,8 @@ export class EnhancedConversationService {
     conversation: Conversation,
     troubleshootingResult: any
   ): Promise<any> {
-    console.log('🔧 Handling troubleshooting request:', troubleshootingResult.category);
+    console.log('🔧 Handling EXCLUSIVE troubleshooting request:', troubleshootingResult.category);
+    console.log('🚫 Blocking all other intent processing');
     
     const conversationContext = conversation.conversation_context as any || {};
     let response = '';
@@ -912,9 +917,13 @@ export class EnhancedConversationService {
       console.warn('⚠️ Failed to update context:', error);
     }
     
+    // Mark response type to ensure no other handlers interfere
+    console.log('✅ Troubleshooting response generated - no further processing allowed');
+    
     return {
       messages: MessageUtils.ensureSmsLimit(response),
-      shouldUpdateState: false
+      shouldUpdateState: false,
+      responseType: 'troubleshooting' // Marker to prevent mixing
     };
   }
   
