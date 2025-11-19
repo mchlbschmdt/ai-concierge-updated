@@ -185,16 +185,55 @@ export class PropertyDataExtractor {
     let response = '';
     let hasData = false;
     
-    // Pool information - SPECIFIC DETECTION
+    // Pool information - SPECIFIC DETECTION (including pool heat)
     if (lowerMessage.includes('pool')) {
+      const isPoolHeatQuestion = lowerMessage.includes('pool heat') || 
+        (lowerMessage.includes('heat') && lowerMessage.includes('pool')) ||
+        (lowerMessage.includes('heated') && lowerMessage.includes('pool')) ||
+        (lowerMessage.includes('heating') && lowerMessage.includes('pool'));
+      
       const hasPool = amenities.some((a: string) => a.toLowerCase().includes('pool'));
+      let hasPoolHeatAnswer = false;
+      
       if (hasPool) {
-        response += '🏊‍♀️ Yes! The property has a pool. ';
-        hasData = true;
+        // Handle pool heat specific questions FIRST
+        if (isPoolHeatQuestion) {
+          const kb = property.knowledge_base || '';
+          let poolHeatSentence = '';
+          
+          // Try to find pool heating information in knowledge base
+          const match = kb.match(/pool heating[^.\n]*[.\n]/i) || 
+                       kb.match(/optional pool heating[^.\n]*\$\d+[^.\n]*[.\n]/i) ||
+                       kb.match(/heating available[^.\n]*[.\n]/i);
+          
+          if (match) {
+            poolHeatSentence = match[0].trim();
+            response += `🏊‍♀️ ${poolHeatSentence} `;
+            hasPoolHeatAnswer = true;
+            hasData = true;
+          } else {
+            // Fallback if no specific pool heat info found
+            response += `🏊‍♀️ Pool heat isn't automatically included. It's available as an add-on at $25/day. Contact your host to add pool heating! `;
+            hasPoolHeatAnswer = true;
+            hasData = true;
+          }
+        }
         
+        // Add general pool info only if we didn't already answer about pool heat
+        if (!hasPoolHeatAnswer) {
+          response += '🏊‍♀️ Yes! The property has a pool. ';
+          hasData = true;
+        }
+        
+        // Add pool operation details from special notes
         if (specialNotes.toLowerCase().includes('pool')) {
           const poolInfo = this.extractPoolInfo(specialNotes);
           if (poolInfo) response += poolInfo + ' ';
+        }
+        
+        // Add Seven Eagles pool recommendation if available
+        if (property.local_recommendations && property.local_recommendations.includes('Seven Eagles pool')) {
+          response += 'For the best pool experience, check out the Seven Eagles pool on the resort—it has spas and gorgeous views!';
         }
       } else {
         response += '🏊‍♀️ No pool at this property. ';
@@ -252,31 +291,6 @@ export class PropertyDataExtractor {
       }
     }
     
-    // Pool information
-    if (lowerMessage.includes('pool') && amenities.includes('Pool')) {
-      response += '🏊‍♀️ Yes! The property has a pool. ';
-      hasData = true;
-      
-      if (specialNotes.includes('pool') || specialNotes.includes('Pool')) {
-        const poolInfo = this.extractPoolInfo(specialNotes);
-        if (poolInfo) response += poolInfo + ' ';
-      }
-      
-      if (property.local_recommendations && property.local_recommendations.includes('Seven Eagles pool')) {
-        response += 'For the best pool experience, check out the Seven Eagles pool on the resort—it has spas and gorgeous views!';
-      }
-    }
-    
-    // Hot tub information
-    if (lowerMessage.includes('hot tub') && amenities.includes('Hot Tub')) {
-      response += '🛁 Yes! There\'s a hot tub available. ';
-      hasData = true;
-      
-      if (specialNotes.includes('hot tub') || specialNotes.includes('Hot Tub')) {
-        const hotTubInfo = this.extractHotTubInfo(specialNotes);
-        if (hotTubInfo) response += hotTubInfo;
-      }
-    }
     
     // WiFi information
     if (lowerMessage.includes('wifi') || lowerMessage.includes('internet') || lowerMessage.includes('password')) {
