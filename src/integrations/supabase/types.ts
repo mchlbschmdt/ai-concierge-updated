@@ -262,12 +262,15 @@ export type Database = {
           email: string
           full_name: string | null
           id: string
+          onboarding_completed: boolean | null
+          onboarding_completed_at: string | null
           security_answer_1: string | null
           security_answer_2: string | null
           security_answer_3: string | null
           security_question_1: string | null
           security_question_2: string | null
           security_question_3: string | null
+          skip_onboarding: boolean | null
           updated_at: string
         }
         Insert: {
@@ -276,12 +279,15 @@ export type Database = {
           email: string
           full_name?: string | null
           id: string
+          onboarding_completed?: boolean | null
+          onboarding_completed_at?: string | null
           security_answer_1?: string | null
           security_answer_2?: string | null
           security_answer_3?: string | null
           security_question_1?: string | null
           security_question_2?: string | null
           security_question_3?: string | null
+          skip_onboarding?: boolean | null
           updated_at?: string
         }
         Update: {
@@ -290,12 +296,15 @@ export type Database = {
           email?: string
           full_name?: string | null
           id?: string
+          onboarding_completed?: boolean | null
+          onboarding_completed_at?: string | null
           security_answer_1?: string | null
           security_answer_2?: string | null
           security_answer_3?: string | null
           security_question_1?: string | null
           security_question_2?: string | null
           security_question_3?: string | null
+          skip_onboarding?: boolean | null
           updated_at?: string
         }
         Relationships: []

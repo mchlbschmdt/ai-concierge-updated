@@ -60,8 +60,21 @@ export default function Login() {
         throw error;
       }
 
+      // Check onboarding status
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('onboarding_completed')
+        .eq('id', data.user.id)
+        .single();
+
       showToast("Welcome back!", "success");
-      navigate("/");
+      
+      // Redirect based on onboarding status
+      if (profile && !profile.onboarding_completed) {
+        navigate("/onboarding");
+      } else {
+        navigate("/");
+      }
     } catch (err) {
       console.error("Login error:", err);
       setError(err.message || "Failed to sign in");

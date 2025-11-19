@@ -121,14 +121,20 @@ export default function Register() {
           title: "Registration successful!",
           description: "Please check your email to confirm your account before signing in."
         });
+        // Navigate to login if email confirmation is required
+        setTimeout(() => {
+          navigate("/login");
+        }, 2000);
       } else {
         toast({
           title: "Registration successful!",
-          description: "You can now sign in to your account."
+          description: "Let's set up your account."
         });
+        // Navigate to onboarding for immediate setup
+        setTimeout(() => {
+          navigate("/onboarding");
+        }, 1000);
       }
-
-      navigate("/login");
     } catch (err) {
       console.error("Registration error:", err);
       setError(err.message || "Failed to create account");

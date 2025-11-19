@@ -27,6 +27,8 @@ import Register from "./pages/Register";
 import RecommendationQualityAnalytics from "./pages/RecommendationQualityAnalytics";
 import SmsConversationsAdmin from "./pages/SmsConversationsAdmin";
 import NotFound from "./pages/NotFound";
+import Onboarding from "./pages/Onboarding";
+import ProfileSettings from "./pages/ProfileSettings";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +44,16 @@ const App = () => (
               <Route path="/register" element={<Register />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/auth/callback" element={<GoogleAuthCallback />} />
+              <Route path="/onboarding" element={
+                <ProtectedRoute>
+                  <Onboarding />
+                </ProtectedRoute>
+              } />
+              <Route path="/profile-settings" element={
+                <ProtectedRoute>
+                  <ProfileSettings />
+                </ProtectedRoute>
+              } />
               <Route path="/" element={
                 <ProtectedRoute>
                   <Dashboard />
