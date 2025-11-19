@@ -35,10 +35,12 @@ export class IntentRecognitionService {
     }
     
     // NEW: Troubleshooting intents - HIGH PRIORITY
+    // When troubleshooting is detected, return ONLY troubleshooting intent
+    // Do NOT allow other intents to be triggered
     if (this.detectTroubleshootingIntent(lowerMessage)) {
       const category = this.detectTroubleshootingCategory(lowerMessage);
-      console.log(`🔧 Troubleshooting intent detected (${category}):`, message);
-      return { intent: `troubleshoot_${category}`, confidence: 0.95, isMultiPart: false };
+      console.log(`🔧 Troubleshooting intent detected (${category}) - blocking other intents:`, message);
+      return { intent: `troubleshoot_${category}`, confidence: 0.98, isMultiPart: false };
     }
     
     // NEW: Additional services intent
