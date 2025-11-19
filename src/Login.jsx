@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "./integrations/supabase/client";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/context/ToastContext";
 import { loginRateLimiter } from "./utils/inputValidation";
 import GoogleOAuthButton from "./components/GoogleOAuthButton";
 import CustomPasswordReset from "./components/CustomPasswordReset";
@@ -22,7 +22,7 @@ export default function Login() {
   const [showDirectPasswordReset, setShowDirectPasswordReset] = useState(false);
   const [verifiedUserId, setVerifiedUserId] = useState(null);
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const { showToast } = useToast();
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -56,19 +56,12 @@ export default function Login() {
         throw error;
       }
 
-      toast({
-        title: "Login successful",
-        description: "Welcome back!"
-      });
+      showToast("Welcome back!", "success");
       navigate("/dashboard");
     } catch (err) {
       console.error("Login error:", err);
       setError(err.message || "Failed to sign in");
-      toast({
-        variant: "destructive",
-        title: "Login Failed",
-        description: err.message || "Failed to sign in"
-      });
+      showToast(err.message || "Failed to sign in", "error");
     } finally {
       setIsLoading(false);
     }
@@ -85,10 +78,7 @@ export default function Login() {
     setShowForgotPassword(false);
     setResetMethod(null);
     setVerifiedUserId(null);
-    toast({
-      title: "Password reset complete",
-      description: "You can now sign in with your new password."
-    });
+    showToast("Password reset complete. You can now sign in with your new password.", "success");
   };
 
   const resetPasswordFlow = () => {
