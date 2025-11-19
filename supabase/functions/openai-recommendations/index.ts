@@ -48,8 +48,8 @@ serve(async (req) => {
     // Build personalized context-aware prompt
     const personalizedPrompt = buildPersonalizedPrompt(prompt, propertyAddress, guestContext, requestType, previousRecommendations, isFollowUpQuestion);
     
-    // Get personalized system message
-    const systemMessage = getContextualSystemPrompt(isFollowUpQuestion, guestContext);
+    // Get personalized system message with request type for special handling
+    const systemMessage = getContextualSystemPrompt(isFollowUpQuestion, guestContext, requestType);
 
     // Call OpenAI API with enhanced context
     const recommendation = await callOpenAI(personalizedPrompt, systemMessage, openAIApiKey);

@@ -1,8 +1,26 @@
 
 import { RecommendationRequest } from './types.ts';
 
-export function getContextualSystemPrompt(isFollowUpQuestion = false, guestContext?: any): string {
+export function getContextualSystemPrompt(isFollowUpQuestion = false, guestContext?: any, requestType?: string): string {
   let systemPrompt = '';
+  
+  // SPECIAL: Direction/park queries get their own prompt (NO restaurant format!)
+  if (requestType === 'directions' || requestType === 'park_distance') {
+    return `You are a helpful local concierge providing distance and travel information via SMS.
+
+CRITICAL: You are answering questions about DISTANCE, DIRECTIONS, and TRAVEL TIME to attractions and destinations.
+DO NOT recommend restaurants, food, or dining options in this mode.
+
+ANSWER FORMAT:
+- State the distance clearly (e.g., "You're about X miles / X min drive from...")
+- Mention best transport method (driving, rideshare, not walking if too far)
+- Keep under 160 characters
+- Be warm and conversational
+
+${guestContext?.guestName ? `- Address guest as ${guestContext.guestName}` : ''}
+
+TONE: Friendly, helpful, focused on giving clear travel guidance.`;
+  }
   
   if (isFollowUpQuestion) {
     systemPrompt = `You are a helpful local concierge answering a follow-up question about previously recommended places.
@@ -160,6 +178,26 @@ export function buildPersonalizedPrompt(
   isFollowUpQuestion?: boolean
 ): string {
   let enhancedPrompt = `Guest Request: ${prompt}\n\n`;
+  
+  // CRITICAL: If this is a directions/park query, don't use restaurant formatting
+  if (requestType === 'directions' || requestType === 'park_distance') {
+    if (propertyAddress) {
+      enhancedPrompt += `Property location: ${propertyAddress}\n`;
+    }
+    if (guestContext?.locationContext) {
+      const loc = guestContext.locationContext;
+      enhancedPrompt += `\nLocation context:\n`;
+      if (loc.neighborhood) enhancedPrompt += `- In ${loc.neighborhood}\n`;
+      if (loc.resort) enhancedPrompt += `- At ${loc.resort}\n`;
+      if (loc.distanceToDisney) enhancedPrompt += `- Disney is ${loc.distanceToDisney} away\n`;
+      if (loc.distanceToUniversal) enhancedPrompt += `- Universal is ${loc.distanceToUniversal} away\n`;
+      if (loc.nearbyAttractions.length > 0) {
+        enhancedPrompt += `- Near: ${loc.nearbyAttractions.join(', ')}\n`;
+      }
+    }
+    enhancedPrompt += `\n${guestContext?.guestName ? `Address guest as ${guestContext.guestName}. ` : ''}Keep answer under 160 characters. Be direct and helpful about distance/transport. DO NOT recommend restaurants.`;
+    return enhancedPrompt;
+  }
   
   // Add previous context if this is a follow-up question
   if (guestContext?.previousContext) {
