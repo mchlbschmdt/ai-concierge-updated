@@ -2903,14 +2903,6 @@ Keep responses concise (under 300 characters) and practical. Include specific de
   }
 }
 
-    // Fallback response
-    return {
-      response: "I'm here to help! What would you like to know about your stay?",
-      shouldUpdateState: false
-    };
-  }
-}
-
 interface ProcessingResult {
   response: string;
   shouldUpdateState: boolean;
