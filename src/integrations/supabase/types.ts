@@ -581,6 +581,96 @@ export type Database = {
         }
         Relationships: []
       }
+      sms_test_results: {
+        Row: {
+          conversation_id: string | null
+          created_at: string | null
+          created_by: string | null
+          edge_function_version: string | null
+          expected_keywords: string[] | null
+          expected_not_keywords: string[] | null
+          failure_reason: string | null
+          id: string
+          intent_detected: string | null
+          keywords_found: string[] | null
+          keywords_missing: string[] | null
+          pass_score: number | null
+          passed: boolean
+          phone_number: string
+          property_id: string | null
+          response_text: string | null
+          response_time_ms: number | null
+          test_environment: string | null
+          test_message: string
+          test_name: string
+          test_run_id: string | null
+          unexpected_keywords_found: string[] | null
+        }
+        Insert: {
+          conversation_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          edge_function_version?: string | null
+          expected_keywords?: string[] | null
+          expected_not_keywords?: string[] | null
+          failure_reason?: string | null
+          id?: string
+          intent_detected?: string | null
+          keywords_found?: string[] | null
+          keywords_missing?: string[] | null
+          pass_score?: number | null
+          passed: boolean
+          phone_number: string
+          property_id?: string | null
+          response_text?: string | null
+          response_time_ms?: number | null
+          test_environment?: string | null
+          test_message: string
+          test_name: string
+          test_run_id?: string | null
+          unexpected_keywords_found?: string[] | null
+        }
+        Update: {
+          conversation_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          edge_function_version?: string | null
+          expected_keywords?: string[] | null
+          expected_not_keywords?: string[] | null
+          failure_reason?: string | null
+          id?: string
+          intent_detected?: string | null
+          keywords_found?: string[] | null
+          keywords_missing?: string[] | null
+          pass_score?: number | null
+          passed?: boolean
+          phone_number?: string
+          property_id?: string | null
+          response_text?: string | null
+          response_time_ms?: number | null
+          test_environment?: string | null
+          test_message?: string
+          test_name?: string
+          test_run_id?: string | null
+          unexpected_keywords_found?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sms_test_results_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "sms_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sms_test_results_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tasks: {
         Row: {
           created_at: string

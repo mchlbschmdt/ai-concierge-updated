@@ -15,6 +15,8 @@ import {
   MessageSquare,
   ExternalLink
 } from "lucide-react";
+import { TEST_ASSERTIONS } from "@/config/testAssertions";
+import { TestAssertionService } from "@/services/testAssertionService";
 
 export default function QuickSmsTest() {
   const { showToast } = useToast();
@@ -25,6 +27,7 @@ export default function QuickSmsTest() {
   const [customMessage, setCustomMessage] = useState("");
   const [testResults, setTestResults] = useState({});
   const [loading, setLoading] = useState({});
+  const [testRunId] = useState(crypto.randomUUID());
 
   const testMessages = [
     { id: "waterpark", label: "Waterpark", message: "How do we access the waterpark?", icon: "🏊" },
@@ -66,6 +69,8 @@ export default function QuickSmsTest() {
     setTestResults((prev) => ({ ...prev, [testId]: null }));
 
     try {
+      const startTime = Date.now();
+      
       // Call the openphone-webhook edge function to simulate incoming SMS
       const { data, error } = await supabase.functions.invoke("openphone-webhook", {
         body: {
@@ -99,6 +104,37 @@ export default function QuickSmsTest() {
 
       if (convError) throw convError;
 
+      const responseTime = Date.now() - startTime;
+      
+      // Validate response with assertions
+      const validation = testId !== "custom" 
+        ? TestAssertionService.validateResponse(testId, conversation.last_response)
+        : { passed: true, score: 100, reason: "Custom message - no validation" };
+
+      // Save test result to database if not custom
+      if (testId !== "custom") {
+        const testConfig = TEST_ASSERTIONS[testId];
+        await TestAssertionService.saveTestResult({
+          testName: testConfig?.name || testId,
+          message,
+          phoneNumber: selectedPhone,
+          propertyId: selectedProperty,
+          response: conversation.last_response,
+          intent: conversation.last_intent,
+          responseTime,
+          expectedKeywords: testConfig?.expectedKeywords || [],
+          forbiddenKeywords: testConfig?.forbiddenKeywords || [],
+          keywordsFound: validation.keywordsFound || [],
+          keywordsMissing: validation.keywordsMissing || [],
+          unexpectedKeywordsFound: validation.unexpectedKeywordsFound || [],
+          passed: validation.passed,
+          score: validation.score,
+          reason: validation.reason,
+          testRunId,
+          conversationId: conversation.id
+        });
+      }
+
       setTestResults((prev) => ({
         ...prev,
         [testId]: {
@@ -106,10 +142,11 @@ export default function QuickSmsTest() {
           response: conversation?.last_response || "No response yet",
           intent: conversation?.last_intent,
           conversationId: conversation?.id,
+          validation,
         },
       }));
 
-      showToast("Test message sent successfully", "success");
+      showToast(`Test ${validation.passed ? 'passed' : 'failed'}: ${validation.reason}`, validation.passed ? "success" : "error");
     } catch (error) {
       console.error("Error sending test message:", error);
       setTestResults((prev) => ({
@@ -211,6 +248,50 @@ export default function QuickSmsTest() {
 
                   {/* Response Preview */}
                   {testResults[test.id] && (
+                    <div className={`text-xs p-2 rounded border space-y-1 ${
+                      testResults[test.id].validation?.passed 
+                        ? "bg-success/10 border-success/30" 
+                        : "bg-destructive/10 border-destructive/30"
+                    }`}>
+                      {testResults[test.id].success ? (
+                        <>
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold">
+                              {testResults[test.id].validation?.passed ? '✅ PASSED' : '⚠️ FAILED'}
+                            </span>
+                            <span className="text-xs">
+                              Score: {testResults[test.id].validation?.score}%
+                            </span>
+                          </div>
+                          {testResults[test.id].intent && (
+                            <div className="text-xs">
+                              Intent: <span className="font-mono">{testResults[test.id].intent}</span>
+                            </div>
+                          )}
+                          <div className="text-xs text-muted-foreground">
+                            {testResults[test.id].validation?.reason}
+                          </div>
+                          {testResults[test.id].validation?.keywordsFound?.length > 0 && (
+                            <div className="text-xs">
+                              ✓ Found: {testResults[test.id].validation.keywordsFound.join(', ')}
+                            </div>
+                          )}
+                          {testResults[test.id].validation?.keywordsMissing?.length > 0 && (
+                            <div className="text-xs text-destructive">
+                              ✗ Missing: {testResults[test.id].validation.keywordsMissing.join(', ')}
+                            </div>
+                          )}
+                          <div className="text-xs text-muted-foreground line-clamp-2 mt-1 pt-1 border-t">
+                            {testResults[test.id].response}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-destructive">
+                          ✗ {testResults[test.id].error}
+                        </div>
+                      )}
+                    </div>
+                  )}
                     <div className={`text-xs p-2 rounded border ${
                       testResults[test.id].success 
                         ? "bg-success/10 border-success/30 text-success" 
