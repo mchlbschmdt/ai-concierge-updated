@@ -81,12 +81,21 @@ export class EnhancedConversationService {
         return await this.handlePropertySwitch(phoneNumber, propertySwitchResult, conversation);
       }
 
-      // PHASE 2: Multi-Query Detection and Immediate Acknowledgment (NEW)
-      const parsedQuery = MultiQueryParser.parseMessage(message);
-      if (parsedQuery.isMultiQuery) {
-        console.log('🔍 Multi-query detected:', parsedQuery);
-        // Process multi-query immediately, don't use setTimeout to avoid race conditions
-        return await this.processMultiQuerySequentially(phoneNumber, parsedQuery, conversation);
+      // PHASE 2: Troubleshooting Detection (MUST RUN BEFORE multi-query parser)
+      // Troubleshooting messages should NOT be split into multiple queries
+      const troubleshootingResult = TroubleshootingDetectionService.detectTroubleshootingIntent(message);
+      if (troubleshootingResult.isTroubleshooting) {
+        console.log('🔧 PRIORITY: Troubleshooting detected BEFORE multi-query - blocking multi-query parser:', troubleshootingResult);
+        // Skip multi-query parsing and go straight to confirmed guest inquiry
+        // The enhanced processing will handle troubleshooting properly
+      } else {
+        // PHASE 3: Multi-Query Detection (only if NOT troubleshooting)
+        const parsedQuery = MultiQueryParser.parseMessage(message);
+        if (parsedQuery.isMultiQuery) {
+          console.log('🔍 Multi-query detected:', parsedQuery);
+          // Process multi-query immediately, don't use setTimeout to avoid race conditions
+          return await this.processMultiQuerySequentially(phoneNumber, parsedQuery, conversation);
+        }
       }
       
       // Special handling for 'get_conversation' requests
