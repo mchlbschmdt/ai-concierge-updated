@@ -638,13 +638,12 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
     
     // Check if breakfast request returned only coffee shops
     if (requestType === 'breakfast_restaurant' && lowerMessage.includes('breakfast')) {
-      // If response contains café/coffee but NOT breakfast-related words, it's wrong
       const hasCoffeeWords = lowerResponse.includes('café') || lowerResponse.includes('cafe') || lowerResponse.includes('coffee shop');
       const hasBreakfastWords = lowerResponse.includes('breakfast') || lowerResponse.includes('eggs') || 
                                  lowerResponse.includes('pancake') || lowerResponse.includes('omelet');
       
       if (hasCoffeeWords && !hasBreakfastWords) {
-        console.log('❌ Validation failed: breakfast request returned coffee shops only');
+        console.log(`❌ ${requestType} validation failed: breakfast request returned coffee shops only`);
         return false;
       }
     }
@@ -653,12 +652,52 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
     if (requestType === 'coffee_shop' && lowerMessage.includes('coffee')) {
       const hasBreakfastRestaurant = lowerResponse.includes('breakfast menu') || lowerResponse.includes('full breakfast');
       if (hasBreakfastRestaurant && !lowerResponse.includes('coffee')) {
-        console.log('❌ Validation failed: coffee request returned breakfast restaurants');
+        console.log(`❌ ${requestType} validation failed: coffee request returned breakfast restaurants`);
         return false;
       }
     }
     
-    console.log('✅ Validation passed: recommendation matches intent');
+    // Check if lunch request returned fine dining/dinner establishments
+    if (requestType === 'lunch_dining') {
+      const hasDinnerWords = lowerResponse.includes('fine dining') || lowerResponse.includes('upscale') || 
+                             lowerResponse.includes('evening') || lowerResponse.includes('reservations recommended');
+      const hasLunchWords = lowerResponse.includes('lunch') || lowerResponse.includes('sandwich') || 
+                           lowerResponse.includes('salad') || lowerResponse.includes('quick') || lowerResponse.includes('casual');
+      
+      if (hasDinnerWords && !hasLunchWords) {
+        console.log(`❌ ${requestType} validation failed: lunch request returned fine dining establishments`);
+        return false;
+      }
+    }
+    
+    // Check if dinner request returned fast-casual/lunch spots
+    if (requestType === 'dinner_dining') {
+      const hasLunchWords = lowerResponse.includes('quick bite') || lowerResponse.includes('fast casual') || 
+                           lowerResponse.includes('sandwich shop');
+      const hasDinnerWords = lowerResponse.includes('dinner') || lowerResponse.includes('evening') || 
+                            lowerResponse.includes('entree') || lowerResponse.includes('full service');
+      
+      if (hasLunchWords && !hasDinnerWords) {
+        console.log(`❌ ${requestType} validation failed: dinner request returned fast-casual lunch spots`);
+        return false;
+      }
+    }
+    
+    // Check if activities request returned restaurants
+    if (requestType === 'activities') {
+      const hasRestaurantWords = lowerResponse.includes('restaurant') || lowerResponse.includes('dining') || 
+                                  lowerResponse.includes('café') || lowerResponse.includes('eatery') || lowerResponse.includes('menu');
+      const hasActivityWords = lowerResponse.includes('museum') || lowerResponse.includes('park') || 
+                              lowerResponse.includes('beach') || lowerResponse.includes('tour') || 
+                              lowerResponse.includes('hike') || lowerResponse.includes('attraction') || lowerResponse.includes('scenic');
+      
+      if (hasRestaurantWords && !hasActivityWords) {
+        console.log(`❌ ${requestType} validation failed: activities request returned restaurants instead of attractions`);
+        return false;
+      }
+    }
+    
+    console.log(`✅ ${requestType} validation passed: recommendation matches intent`);
     return true;
   }
 
@@ -675,12 +714,22 @@ ${guestName ? `Address the guest by name (${guestName}) when appropriate.` : ''}
     } else if (requestType === 'coffee_shop') {
       prompt += `The guest wants COFFEE SHOPS for coffee and pastries only.\n`;
       prompt += `DO NOT recommend full-service breakfast restaurants.\n\n`;
+    } else if (requestType === 'lunch_dining') {
+      prompt += `The guest wants LUNCH-APPROPRIATE restaurants (casual, quick service, sandwiches, salads, lighter fare).\n`;
+      prompt += `DO NOT recommend fine dining or heavy dinner establishments.\n\n`;
+    } else if (requestType === 'dinner_dining') {
+      prompt += `The guest wants DINNER restaurants (full-service dining, evening atmosphere, entrees).\n`;
+      prompt += `DO NOT recommend quick lunch spots or fast-casual chains.\n\n`;
+    } else if (requestType === 'activities') {
+      prompt += `The guest wants ACTIVITIES and ATTRACTIONS (museums, parks, tours, scenic spots, things to DO).\n`;
+      prompt += `DO NOT recommend restaurants or dining establishments. They want experiences, not food.\n\n`;
     }
     
     prompt += `Previous incorrect response:\n${previousResponse}\n\n`;
     prompt += `Provide DIFFERENT recommendations that match the request type.\n`;
     prompt += `Use exact GPS distance from ${propertyAddress}.`;
     
+    console.log(`🔄 Retrying ${requestType} with correction prompt`);
     return prompt;
   }
 
