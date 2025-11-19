@@ -695,6 +695,93 @@ export class IntentRecognitionService {
     
     return packingKeywords.some(kw => lowerMessage.includes(kw));
   }
+  
+  private static detectBestTimeToVisitIntent(lowerMessage: string): boolean {
+    const bestTimeKeywords = [
+      'best time to visit', 'best time to go', 'when should we visit',
+      'when should we go', 'best day to visit', 'best day to go',
+      'least crowded', 'avoid crowds', 'best time for',
+      'when is it less busy', 'what day is best', 'cheapest time',
+      'off peak', 'off-peak', 'slow days', 'quiet days',
+      'early morning', 'rope drop', 'park hours'
+    ];
+    
+    const parkKeywords = ['disney', 'universal', 'magic kingdom', 'epcot', 
+                         'hollywood studios', 'animal kingdom', 'seaworld',
+                         'islands of adventure', 'theme park', 'park'];
+    
+    const hasBestTime = bestTimeKeywords.some(kw => lowerMessage.includes(kw));
+    const hasPark = parkKeywords.some(kw => lowerMessage.includes(kw));
+    
+    return hasBestTime || (hasPark && (
+      lowerMessage.includes('when') || 
+      lowerMessage.includes('time') ||
+      lowerMessage.includes('day')
+    ));
+  }
+  
+  private static detectTransportationIntent(lowerMessage: string): boolean {
+    const transportKeywords = [
+      'how do i get to', 'how to get to', 'transportation',
+      'uber', 'lyft', 'rideshare', 'taxi', 'shuttle',
+      'bus', 'public transit', 'driving', 'car',
+      'rental car', 'how much is uber', 'uber cost',
+      'parking', 'where to park', 'how long to drive'
+    ];
+    
+    return transportKeywords.some(kw => lowerMessage.includes(kw));
+  }
+  
+  private static detectLocalEventsIntent(lowerMessage: string): boolean {
+    const eventKeywords = [
+      'event', 'festival', 'concert', 'show', 'happening',
+      'what\'s going on', 'what\'s happening', 'things to do',
+      'activities', 'special event', 'this weekend',
+      'tonight', 'today', 'this week', 'seasonal',
+      'holiday event', 'christmas', 'halloween', 'new year'
+    ];
+    
+    const temporalKeywords = ['tonight', 'today', 'weekend', 'week', 'month'];
+    
+    const hasEvent = eventKeywords.some(kw => lowerMessage.includes(kw));
+    const hasTemporal = temporalKeywords.some(kw => lowerMessage.includes(kw));
+    
+    return hasEvent || (hasTemporal && (
+      lowerMessage.includes('do') || 
+      lowerMessage.includes('see') ||
+      lowerMessage.includes('going on')
+    ));
+  }
+  
+  private static detectKidsContext(lowerMessage: string): { hasKids: boolean; kidAges: string[] } {
+    const hasKids = [
+      'kid', 'child', 'children', 'toddler', 'baby', 'infant',
+      'family', 'kid-friendly', 'kid friendly', 'with kids',
+      'for kids', 'young', 'age', 'years old'
+    ].some(kw => lowerMessage.includes(kw));
+    
+    const kidAges: string[] = [];
+    
+    // Extract age ranges
+    if (lowerMessage.match(/\b([0-9]{1,2})\s*year/i)) {
+      const ageMatch = lowerMessage.match(/\b([0-9]{1,2})\s*year/i);
+      if (ageMatch) {
+        const age = parseInt(ageMatch[1]);
+        if (age <= 2) kidAges.push('infant');
+        else if (age <= 5) kidAges.push('toddler');
+        else if (age <= 9) kidAges.push('young_child');
+        else if (age <= 12) kidAges.push('tween');
+        else kidAges.push('teen');
+      }
+    }
+    
+    // Detect specific age keywords
+    if (lowerMessage.includes('baby') || lowerMessage.includes('infant')) kidAges.push('infant');
+    if (lowerMessage.includes('toddler')) kidAges.push('toddler');
+    if (lowerMessage.includes('teen')) kidAges.push('teen');
+    
+    return { hasKids, kidAges };
+  }
 
   private static matchesKeywords(message: string, keywords: string[]): boolean {
     return keywords.some(keyword => {
