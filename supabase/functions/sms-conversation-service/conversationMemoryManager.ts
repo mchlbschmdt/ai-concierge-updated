@@ -357,7 +357,7 @@ export class ConversationMemoryManager {
     };
   }
   
-  static trackSharedInformation(context: any, sharedContent: { topic: string; content: string; summary: string }) {
+  static trackSharedInformation(context: any, sharedContent: { topic: string; content: string; summary: string }): void {
     if (!context.shared_information) {
       context.shared_information = [];
     }
