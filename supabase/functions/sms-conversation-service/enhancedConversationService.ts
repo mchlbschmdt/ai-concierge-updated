@@ -22,6 +22,7 @@ import { EnhancedIntentRouter } from './enhancedIntentRouter.ts';
 import { TroubleshootingDetectionService } from './troubleshootingDetectionService.ts';
 import { HostContactService } from './hostContactService.ts';
 import { PropertyDataExtractorEnhanced } from './propertyDataExtractorEnhanced.ts';
+import { PropertyLocationAnalyzer } from './propertyLocationAnalyzer.ts';
 import { Conversation, Property } from './types.ts';
 
 export class EnhancedConversationService {
