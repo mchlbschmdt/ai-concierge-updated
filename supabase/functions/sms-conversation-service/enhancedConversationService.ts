@@ -759,12 +759,13 @@ export class EnhancedConversationService {
     
     // STEP 2: Check if topic was recently shared (prevent repetition)
     const topic = this.extractTopicFromIntent(intent, message);
-    const recentShare = ConversationMemoryManager.wasTopicRecentlyShared(conversationContext, topic);
+    const recentShare = ConversationMemoryManager.hasAlreadySharedInformation(conversationContext, topic, 5);
     
     if (recentShare.shared) {
-      console.log('✅ Topic was recently shared, providing brief reminder');
+      console.log(`✅ Topic "${topic}" was shared ${recentShare.minutesAgo} minutes ago - providing abbreviated response`);
+      const abbreviated = ConversationMemoryManager.abbreviateResponse('', topic, recentShare.summary);
       return {
-        messages: [`As I mentioned, ${recentShare.summary}. Is there something specific you'd like to know more about?`],
+        messages: [abbreviated],
         shouldUpdateState: false
       };
     }
@@ -854,10 +855,9 @@ export class EnhancedConversationService {
           
           let response = kbResult.content;
           
-          // Track shared information
+          // Track shared information and get updated context
           const summary = response.length > 100 ? response.substring(0, 97) + '...' : response;
-          const updatedContext = { ...conversationContext };
-          ConversationMemoryManager.trackSharedInformation(updatedContext, {
+          const updatedContext = ConversationMemoryManager.trackSharedInformation(conversationContext, {
             topic,
             content: response,
             summary

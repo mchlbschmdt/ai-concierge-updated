@@ -4,6 +4,7 @@ export interface PropertyDataResponse {
   content: string;
   hasData: boolean;
   dataType: 'amenities' | 'checkout' | 'emergency' | 'access' | 'general' | 'garbage' | 'grocery' | 'transportation';
+  summary?: string; // Brief summary for tracking
 }
 
 export class PropertyDataExtractor {
