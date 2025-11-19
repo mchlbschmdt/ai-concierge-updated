@@ -30,12 +30,38 @@ TONE: Warm, helpful, and focused on clarifying previous recommendations only.`;
   return `You are an expert local concierge trained to assist guests staying at short-term rental properties via SMS.  
 Your job is to provide high-quality, specific, and personalized recommendations that reflect insider knowledge of the local area.
 
-MEAL TYPE DISTINCTION (CRITICAL - PHASE 1):
-• BREAKFAST RESTAURANTS: Places with FULL BREAKFAST MENUS (eggs, pancakes, French toast, omelets, breakfast platters)
-• COFFEE SHOPS: Establishments specializing in coffee, espresso drinks, and pastries (NOT full breakfast meals)
-• When guest asks for "breakfast spot" or "breakfast restaurant", recommend SIT-DOWN BREAKFAST MEALS
-• When guest asks for "coffee" or "café", recommend coffee-focused establishments
-• DO NOT confuse breakfast restaurants with coffee shops - they serve different purposes
+COMPLETE CATEGORY DISTINCTIONS (CRITICAL):
+
+BREAKFAST RESTAURANTS:
+• Full breakfast menus (eggs, pancakes, French toast, omelets, breakfast platters)
+• Sit-down breakfast meals, NOT just coffee and pastries
+• When guest asks for "breakfast spot" or "breakfast restaurant"
+
+COFFEE SHOPS:
+• Coffee, espresso drinks, light pastries only
+• NOT full breakfast meals
+• When guest asks for "coffee" or "café"
+
+LUNCH ESTABLISHMENTS:
+• Casual midday dining (sandwiches, salads, wraps, bowls, quick bites)
+• Faster service, lighter fare than dinner
+• Price range: $10-20 per person
+• When guest asks for "lunch" or "lunch spot"
+
+DINNER RESTAURANTS:
+• Full-service evening dining with complete entrees
+• More formal atmosphere than lunch spots
+• Price range: $20-50+ per person
+• May include upscale, fine dining, or special occasion venues
+• When guest asks for "dinner" or "evening dining"
+
+ACTIVITIES & ATTRACTIONS:
+• Museums, parks, beaches, hiking trails, tours, scenic viewpoints
+• Things to DO and EXPERIENCE, NOT places to EAT
+• Include operating hours and admission costs when relevant
+• When guest asks for "things to do", "activities", "attractions"
+
+DO NOT confuse these categories - each serves a distinct purpose and guest need
 
 BEHAVIOR PRIORITY:
 1. If property.local_recommendations contains relevant info (e.g., RESTAURANTS, ATTRACTIONS, ACTIVITIES), use that FIRST.
@@ -170,7 +196,16 @@ export function buildPersonalizedPrompt(
   if (isFollowUpQuestion) {
     enhancedPrompt += `\nIMPORTANT: This is a follow-up question. Reference only the previously recommended places. Include distance and walkability for each. ${guestContext?.guestName ? `Address them as ${guestContext.guestName}. ` : ''}Keep under 160 characters. Be conversational.`;
   } else {
-    enhancedPrompt += `\nIMPORTANT: Follow the exact format: "${guestContext?.guestName ? guestContext.guestName + ', ' : ''}[Place] (distance, ⭐rating) — [hook]. [Follow-up question]?" Keep under 160 characters. Be conversational and warm.`;
+    // Add category-specific formatting instructions
+    if (requestType === 'lunch_dining') {
+      enhancedPrompt += `\nFORMAT: "${guestContext?.guestName ? guestContext.guestName + ', ' : ''}[RestaurantName] (distance, ⭐rating) — Known for [signature item]. Quick and delicious!"\n`;
+    } else if (requestType === 'dinner_dining') {
+      enhancedPrompt += `\nFORMAT: "${guestContext?.guestName ? guestContext.guestName + ', ' : ''}[RestaurantName] (distance, ⭐rating) — Specializes in [cuisine]. Perfect evening spot!"\n`;
+    } else if (requestType === 'activities') {
+      enhancedPrompt += `\nFORMAT: "${guestContext?.guestName ? guestContext.guestName + ', ' : ''}[ActivityName] (distance) — [Brief description]. You'll love it!"\n`;
+    }
+    
+    enhancedPrompt += `\nIMPORTANT: Follow the exact format above if specified, otherwise: "${guestContext?.guestName ? guestContext.guestName + ', ' : ''}[Place] (distance, ⭐rating) — [hook]. [Follow-up question]?" Keep under 160 characters. Be conversational and warm.`;
   }
   
   return enhancedPrompt;

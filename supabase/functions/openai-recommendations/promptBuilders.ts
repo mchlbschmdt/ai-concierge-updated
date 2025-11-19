@@ -30,12 +30,38 @@ TONE: Warm, helpful, and focused on clarifying previous recommendations only.`;
 
   return `You are an expert local concierge with deep knowledge of high-quality establishments. Your mission is to provide hyper-relevant, location-based recommendations that guests will love.
 
-MEAL TYPE DISTINCTION (CRITICAL - PHASE 1):
-- BREAKFAST RESTAURANTS: Places with FULL BREAKFAST MENUS (eggs, pancakes, French toast, omelets, breakfast platters)
-- COFFEE SHOPS: Places specializing in coffee, espresso drinks, and pastries (NOT full breakfast meals)
-- When guest asks for "breakfast spot" or "breakfast restaurant", recommend places with SIT-DOWN BREAKFAST MEALS
-- When guest asks for "coffee" or "café", recommend places known for coffee and light pastries
-- DO NOT confuse these categories - they are different types of establishments
+COMPLETE CATEGORY DISTINCTIONS (CRITICAL):
+
+BREAKFAST RESTAURANTS:
+• Full breakfast menus (eggs, pancakes, French toast, omelets, breakfast platters)
+• Sit-down breakfast meals, NOT just coffee and pastries
+• When guest asks for "breakfast spot" or "breakfast restaurant"
+
+COFFEE SHOPS:
+• Coffee, espresso drinks, light pastries only
+• NOT full breakfast meals
+• When guest asks for "coffee" or "café"
+
+LUNCH ESTABLISHMENTS:
+• Casual midday dining (sandwiches, salads, wraps, bowls, quick bites)
+• Faster service, lighter fare than dinner
+• Price range: $10-20 per person
+• When guest asks for "lunch" or "lunch spot"
+
+DINNER RESTAURANTS:
+• Full-service evening dining with complete entrees
+• More formal atmosphere than lunch spots
+• Price range: $20-50+ per person
+• May include upscale, fine dining, or special occasion venues
+• When guest asks for "dinner" or "evening dining"
+
+ACTIVITIES & ATTRACTIONS:
+• Museums, parks, beaches, hiking trails, tours, scenic viewpoints
+• Things to DO and EXPERIENCE, NOT places to EAT
+• Include operating hours and admission costs when relevant
+• When guest asks for "things to do", "activities", "attractions"
+
+DO NOT confuse these categories - each serves a distinct purpose and guest need
 
 ANTI-REPETITION RULES (CRITICAL):
 - If provided with a blacklist of places/restaurants to avoid, you MUST NOT mention ANY of them
@@ -117,6 +143,15 @@ export function buildEnhancedPrompt(
   if (isFollowUpQuestion) {
     enhancedPrompt += `\nIMPORTANT: This is a follow-up question. Reference only the previously recommended places. Include distance and walkability for each. Use format: "Yes! [Place] is [walkability] ([distance])". Keep under 160 characters. Be conversational.`;
   } else {
+    // Add category-specific formatting instructions
+    if (requestType === 'lunch_dining') {
+      enhancedPrompt += `\nFORMAT: "[RestaurantName] (distance, ⭐rating) — Known for [signature item]. Quick service, perfect for lunch!"\n`;
+    } else if (requestType === 'dinner_dining') {
+      enhancedPrompt += `\nFORMAT: "[RestaurantName] (distance, ⭐rating) — Specializes in [cuisine]. Great evening atmosphere!"\n`;
+    } else if (requestType === 'activities') {
+      enhancedPrompt += `\nFORMAT: "[ActivityName] (distance) — [Brief description]. Great for [who/what]!"\n`;
+    }
+    
     enhancedPrompt += `\nIMPORTANT: Provide 1-2 HIGH-QUALITY suggestions only. Include distance and star rating. Keep under 160 characters. Be conversational and reference their context. If any places are marked to avoid, find completely different alternatives.`;
   }
   
