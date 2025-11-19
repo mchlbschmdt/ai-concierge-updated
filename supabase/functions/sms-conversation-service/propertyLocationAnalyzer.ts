@@ -228,4 +228,23 @@ export class PropertyLocationAnalyzer {
     
     return essentials;
   }
+  
+  private static getEventsContext(addressLower: string): any {
+    const month = new Date().getMonth() + 1;
+    const region = this.detectRegion(addressLower);
+    
+    return {
+      season: month >= 3 && month <= 5 ? 'spring' : month >= 6 && month <= 8 ? 'summer' : month >= 9 && month <= 11 ? 'fall' : 'winter',
+      hasThemeParkEvents: region === 'florida',
+      festivalSeason: month >= 3 && month <= 5
+    };
+  }
+  
+  private static getTransportContext(neighborhood: string | null, resort: string | null): any {
+    return {
+      hasResortShuttle: resort !== null,
+      publicTransitAvailable: neighborhood === 'Orlando',
+      walkabilityScore: resort === 'vista cay' ? 'high' : neighborhood === 'Celebration' ? 'medium' : 'low'
+    };
+  }
 }

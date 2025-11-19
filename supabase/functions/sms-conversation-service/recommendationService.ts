@@ -70,12 +70,13 @@ export class RecommendationService {
 
       // Enhanced payload with better rejection handling and food-specific instructions
       const enhancedPayload = {
-        prompt: this.buildEnhancedPrompt(originalMessage, propertyAddress, foodFilters, rejectedRestaurants, isRejection),
+        prompt: this.buildEnhancedPrompt(originalMessage, propertyAddress, foodFilters, rejectedRestaurants, isRejection, intentResult?.kidAges),
         propertyAddress: `${propertyName}, ${propertyAddress}`,
         guestContext: { 
           ...guestContext, 
           foodFilters,
-          locationContext
+          locationContext,
+          kidAges: intentResult?.kidAges
         },
         requestType: requestType,
         previousRecommendations: isRejection ? null : previousRecommendations,
@@ -302,7 +303,7 @@ export class RecommendationService {
   }
 
   // PHASE 1: Enhanced prompt with explicit meal-type detection
-  private buildEnhancedPrompt(originalMessage: string, propertyAddress: string, foodFilters: string[], rejectedRestaurants: string[], isRejection: boolean): string {
+  private buildEnhancedPrompt(originalMessage: string, propertyAddress: string, foodFilters: string[], rejectedRestaurants: string[], isRejection: boolean, kidAges?: string[]): string {
     let prompt = `${originalMessage}\n\n`;
     
     // CRITICAL: Detect meal type and add explicit instructions
@@ -320,6 +321,33 @@ export class RecommendationService {
       prompt += `CRITICAL INSTRUCTION: Guest wants LUNCH restaurants with full lunch menus.\n\n`;
     } else if (mealType === 'dinner') {
       prompt += `CRITICAL INSTRUCTION: Guest wants DINNER restaurants suitable for evening dining.\n\n`;
+    }
+    
+    // NEW: Kid-friendly enhancement
+    if (kidAges && kidAges.length > 0) {
+      prompt += '\n\n🧒 FAMILY-FRIENDLY REQUIREMENTS:\n';
+      
+      if (kidAges.includes('infant') || kidAges.includes('toddler')) {
+        prompt += '• High chairs & changing tables available\n';
+        prompt += '• Quick service or casual dining preferred\n';
+        prompt += '• Quiet, family-friendly atmosphere\n';
+        prompt += '• Simple menu options for young children\n';
+      }
+      
+      if (kidAges.includes('young_child')) {
+        prompt += '• Kids menu with familiar options\n';
+        prompt += '• Activities or entertainment for kids\n';
+        prompt += '• Reasonable wait times\n';
+        prompt += '• Tolerant of noise/activity\n';
+      }
+      
+      if (kidAges.includes('tween') || kidAges.includes('teen')) {
+        prompt += '• Variety of options appealing to older kids\n';
+        prompt += '• Interactive or unique dining experience\n';
+        prompt += '• Not too "babyish" but still family-appropriate\n';
+      }
+      
+      prompt += '\nMUST prioritize family-friendly venues only!';
     }
     
     // Add specific instructions for rejections

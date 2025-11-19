@@ -47,3 +47,13 @@ export interface MultiMessageResult {
   messages: string[];
   shouldUpdateState: boolean;
 }
+
+export interface IntentResult {
+  intent: string;
+  confidence: number;
+  subIntents?: string[];
+  isMultiPart: boolean;
+  hasKids?: boolean;
+  kidAges?: string[];
+  isCheckoutSoon?: boolean;
+}
