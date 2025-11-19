@@ -728,10 +728,15 @@ export class EnhancedConversationService {
           response += '\n\nWhat else can I help with?';
         }
         
-        await this.conversationManager.updateConversationState(conversation.phone_number, {
-          last_intent: intent,
-          last_response: response
-        });
+        // Log intent and response (non-critical - don't let this block the user response)
+        try {
+          await this.conversationManager.updateConversationState(conversation.phone_number, {
+            last_intent: intent,
+            last_response: response
+          });
+        } catch (logError) {
+          console.warn('⚠️ Non-critical: Failed to log intent/response:', logError);
+        }
         
         return {
           messages: MessageUtils.ensureSmsLimit(response),
