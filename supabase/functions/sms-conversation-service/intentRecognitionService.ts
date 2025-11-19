@@ -376,6 +376,12 @@ export class IntentRecognitionService {
       return { intent: 'ask_garbage', confidence: 0.95 };
     }
     
+    // NEW: Resort amenities intent
+    if (this.detectResortAmenitiesIntent(lowerMessage)) {
+      console.log('🏨 Resort amenities intent detected:', message);
+      return { intent: 'ask_resort_amenities', confidence: 0.9 };
+    }
+    
     // NEW: Grocery stores
     if (this.matchesKeywords(message, [
       'grocery', 'groceries', 'supermarket', 'store', 'shopping',

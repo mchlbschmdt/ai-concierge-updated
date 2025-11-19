@@ -4,6 +4,7 @@ import { ResponseGenerator } from './responseGenerator.ts';
 import { MessageUtils } from './messageUtils.ts';
 import { LocationService } from './locationService.ts';
 import { ConversationMemoryManager } from './conversationMemoryManager.ts';
+import { PropertyLocationAnalyzer } from './propertyLocationAnalyzer.ts';
 
 export class RecommendationService {
   constructor(private supabase: any, private conversationManager: any) {}
@@ -39,6 +40,10 @@ export class RecommendationService {
         console.log('✅ Added to rejected list and cleared from memory');
       }
       
+      // Detect follow-up questions
+      const isFollowUp = ConversationMemoryManager.isFollowUpQuestion(originalMessage);
+      const lastContext = ConversationMemoryManager.getLastQuestionContext(context);
+      
       // Enhanced food query detection with improved filters
       const foodFilters = this.extractFoodFilters(originalMessage);
       const guestContext = this.extractGuestContext(originalMessage, context, conversation, intentResult);
@@ -46,7 +51,15 @@ export class RecommendationService {
       const previousRecommendations = conversation?.last_recommendations || null;
       const rejectedRestaurants = ConversationMemoryManager.getRejectedRestaurants(context);
       
+      // Get location context for the property
+      const locationContext = PropertyLocationAnalyzer.analyzePropertyLocation(property.address);
+      console.log('📍 Location context:', locationContext);
+      
       const memoryContext = this.getRecommendationMemoryContext(context);
+      
+      if (isFollowUp && lastContext) {
+        console.log('🔄 Detected follow-up question. Previous context:', lastContext.topic);
+      }
       
       console.log('📍 Guest context extracted:', guestContext);
       console.log('🏷️ Request type:', requestType);
@@ -59,10 +72,19 @@ export class RecommendationService {
       const enhancedPayload = {
         prompt: this.buildEnhancedPrompt(originalMessage, propertyAddress, foodFilters, rejectedRestaurants, isRejection),
         propertyAddress: `${propertyName}, ${propertyAddress}`,
-        guestContext: { ...guestContext, foodFilters },
+        guestContext: { 
+          ...guestContext, 
+          foodFilters,
+          locationContext
+        },
         requestType: requestType,
         previousRecommendations: isRejection ? null : previousRecommendations,
-        rejectedRestaurants: rejectedRestaurants
+        rejectedRestaurants: rejectedRestaurants,
+        previousContext: (isFollowUp && lastContext) ? {
+          lastQuestion: lastContext.question,
+          lastAnswer: lastContext.answer,
+          topic: lastContext.topic
+        } : undefined
       };
 
       console.log('🔄 [OPENAI] Enhanced payload being sent:', JSON.stringify(enhancedPayload).substring(0, 200));

@@ -2,8 +2,10 @@
 import { RecommendationRequest } from './types.ts';
 
 export function getContextualSystemPrompt(isFollowUpQuestion = false, guestContext?: any): string {
+  let systemPrompt = '';
+  
   if (isFollowUpQuestion) {
-    return `You are a helpful local concierge answering a follow-up question about previously recommended places.
+    systemPrompt = `You are a helpful local concierge answering a follow-up question about previously recommended places.
 
 FOLLOW-UP RESPONSE RULES (CRITICAL):
 - ONLY reference the places you previously recommended - DO NOT suggest new places
@@ -25,9 +27,8 @@ SMS FORMAT REQUIREMENTS:
 - Use phrases like "Yes! Both spots I mentioned..." or "The places I recommended..."
 
 TONE: Warm, helpful, and focused on clarifying previous recommendations only.`;
-  }
-
-  return `You are an expert local concierge trained to assist guests staying at short-term rental properties via SMS.  
+  } else {
+    systemPrompt = `You are an expert local concierge trained to assist guests staying at short-term rental properties via SMS.
 Your job is to provide high-quality, specific, and personalized recommendations that reflect insider knowledge of the local area.
 
 COMPLETE CATEGORY DISTINCTIONS (CRITICAL):
@@ -145,6 +146,9 @@ ${guestContext?.lastActivity ? `- Their last activity was: ${guestContext.lastAc
 - Current time context: ${guestContext?.timeOfDay || 'unknown'} on ${guestContext?.dayOfWeek || 'unknown'}
 ${guestContext?.isCheckoutSoon ? '- Guest is checking out soon - prioritize quick/nearby options' : ''}
 ${guestContext?.hasKids ? '- Guest is traveling with kids - prioritize family-friendly options' : ''}`;
+  }
+  
+  return systemPrompt;
 }
 
 export function buildPersonalizedPrompt(
@@ -157,6 +161,14 @@ export function buildPersonalizedPrompt(
 ): string {
   let enhancedPrompt = `Guest Request: ${prompt}\n\n`;
   
+  // Add previous context if this is a follow-up question
+  if (guestContext?.previousContext) {
+    enhancedPrompt += `\n\nIMPORTANT CONTEXT - Guest just asked about: "${guestContext.previousContext.topic}"`;
+    enhancedPrompt += `\nPrevious question: "${guestContext.previousContext.lastQuestion}"`;
+    enhancedPrompt += `\nYour previous answer: "${guestContext.previousContext.lastAnswer}"`;
+    enhancedPrompt += `\n\nThis is a FOLLOW-UP question, so provide additional related information, not a repeat.\n\n`;
+  }
+  
   if (isFollowUpQuestion && previousRecommendations) {
     enhancedPrompt += `IMPORTANT: This is a follow-up question about these previously recommended places:\n"${previousRecommendations}"\n\n`;
     enhancedPrompt += `DO NOT suggest new places. Only answer about the places already recommended.\n`;
@@ -166,6 +178,29 @@ export function buildPersonalizedPrompt(
   // Add property location context
   if (propertyAddress) {
     enhancedPrompt += `Property Location: ${propertyAddress}\n`;
+  }
+  
+  // Add location context for better recommendations
+  if (guestContext?.locationContext) {
+    const loc = guestContext.locationContext;
+    
+    enhancedPrompt += `\nLOCATION CONTEXT (use this for accurate local information):\n`;
+    if (loc.resort) {
+      enhancedPrompt += `- Guest is staying at ${loc.resort}\n`;
+    }
+    if (loc.neighborhood) {
+      enhancedPrompt += `- Property is in ${loc.neighborhood}\n`;
+    }
+    if (loc.distanceToDisney) {
+      enhancedPrompt += `- Disney is ${loc.distanceToDisney} away\n`;
+    }
+    if (loc.distanceToUniversal) {
+      enhancedPrompt += `- Universal is ${loc.distanceToUniversal} away\n`;
+    }
+    if (loc.nearbyAttractions.length > 0) {
+      enhancedPrompt += `- Nearby attractions: ${loc.nearbyAttractions.join(', ')}\n`;
+    }
+    enhancedPrompt += `\nWhen guest asks about theme parks, attractions, or local tips, use this context.\n`;
   }
   
   // Add enhanced guest context
