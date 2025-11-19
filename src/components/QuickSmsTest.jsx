@@ -292,37 +292,6 @@ export default function QuickSmsTest() {
                       )}
                     </div>
                   )}
-                    <div className={`text-xs p-2 rounded border ${
-                      testResults[test.id].success 
-                        ? "bg-success/10 border-success/30 text-success" 
-                        : "bg-error/10 border-error/30 text-error"
-                    }`}>
-                      {testResults[test.id].success ? (
-                        <>
-                          <div className="font-semibold mb-1">
-                            Intent: {testResults[test.id].intent || "Unknown"}
-                          </div>
-                          <div className="line-clamp-2">
-                            {testResults[test.id].response.substring(0, 100)}...
-                          </div>
-                          {testResults[test.id].conversationId && (
-                            <a
-                              href={`#conv-${testResults[test.id].conversationId}`}
-                              className="flex items-center gap-1 mt-1 text-primary hover:underline"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                document.getElementById(`conv-${testResults[test.id].conversationId}`)?.scrollIntoView({ behavior: 'smooth' });
-                              }}
-                            >
-                              View full <ExternalLink className="h-3 w-3" />
-                            </a>
-                          )}
-                        </>
-                      ) : (
-                        <div>❌ {testResults[test.id].error}</div>
-                      )}
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
