@@ -84,11 +84,15 @@ export class MultiQueryParser {
       }
     ];
     
-    // Check each pattern against the message
+    // Check each pattern against the message using word boundary matching
     queryPatterns.forEach(pattern => {
-      const matchedKeywords = pattern.patterns.filter(keyword => 
-        lowerMessage.includes(keyword)
-      );
+      const matchedKeywords = pattern.patterns.filter(keyword => {
+        // Use word boundaries to match complete words only to prevent false positives
+        // (e.g., "heat" should not match "eat", "theater" should not match "eat")
+        const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const wordBoundaryRegex = new RegExp(`\\b${escapedKeyword}\\b`, 'i');
+        return wordBoundaryRegex.test(lowerMessage);
+      });
       
       if (matchedKeywords.length > 0) {
         // Extract the relevant portion of the message
@@ -108,13 +112,20 @@ export class MultiQueryParser {
     const uniqueQueries = this.deduplicateQueries(queries);
     uniqueQueries.sort((a, b) => a.priority - b.priority);
     
-    const isMultiQuery = uniqueQueries.length > 1;
+    // Only trigger multi-query if we have strong signals (multiple keywords or high priority)
+    const strongMatches = uniqueQueries.filter(q => 
+      q.keywords.length >= 2 || // Multiple matching keywords
+      q.priority === 1 // Or high-priority intent
+    );
+    
+    const isMultiQuery = strongMatches.length > 1 || 
+                        (uniqueQueries.length > 1 && strongMatches.length >= 1);
     
     return {
       originalMessage: message,
-      queries: uniqueQueries,
+      queries: isMultiQuery ? strongMatches : uniqueQueries,
       isMultiQuery,
-      acknowledgmentMessage: this.generateAcknowledgment(uniqueQueries, isMultiQuery)
+      acknowledgmentMessage: this.generateAcknowledgment(isMultiQuery ? strongMatches : uniqueQueries, isMultiQuery)
     };
   }
   

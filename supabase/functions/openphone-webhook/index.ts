@@ -402,7 +402,38 @@ serve(async (req) => {
             smsConversation = null;
           }
           
-          // Store the incoming user message
+          // Check for duplicate webhook using external message ID
+          if (smsConversation && message.id) {
+            try {
+              const { data: existingMessage } = await supabase
+                .from('sms_conversation_messages')
+                .select('id')
+                .eq('external_message_id', message.id)
+                .maybeSingle();
+
+              if (existingMessage) {
+                console.log('⏭️ Duplicate webhook detected, skipping processing for message ID:', message.id);
+                return new Response(
+                  JSON.stringify({ 
+                    success: true,
+                    processed: false,
+                    reason: 'DUPLICATE_MESSAGE',
+                    message: 'Message already processed',
+                    messageId: message.id
+                  }),
+                  {
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                    status: 200
+                  }
+                );
+              }
+            } catch (dupCheckError) {
+              console.error('❌ Error checking for duplicate:', dupCheckError);
+              // Continue processing if duplicate check fails
+            }
+          }
+
+          // Store the incoming user message with external message ID
           if (smsConversation) {
             try {
               const { error: storeError } = await supabase
@@ -412,13 +443,14 @@ serve(async (req) => {
                   sms_conversation_id: smsConversation.id,
                   role: 'user',
                   content: message.body || message.text || '',
-                  timestamp: new Date().toISOString()
+                  timestamp: new Date().toISOString(),
+                  external_message_id: message.id || null
                 })
 
               if (storeError) {
                 console.error('❌ Error storing user message:', storeError)
               } else {
-                console.log('✅ User message stored successfully');
+                console.log('✅ User message stored successfully with external ID:', message.id);
               }
             } catch (storeErr) {
               console.error('❌ Exception storing user message:', storeErr);
@@ -450,7 +482,8 @@ serve(async (req) => {
                 body: JSON.stringify({
                   action: 'processMessage',
                   phoneNumber: message.from,
-                  message: messageText  // Changed from messageBody to message
+                  message: messageText,  // Changed from messageBody to message
+                  messageTimestamp: message.createdAt || new Date().toISOString() // Pass timestamp for ordering
                 })
               });
 
