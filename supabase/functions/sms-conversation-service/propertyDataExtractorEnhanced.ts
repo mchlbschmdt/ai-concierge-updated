@@ -504,3 +504,18 @@ export class PropertyDataExtractorEnhanced {
   private static getUniversalTimingAdvice(): string {
     return '⚡ Universal Orlando:\n• Less crowded than Disney\n• Best: Tue-Thu\n• Hagrid\'s & Velocicoaster = early entry\n• Tip: Express Pass worth it on busy days';
   }
+  
+  private static extractSpecificInfo(text: string, ...keywords: string[]): string {
+    const sentences = text.split(/[.!?]+/);
+    const relevantSentences: string[] = [];
+    
+    for (const sentence of sentences) {
+      const lowerSentence = sentence.toLowerCase();
+      if (keywords.some(keyword => lowerSentence.includes(keyword))) {
+        relevantSentences.push(sentence.trim());
+      }
+    }
+    
+    return relevantSentences.slice(0, 2).join('. ') + (relevantSentences.length > 0 ? '.' : '');
+  }
+}

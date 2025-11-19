@@ -806,11 +806,6 @@ export class EnhancedConversationService {
         const LocalEventsService = await import('./localEventsService.ts').then(m => m.LocalEventsService);
         const eventsResponse = LocalEventsService.getLocalEvents(property, message);
         extractionResult = { response: eventsResponse, hasData: true };
-      }
-      } else if (intent === 'ask_weather') {
-        extractionResult = PropertyDataExtractorEnhanced.extractWeatherInfo(property, message, conversationContext);
-      } else if (intent === 'ask_packing_tips') {
-        extractionResult = PropertyDataExtractorEnhanced.extractPackingTips(property, message, conversationContext);
       } else {
         // Use original extractor for standard intents
         const dataResponse = PropertyDataExtractor.extractPropertyData(property, intent, message);
