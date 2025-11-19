@@ -14,7 +14,8 @@ import {
   Bot,
   FileText,
   TrendingUp,
-  MessagesSquare
+  MessagesSquare,
+  UserCog
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -35,6 +36,7 @@ const Sidebar = () => {
     { icon: FileText, label: 'Knowledge Base', path: '/knowledge-base' },
     { icon: HelpCircle, label: 'FAQ Editor', path: '/faq-editor' },
     { icon: MapPin, label: 'Travel Guide', path: '/travel-admin' },
+    { icon: UserCog, label: 'Profile Settings', path: '/profile-settings' },
   ];
 
   return (
