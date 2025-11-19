@@ -1,7 +1,7 @@
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { GmailAuthProvider } from "./context/GmailAuthContext";
 import { ToastProvider } from "./context/ToastContext";
@@ -26,6 +26,7 @@ import TravelGuideAdmin from "./pages/TravelGuideAdmin";
 import Register from "./pages/Register";
 import RecommendationQualityAnalytics from "./pages/RecommendationQualityAnalytics";
 import SmsConversationsAdmin from "./pages/SmsConversationsAdmin";
+import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
@@ -121,7 +122,14 @@ const App = () => (
                   <SmsConversationsAdmin />
                 </ProtectedRoute>
               } />
-              </Routes>
+              
+              {/* Backward compatibility redirects */}
+              <Route path="/dashboard" element={<Navigate to="/" replace />} />
+              <Route path="/dashboard/*" element={<Navigate to="/" replace />} />
+              
+              {/* 404 Catch-all - must be last */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
             </ToastProvider>
           </GmailAuthProvider>
         </AuthProvider>
