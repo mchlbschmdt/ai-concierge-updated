@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import Layout from '@/components/Layout';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectSeparator } from '@/components/ui/select';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { AlertCircle, TrendingUp, CheckCircle, XCircle, Filter } from 'lucide-react';
 import { format } from 'date-fns';
@@ -14,10 +15,31 @@ const RecommendationQualityAnalytics = () => {
   const [keywordAnalysis, setKeywordAnalysis] = useState([]);
   const [retryStats, setRetryStats] = useState({ success: 0, failed: 0 });
   const [dateRange, setDateRange] = useState(30); // days
+  const [properties, setProperties] = useState([]);
+  const [selectedProperty, setSelectedProperty] = useState('all');
+  const [propertyRejectionRates, setPropertyRejectionRates] = useState([]);
+
+  useEffect(() => {
+    fetchProperties();
+  }, []);
 
   useEffect(() => {
     fetchAnalyticsData();
-  }, [dateRange]);
+  }, [dateRange, selectedProperty]);
+
+  const fetchProperties = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('properties')
+        .select('id, property_name, code, address')
+        .order('property_name');
+      
+      if (error) throw error;
+      setProperties(data || []);
+    } catch (error) {
+      console.error('Error fetching properties:', error);
+    }
+  };
 
   const fetchAnalyticsData = async () => {
     setLoading(true);
@@ -26,10 +48,16 @@ const RecommendationQualityAnalytics = () => {
       cutoffDate.setDate(cutoffDate.getDate() - dateRange);
 
       // Fetch rejections by category
-      const { data: categoryData, error: categoryError } = await supabase
+      let categoryQuery = supabase
         .from('recommendation_rejections')
-        .select('requested_category, retry_attempted, retry_successful')
+        .select('requested_category, retry_attempted, retry_successful, property_id')
         .gte('created_at', cutoffDate.toISOString());
+
+      if (selectedProperty !== 'all') {
+        categoryQuery = categoryQuery.eq('property_id', selectedProperty);
+      }
+
+      const { data: categoryData, error: categoryError } = await categoryQuery;
 
       if (categoryError) throw categoryError;
 
@@ -71,12 +99,49 @@ const RecommendationQualityAnalytics = () => {
         failed: totalRetries - successfulRetries
       });
 
+      // Fetch property-level rejection rates for comparison
+      if (selectedProperty === 'all') {
+        const { data: propertyStats, error: propertyError } = await supabase
+          .from('recommendation_rejections')
+          .select('property_id')
+          .gte('created_at', cutoffDate.toISOString());
+
+        if (!propertyError && propertyStats) {
+          const propertyMap = {};
+          
+          propertyStats.forEach(rejection => {
+            const propId = rejection.property_id || 'unknown';
+            propertyMap[propId] = (propertyMap[propId] || 0) + 1;
+          });
+          
+          const propertyRates = Object.entries(propertyMap)
+            .map(([propId, count]) => {
+              const property = properties.find(p => p.code === propId);
+              return {
+                property_id: propId,
+                property_name: property?.property_name || 'Unknown Property',
+                rejection_count: count
+              };
+            })
+            .sort((a, b) => b.rejection_count - a.rejection_count)
+            .slice(0, 10);
+          
+          setPropertyRejectionRates(propertyRates);
+        }
+      }
+
       // Fetch recent rejections with details
-      const { data: recentData, error: recentError } = await supabase
+      let recentQuery = supabase
         .from('recommendation_rejections')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(20);
+
+      if (selectedProperty !== 'all') {
+        recentQuery = recentQuery.eq('property_id', selectedProperty);
+      }
+
+      const { data: recentData, error: recentError } = await recentQuery;
 
       if (recentError) throw recentError;
       setRecentRejections(recentData || []);
@@ -139,36 +204,58 @@ const RecommendationQualityAnalytics = () => {
     <Layout>
       <div className="p-8 space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-center">
+        <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-3xl font-bold text-foreground">Recommendation Quality Analytics</h1>
-            <p className="text-muted-foreground mt-1">Track and improve AI recommendation accuracy</p>
+            <p className="text-muted-foreground mt-2">Track category mismatch patterns and retry outcomes</p>
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setDateRange(7)}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                dateRange === 7 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
-              }`}
-            >
-              7 Days
-            </button>
-            <button
-              onClick={() => setDateRange(30)}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                dateRange === 30 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
-              }`}
-            >
-              30 Days
-            </button>
-            <button
-              onClick={() => setDateRange(90)}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                dateRange === 90 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
-              }`}
-            >
-              90 Days
-            </button>
+          <div className="flex items-center gap-4">
+            {/* Property Filter */}
+            <div className="flex items-center gap-2">
+              <Filter className="h-5 w-5 text-muted-foreground" />
+              <Select value={selectedProperty} onValueChange={setSelectedProperty}>
+                <SelectTrigger className="w-[250px]">
+                  <SelectValue placeholder="All Properties" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Properties</SelectItem>
+                  <SelectSeparator />
+                  {properties.map(property => (
+                    <SelectItem key={property.id} value={property.code}>
+                      {property.property_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* Date Range Buttons */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setDateRange(7)}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  dateRange === 7 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                7 Days
+              </button>
+              <button
+                onClick={() => setDateRange(30)}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  dateRange === 30 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                30 Days
+              </button>
+              <button
+                onClick={() => setDateRange(90)}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  dateRange === 90 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                90 Days
+              </button>
+            </div>
           </div>
         </div>
 
@@ -177,7 +264,14 @@ const RecommendationQualityAnalytics = () => {
           <Card className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Total Rejections</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Total Rejections
+                  {selectedProperty !== 'all' && (
+                    <span className="block text-xs text-blue-600 mt-1">
+                      (Filtered by property)
+                    </span>
+                  )}
+                </p>
                 <p className="text-3xl font-bold text-foreground mt-2">{totalRejections}</p>
               </div>
               <AlertCircle className="h-8 w-8 text-orange-500" />
@@ -277,6 +371,94 @@ const RecommendationQualityAnalytics = () => {
           </Card>
         </div>
 
+        {/* Property Rejection Rate Comparison - Only show when "All Properties" is selected */}
+        {selectedProperty === 'all' && propertyRejectionRates.length > 0 && (
+          <Card className="p-6">
+            <h2 className="text-xl font-semibold text-foreground mb-4">
+              Property Rejection Rates
+              <p className="text-sm text-muted-foreground font-normal mt-1">
+                Properties with higher rates may need better knowledge base data
+              </p>
+            </h2>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={propertyRejectionRates}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis 
+                  dataKey="property_name" 
+                  stroke="hsl(var(--muted-foreground))"
+                  angle={-45}
+                  textAnchor="end"
+                  height={100}
+                />
+                <YAxis stroke="hsl(var(--muted-foreground))" />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: 'hsl(var(--card))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '8px'
+                  }}
+                />
+                <Legend />
+                <Bar 
+                  dataKey="rejection_count" 
+                  fill="#ef4444" 
+                  name="Total Rejections" 
+                  radius={[8, 8, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+        )}
+
+        {/* Property-Specific Insights */}
+        {selectedProperty !== 'all' && (
+          <Card className="p-6 bg-blue-50 border-blue-200">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-6 w-6 text-blue-600 mt-1" />
+              <div>
+                <h3 className="text-lg font-semibold text-foreground mb-2">
+                  Property Analysis: {properties.find(p => p.code === selectedProperty)?.property_name}
+                </h3>
+                <div className="space-y-2 text-sm text-muted-foreground">
+                  <p>
+                    <strong>Total Rejections:</strong> {totalRejections} in the last {dateRange} days
+                  </p>
+                  {totalRejections > 0 && (
+                    <>
+                      <p>
+                        <strong>Most Problematic Categories:</strong>{' '}
+                        {rejectionsByCategory
+                          .sort((a, b) => b.total - a.total)
+                          .slice(0, 3)
+                          .map(cat => getCategoryDisplayName(cat.category))
+                          .join(', ')}
+                      </p>
+                      <div className="mt-3 p-3 bg-white rounded-md border border-blue-300">
+                        <p className="font-semibold text-foreground mb-2">💡 Recommendations:</p>
+                        <ul className="list-disc list-inside space-y-1">
+                          {totalRejections > 10 && (
+                            <li>This property has high rejection rates - review and enhance knowledge base</li>
+                          )}
+                          {rejectionsByCategory.some(cat => cat.successRate < 50) && (
+                            <li>Low retry success rate suggests fundamental data gaps</li>
+                          )}
+                          <li>Add more detailed information for top rejection categories</li>
+                          <li>Verify property amenities and local recommendations are complete</li>
+                        </ul>
+                      </div>
+                    </>
+                  )}
+                  {totalRejections === 0 && (
+                    <p className="text-green-600 font-semibold">
+                      ✅ No rejections found - this property's recommendations are performing well!
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </Card>
+        )}
+
         {/* Keyword Analysis */}
         <Card className="p-6">
           <h2 className="text-xl font-semibold text-foreground mb-4">Most Frequently Missing Keywords</h2>
@@ -304,21 +486,33 @@ const RecommendationQualityAnalytics = () => {
           <h2 className="text-xl font-semibold text-foreground mb-4">Recent Rejections</h2>
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-muted-foreground">Time</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-muted-foreground">Category</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-muted-foreground">Reason</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-muted-foreground">Guest Request</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-muted-foreground">Retry</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentRejections.map((rejection) => (
+            <thead>
+              <tr className="border-b border-border">
+                <th className="text-left py-3 px-4 text-sm font-semibold text-muted-foreground">Time</th>
+                {selectedProperty === 'all' && (
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-muted-foreground">Property</th>
+                )}
+                <th className="text-left py-3 px-4 text-sm font-semibold text-muted-foreground">Category</th>
+                <th className="text-left py-3 px-4 text-sm font-semibold text-muted-foreground">Reason</th>
+                <th className="text-left py-3 px-4 text-sm font-semibold text-muted-foreground">Guest Request</th>
+                <th className="text-left py-3 px-4 text-sm font-semibold text-muted-foreground">Retry</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentRejections.map((rejection) => {
+                const property = properties.find(p => p.code === rejection.property_id);
+                return (
                   <tr key={rejection.id} className="border-b border-border hover:bg-muted/50">
                     <td className="py-3 px-4 text-sm text-foreground">
                       {format(new Date(rejection.created_at), 'MMM d, h:mm a')}
                     </td>
+                    {selectedProperty === 'all' && (
+                      <td className="py-3 px-4">
+                        <Badge variant="outline" className="bg-blue-50">
+                          {property?.property_name || 'Unknown'}
+                        </Badge>
+                      </td>
+                    )}
                     <td className="py-3 px-4">
                       <Badge variant="outline">
                         {getCategoryDisplayName(rejection.requested_category)}
