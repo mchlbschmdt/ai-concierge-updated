@@ -337,17 +337,170 @@ export class PropertyDataExtractorEnhanced {
     return { response: response.trim(), hasData };
   }
   
-  private static extractSpecificInfo(text: string, ...keywords: string[]): string {
-    const sentences = text.split(/[.!?]+/);
-    const relevantSentences: string[] = [];
+  static extractPackingTips(property: Property, message: string, conversationContext?: any): { response: string; hasData: boolean } {
+    const lowerMessage = message.toLowerCase();
+    let response = '';
+    let hasData = false;
     
-    for (const sentence of sentences) {
-      const lowerSentence = sentence.toLowerCase();
-      if (keywords.some(keyword => lowerSentence.includes(keyword))) {
-        relevantSentences.push(sentence.trim());
+    // Check if we've already shared packing tips recently
+    const recentShare = ConversationMemoryManager.wasTopicRecentlyShared(conversationContext, 'packing_tips');
+    if (recentShare.shared) {
+      return {
+        response: `I shared packing suggestions earlier. ${recentShare.summary}. Need anything else?`,
+        hasData: true
+      };
+    }
+    
+    // Step 1: Check knowledge base for packing suggestions
+    if (property.knowledge_base) {
+      const kb = property.knowledge_base;
+      
+      // Look for packing-related information
+      const packingMatch = kb.match(/(?:pack|bring|essentials|need)[^.\n]{0,200}[.\n]/gi);
+      
+      if (packingMatch && packingMatch.length > 0) {
+        const relevantMatches = packingMatch.filter(match => 
+          match.toLowerCase().includes('bring') || 
+          match.toLowerCase().includes('pack') ||
+          match.toLowerCase().includes('need')
+        );
+        
+        if (relevantMatches.length > 0) {
+          response += `🎒 From the property guide:\n${relevantMatches.slice(0, 2).join('\n')}\n\n`;
+          hasData = true;
+        }
       }
     }
     
-    return relevantSentences.slice(0, 2).join('. ') + (relevantSentences.length > 0 ? '.' : '');
+    // Step 2: Check special notes for packing tips
+    if (property.special_notes) {
+      const packingInfo = this.extractSpecificInfo(
+        property.special_notes, 
+        'pack', 'bring', 'essential', 'need', 'provide', 'supplied'
+      );
+      if (packingInfo) {
+        response += packingInfo + '\n\n';
+        hasData = true;
+      }
+    }
+    
+    // Step 3: Check what amenities are provided to suggest what NOT to pack
+    let providedItems: string[] = [];
+    const amenitiesStr = typeof property.amenities === 'string' ? property.amenities : JSON.stringify(property.amenities || '');
+    const amenitiesLower = amenitiesStr.toLowerCase();
+    
+    if (amenitiesLower.includes('towel')) providedItems.push('towels');
+    if (amenitiesLower.includes('shampoo') || amenitiesLower.includes('toiletries')) providedItems.push('toiletries');
+    if (amenitiesLower.includes('coffee')) providedItems.push('coffee maker');
+    if (amenitiesLower.includes('washer')) providedItems.push('laundry facilities');
+    
+    if (providedItems.length > 0 && !hasData) {
+      response += `✅ Provided at property: ${providedItems.join(', ')}.\n\n`;
+      hasData = true;
+    }
+    
+    // Step 4: Location-based packing suggestions
+    if (property.address) {
+      const locationContext = PropertyLocationAnalyzer.analyzePropertyLocation(property.address);
+      
+      // Pool/beach property packing tips
+      if (amenitiesLower.includes('pool') || 
+          locationContext?.nearbyAttractions?.some((a: string) => a.includes('beach'))) {
+        if (!hasData) {
+          response += `🎒 Essential packing tips:\n`;
+        }
+        response += `• Swimwear & beach towels\n• Sunscreen (SPF 30+)\n• Sunglasses & hat\n• Light, breathable clothing\n`;
+        hasData = true;
+      }
+      
+      // Theme park proximity packing tips
+      if (locationContext.distanceToDisney || locationContext.distanceToUniversal) {
+        response += `\n🎢 Theme park tips:\n• Comfortable walking shoes\n• Portable phone charger\n• Small backpack\n• Refillable water bottle`;
+        hasData = true;
+      }
+    }
+    
+    return { response: response.trim(), hasData };
   }
-}
+  
+  static extractBestTimeToVisit(property: Property, message: string, conversationContext?: any): { response: string; hasData: boolean } {
+    const lowerMessage = message.toLowerCase();
+    let response = '';
+    let hasData = false;
+    
+    // Check for recent shares
+    const recentShare = ConversationMemoryManager.wasTopicRecentlyShared(conversationContext, 'best_time_visit');
+    if (recentShare.shared) {
+      return {
+        response: `As I mentioned, ${recentShare.summary}. Need details about a specific park?`,
+        hasData: true
+      };
+    }
+    
+    // Identify specific park
+    const park = this.identifyParkFromMessage(lowerMessage);
+    
+    // Check knowledge base for timing tips
+    if (property.knowledge_base) {
+      const kb = property.knowledge_base;
+      const timingMatch = kb.match(/(?:best time|crowd|busy|quiet|off-peak|rope drop)[^.\n]{0,250}[.\n]/gi);
+      
+      if (timingMatch && timingMatch.length > 0) {
+        response += `🎢 From local knowledge:\n${timingMatch[0].trim()}\n\n`;
+        hasData = true;
+      }
+    }
+    
+    // Get location-based park timing intelligence
+    const locationContext = PropertyLocationAnalyzer.analyzePropertyLocation(property.address);
+    
+    if (locationContext.distanceToDisney && (park === 'disney' || park === 'general')) {
+      response += this.getDisneyTimingAdvice(park);
+      hasData = true;
+    }
+    
+    if (locationContext.distanceToUniversal && (park === 'universal' || park === 'general')) {
+      if (hasData) response += '\n\n';
+      response += this.getUniversalTimingAdvice();
+      hasData = true;
+    }
+    
+    // General theme park timing wisdom
+    if (!hasData || park === 'general') {
+      response += '\n\n💡 General tips:\n';
+      response += '• Arrive at rope drop (30min before opening)\n';
+      response += '• Avoid Sat/Sun & holidays\n';
+      response += '• Mid-week (Tue-Thu) = shorter lines\n';
+      response += '• Early morning & late evening = best times\n';
+      response += '• Download park app for real-time wait times';
+      hasData = true;
+    }
+    
+    return { response: response.trim(), hasData };
+  }
+  
+  private static identifyParkFromMessage(lowerMessage: string): string {
+    if (lowerMessage.includes('magic kingdom') || lowerMessage.includes('mk')) return 'magic_kingdom';
+    if (lowerMessage.includes('epcot')) return 'epcot';
+    if (lowerMessage.includes('hollywood studios') || lowerMessage.includes('dhs')) return 'hollywood_studios';
+    if (lowerMessage.includes('animal kingdom') || lowerMessage.includes('dak')) return 'animal_kingdom';
+    if (lowerMessage.includes('universal') || lowerMessage.includes('islands')) return 'universal';
+    if (lowerMessage.includes('disney')) return 'disney';
+    return 'general';
+  }
+  
+  private static getDisneyTimingAdvice(park: string): string {
+    const advice: Record<string, string> = {
+      magic_kingdom: '🏰 Magic Kingdom:\n• Most crowded park\n• Best: Tue-Thu early morning\n• Avoid: Weekends & holidays\n• Tip: Arrive 45min before rope drop',
+      epcot: '🌍 EPCOT:\n• Less crowded than MK\n• Best: Mon-Wed\n• Festivals = bigger crowds\n• Tip: World Showcase opens at 11am',
+      hollywood_studios: '🎬 Hollywood Studios:\n• Rise of Resistance = arrive early\n• Best: Wed-Fri\n• Tip: Virtual queue at 7am',
+      animal_kingdom: '🦁 Animal Kingdom:\n• Closes earliest (usually 6-7pm)\n• Best: Mon-Tue early\n• Tip: Animals most active before 11am',
+      disney: '🎢 Disney Parks:\n• Magic Kingdom = most crowded\n• Best parks: EPCOT or Animal Kingdom\n• Best days: Tue-Thu\n• Worst days: Weekends & holidays'
+    };
+    
+    return advice[park] || advice.disney;
+  }
+  
+  private static getUniversalTimingAdvice(): string {
+    return '⚡ Universal Orlando:\n• Less crowded than Disney\n• Best: Tue-Thu\n• Hagrid\'s & Velocicoaster = early entry\n• Tip: Express Pass worth it on busy days';
+  }

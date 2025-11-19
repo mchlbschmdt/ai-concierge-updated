@@ -67,6 +67,24 @@ export class IntentRecognitionService {
       return { intent: 'ask_packing_tips', confidence: 0.9, isMultiPart: false };
     }
     
+    // NEW: Best time to visit
+    if (this.detectBestTimeToVisitIntent(lowerMessage)) {
+      console.log('🎢 Best time to visit intent detected:', message);
+      return { intent: 'ask_best_time_to_visit', confidence: 0.93, isMultiPart: false };
+    }
+    
+    // NEW: Transportation queries
+    if (this.detectTransportationIntent(lowerMessage)) {
+      console.log('🚗 Transportation intent detected:', message);
+      return { intent: 'ask_transportation', confidence: 0.92, isMultiPart: false };
+    }
+    
+    // NEW: Local events and activities
+    if (this.detectLocalEventsIntent(lowerMessage)) {
+      console.log('🎭 Local events intent detected:', message);
+      return { intent: 'ask_local_events', confidence: 0.91, isMultiPart: false };
+    }
+    
     // NEW: Coffee requests - HIGHEST PRIORITY for food-related queries
     if (this.detectCoffeeIntent(lowerMessage)) {
       console.log('☕ Coffee intent detected:', message);
@@ -88,8 +106,15 @@ export class IntentRecognitionService {
 
     // NEW: Food recommendations - AFTER coffee and attractions
     if (this.detectFoodRecommendationIntent(lowerMessage)) {
+      const kidsContext = this.detectKidsContext(lowerMessage);
       console.log('🍽️ Food recommendation intent detected:', message);
-      return { intent: 'ask_food_recommendations', confidence: 0.95, isMultiPart: false };
+      return { 
+        intent: 'ask_food_recommendations', 
+        confidence: 0.95, 
+        isMultiPart: false,
+        hasKids: kidsContext.hasKids,
+        kidAges: kidsContext.kidAges
+      };
     }
     
     // NEW: Amenity requests - AFTER food detection

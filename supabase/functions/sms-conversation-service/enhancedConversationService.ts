@@ -774,7 +774,8 @@ export class EnhancedConversationService {
       'ask_checkout_time', 'ask_checkin_time', 'ask_access', 
       'ask_wifi', 'ask_parking', 'ask_amenity', 'ask_emergency_contact',
       'ask_property_specific', 'ask_additional_services', 'ask_resort_amenities',
-      'ask_weather', 'ask_packing_tips',
+      'ask_weather', 'ask_packing_tips', 'ask_best_time_to_visit', 
+      'ask_transportation', 'ask_local_events',
       'troubleshoot_tv', 'troubleshoot_wifi', 'troubleshoot_equipment', 'troubleshoot_general'
     ];
     
@@ -788,6 +789,24 @@ export class EnhancedConversationService {
         extractionResult = PropertyDataExtractorEnhanced.extractAdditionalServices(property, message, conversationContext);
       } else if (intent === 'ask_resort_amenities') {
         extractionResult = PropertyDataExtractorEnhanced.extractResortAmenities(property, message, conversationContext);
+      } else if (intent === 'ask_weather') {
+        extractionResult = PropertyDataExtractorEnhanced.extractWeatherInfo(property, message, conversationContext);
+      } else if (intent === 'ask_packing_tips') {
+        extractionResult = PropertyDataExtractorEnhanced.extractPackingTips(property, message, conversationContext);
+      } else if (intent === 'ask_best_time_to_visit') {
+        extractionResult = PropertyDataExtractorEnhanced.extractBestTimeToVisit(property, message, conversationContext);
+      } else if (intent === 'ask_transportation') {
+        const destination = this.extractDestinationFromMessage(message);
+        const TransportationService = await import('./transportationService.ts').then(m => m.TransportationService);
+        const transportResponse = destination 
+          ? TransportationService.getTransportationOptions(property, destination, message)
+          : TransportationService.getGeneralTransportation(PropertyLocationAnalyzer.analyzePropertyLocation(property.address), 'the area');
+        extractionResult = { response: transportResponse, hasData: true };
+      } else if (intent === 'ask_local_events') {
+        const LocalEventsService = await import('./localEventsService.ts').then(m => m.LocalEventsService);
+        const eventsResponse = LocalEventsService.getLocalEvents(property, message);
+        extractionResult = { response: eventsResponse, hasData: true };
+      }
       } else if (intent === 'ask_weather') {
         extractionResult = PropertyDataExtractorEnhanced.extractWeatherInfo(property, message, conversationContext);
       } else if (intent === 'ask_packing_tips') {
@@ -1019,9 +1038,30 @@ export class EnhancedConversationService {
       return 'Need packing tips based on the weather? Just ask!';
     } else if (intent === 'ask_packing_tips') {
       return 'Want to know about local attractions or dining options? I\'m here to help!';
+    } else if (intent === 'ask_best_time_to_visit') {
+      return 'Want transportation options or directions to the parks? Just ask!';
+    } else if (intent === 'ask_transportation') {
+      return 'Need directions or best times to visit? I can help with that!';
+    } else if (intent === 'ask_local_events') {
+      return 'Need tickets or directions to any of these? I can help with that!';
     }
     
     return 'Hope that helps! Let me know if you need anything else! 😊';
+  }
+  
+  private extractDestinationFromMessage(message: string): string {
+    const lowerMsg = message.toLowerCase();
+    
+    // Extract "to [destination]" pattern
+    const toMatch = lowerMsg.match(/(?:to|get to|getting to)\s+([^?]+)/);
+    if (toMatch) return toMatch[1].trim();
+    
+    // Check for common destinations
+    if (lowerMsg.includes('disney')) return 'Disney';
+    if (lowerMsg.includes('universal')) return 'Universal';
+    if (lowerMsg.includes('airport')) return 'airport';
+    
+    return '';
   }
   
   /**
