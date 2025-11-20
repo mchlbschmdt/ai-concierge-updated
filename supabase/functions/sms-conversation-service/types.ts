@@ -36,6 +36,15 @@ export interface Property {
   cleaning_instructions?: string;
   special_notes?: string;
   knowledge_base?: string;
+  management_company_name?: string;
+  service_fees?: {
+    [key: string]: {
+      price?: number;
+      unit?: 'per_day' | 'per_booking' | 'per_person' | 'flat_fee';
+      description?: string;
+      notes?: string;
+    }
+  };
 }
 
 export interface ProcessMessageResult {

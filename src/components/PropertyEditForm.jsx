@@ -13,6 +13,13 @@ export default function PropertyEditForm({ formData, setFormData, handleUpdate, 
     return [];
   });
 
+  const [serviceFees, setServiceFees] = useState(() => {
+    if (formData.service_fees) {
+      return typeof formData.service_fees === 'string' ? JSON.parse(formData.service_fees) : formData.service_fees;
+    }
+    return {};
+  });
+
   const commonAmenities = [
     'WiFi', 'Kitchen', 'Washer/Dryer', 'Parking', 'Pool', 'Hot Tub', 'BBQ Grill',
     'Ocean View', 'Mountain View', 'Fireplace', 'Air Conditioning', 'Heating',
@@ -32,6 +39,30 @@ export default function PropertyEditForm({ formData, setFormData, handleUpdate, 
     setFormData({ ...formData, [field]: value });
   };
 
+  const handleServiceFeeChange = (serviceKey, field, value) => {
+    const updatedFees = { ...serviceFees };
+    if (!updatedFees[serviceKey]) {
+      updatedFees[serviceKey] = {};
+    }
+    updatedFees[serviceKey][field] = value;
+    setServiceFees(updatedFees);
+    setFormData({ ...formData, service_fees: JSON.stringify(updatedFees) });
+  };
+
+  const removeServiceFee = (serviceKey) => {
+    const updatedFees = { ...serviceFees };
+    delete updatedFees[serviceKey];
+    setServiceFees(updatedFees);
+    setFormData({ ...formData, service_fees: JSON.stringify(updatedFees) });
+  };
+
+  const addServiceFee = (serviceKey) => {
+    if (!serviceKey || serviceFees[serviceKey]) return;
+    const updatedFees = { ...serviceFees, [serviceKey]: { price: '', unit: 'per_day', description: '', notes: '' } };
+    setServiceFees(updatedFees);
+    setFormData({ ...formData, service_fees: JSON.stringify(updatedFees) });
+  };
+
   return (
     <div className="space-y-6 max-h-96 overflow-y-auto">
       {/* Basic Information */}
@@ -49,6 +80,11 @@ export default function PropertyEditForm({ formData, setFormData, handleUpdate, 
             value={formData.address || ''} 
             onChange={(e) => handleInputChange('address', e.target.value)} 
             placeholder="Address" 
+          />
+          <Input 
+            value={formData.management_company_name || ''} 
+            onChange={(e) => handleInputChange('management_company_name', e.target.value)} 
+            placeholder="Management Company or Host Name (e.g., Lauren & Mike)" 
           />
           <div className="grid grid-cols-2 gap-3">
             <Input 
@@ -158,8 +194,93 @@ export default function PropertyEditForm({ formData, setFormData, handleUpdate, 
         </div>
       </div>
 
-      {/* Additional Information */}
+      {/* Service Fees */}
       <div className="bg-purple-50 p-4 rounded-lg">
+        <h3 className="font-medium mb-3 flex items-center gap-2">
+          <FileText size={18} /> Service Fees & Offerings
+        </h3>
+        <div className="space-y-4">
+          {Object.entries(serviceFees).map(([serviceKey, service]) => (
+            <div key={serviceKey} className="bg-white p-3 rounded border border-purple-200">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-medium text-sm">{serviceKey.replace(/_/g, ' ').toUpperCase()}</span>
+                <Button 
+                  type="button"
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => removeServiceFee(serviceKey)}
+                  className="text-red-500 h-6 px-2"
+                >
+                  Remove
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <Input 
+                  type="number"
+                  value={service.price || ''} 
+                  onChange={(e) => handleServiceFeeChange(serviceKey, 'price', parseFloat(e.target.value) || '')} 
+                  placeholder="Price" 
+                  className="text-sm"
+                />
+                <select
+                  value={service.unit || 'per_day'}
+                  onChange={(e) => handleServiceFeeChange(serviceKey, 'unit', e.target.value)}
+                  className="text-sm border border-gray-300 rounded-md px-2"
+                >
+                  <option value="per_day">Per Day</option>
+                  <option value="per_booking">Per Booking</option>
+                  <option value="per_person">Per Person</option>
+                  <option value="flat_fee">Flat Fee</option>
+                </select>
+              </div>
+              <Input 
+                value={service.description || ''} 
+                onChange={(e) => handleServiceFeeChange(serviceKey, 'description', e.target.value)} 
+                placeholder="Description (e.g., includes waterpark, pools, gym)" 
+                className="text-sm mb-2"
+              />
+              <Textarea
+                value={service.notes || ''}
+                onChange={(e) => handleServiceFeeChange(serviceKey, 'notes', e.target.value)}
+                placeholder="Notes (e.g., Must be scheduled 24 hours in advance)"
+                className="text-sm resize-y min-h-[50px]"
+              />
+            </div>
+          ))}
+          
+          <div className="flex gap-2">
+            <select
+              id="newServiceKey"
+              className="flex-1 text-sm border border-gray-300 rounded-md px-2 py-1"
+            >
+              <option value="">Select service to add...</option>
+              <option value="pool_heat">Pool Heating</option>
+              <option value="resort_amenities">Resort Amenities</option>
+              <option value="grocery_delivery">Grocery Delivery</option>
+              <option value="private_chef">Private Chef</option>
+              <option value="massage">Massage Service</option>
+              <option value="cleaning">Additional Cleaning</option>
+            </select>
+            <Button 
+              type="button"
+              variant="outline" 
+              size="sm"
+              onClick={() => {
+                const select = document.getElementById('newServiceKey');
+                if (select.value) {
+                  addServiceFee(select.value);
+                  select.value = '';
+                }
+              }}
+            >
+              + Add Service
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Additional Information */}
+      <div className="bg-yellow-50 p-4 rounded-lg">
         <h3 className="font-medium mb-3 flex items-center gap-2">
           <AlertTriangle size={18} /> Additional Information
         </h3>

@@ -2684,6 +2684,126 @@ export class EnhancedConversationService {
   /**
    * Handle service requests that require host coordination
    */
+  /**
+   * Extract service information with 3-tier fallback system
+   */
+  private async extractServiceInfo(
+    property: Property,
+    serviceType: string
+  ): Promise<{
+    price?: number;
+    unit?: string;
+    description?: string;
+    notes?: string;
+    managementName?: string;
+    contactInfo?: string;
+    source: 'structured' | 'ai_extracted' | 'generic';
+  }> {
+    const managementName = property.management_company_name || 'your property management';
+    const contactInfo = property.emergency_contact || 'your host';
+    
+    // Priority 1: Check structured service_fees
+    if (property.service_fees && property.service_fees[serviceType]) {
+      const serviceData = property.service_fees[serviceType];
+      console.log(`✅ Found structured data for ${serviceType}`);
+      return {
+        ...serviceData,
+        managementName,
+        contactInfo,
+        source: 'structured'
+      };
+    }
+    
+    // Priority 2: AI extraction from knowledge base
+    console.log(`🤖 Attempting AI extraction for ${serviceType}`);
+    const aiExtracted = await this.aiExtractServiceInfo(property, serviceType, managementName);
+    if (aiExtracted) {
+      return {
+        ...aiExtracted,
+        managementName,
+        contactInfo,
+        source: 'ai_extracted'
+      };
+    }
+    
+    // Priority 3: Generic fallback
+    console.log(`ℹ️ Using generic fallback for ${serviceType}`);
+    return {
+      managementName,
+      contactInfo,
+      source: 'generic'
+    };
+  }
+
+  /**
+   * Use AI to extract service information from knowledge base
+   */
+  private async aiExtractServiceInfo(
+    property: Property,
+    serviceType: string,
+    managementName: string
+  ): Promise<{ price?: number; unit?: string; description?: string; notes?: string } | null> {
+    const knowledgeText = [
+      property.knowledge_base,
+      property.special_notes,
+      property.local_recommendations
+    ].filter(Boolean).join('\n\n').substring(0, 2000);
+    
+    if (!knowledgeText || knowledgeText.length < 20) {
+      return null;
+    }
+    
+    try {
+      const prompt = `Extract ${serviceType.replace(/_/g, ' ')} service information from this property knowledge base.
+      
+Knowledge Base:
+${knowledgeText}
+
+Return ONLY a JSON object with these fields (or empty object if not found):
+{
+  "price": number (if mentioned),
+  "unit": "per_day" | "per_booking" | "per_person" | "flat_fee" (if mentioned),
+  "description": "brief description" (if mentioned),
+  "notes": "any special instructions" (if mentioned)
+}`;
+
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: 'You are a data extraction assistant. Return only valid JSON.' },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.3,
+          max_tokens: 300
+        }),
+      });
+
+      if (!response.ok) {
+        console.warn('AI extraction failed:', response.status);
+        return null;
+      }
+
+      const data = await response.json();
+      const extracted = JSON.parse(data.choices[0].message.content);
+      
+      if (Object.keys(extracted).length > 0 && (extracted.price || extracted.description)) {
+        console.log('✅ AI successfully extracted service info');
+        return extracted;
+      }
+      
+      return null;
+    } catch (error) {
+      console.warn('AI extraction error:', error);
+      return null;
+    }
+  }
+
   private async handleServiceRequest(
     intent: string,
     property: Property,
@@ -2691,42 +2811,94 @@ export class EnhancedConversationService {
     conversationContext: any,
     phoneNumber: string
   ): Promise<any> {
-    const hostContact = property.emergency_contact || '+1 (321) 340-6333';
-    const hostNames = 'Lauren & Mike';
-    
     let response = '';
     
     switch (intent) {
-      case 'request_pool_heat_service':
-        response = `I can help you coordinate pool heating! 🏊‍♀️\n\n` +
-          `Pool heating is $25 per day and needs to be arranged through ${hostNames}.\n\n` +
-          `Please text them at ${hostContact} to add this to your reservation, or I can notify them for you. ` +
-          `Would you like me to send them a message?`;
-        break;
+      case 'request_pool_heat_service': {
+        const serviceInfo = await this.extractServiceInfo(property, 'pool_heat');
         
-      case 'request_amenity_access':
+        if (serviceInfo.source === 'structured' || serviceInfo.source === 'ai_extracted') {
+          const priceText = serviceInfo.price 
+            ? `$${serviceInfo.price}${serviceInfo.unit ? ' ' + serviceInfo.unit.replace(/_/g, ' ') : ''}`
+            : 'Contact for pricing';
+          
+          response = `I can help you coordinate pool heating! 🏊‍♀️\n\n` +
+            `Pool heating is ${priceText} and needs to be arranged through ${serviceInfo.managementName}.\n\n`;
+          
+          if (serviceInfo.notes) {
+            response += `${serviceInfo.notes}\n\n`;
+          }
+          
+          response += `Please text them at ${serviceInfo.contactInfo} to add this to your reservation, or I can notify them for you. ` +
+            `Would you like me to send them a message?`;
+        } else {
+          response = `I can help coordinate pool heating! Please contact ${serviceInfo.managementName} at ${serviceInfo.contactInfo} ` +
+            `for pricing and availability. They'll be happy to set this up for you.`;
+        }
+        break;
+      }
+        
+      case 'request_amenity_access': {
         const amenityType = this.detectRequestedAmenity(message);
+        const serviceInfo = await this.extractServiceInfo(property, 'resort_amenities');
         
         if (amenityType === 'waterpark' || amenityType === 'resort_amenities') {
-          response = `Great choice! Resort amenity access includes the waterpark, pools, golf, gym, tennis, and more. 🎉\n\n` +
-            `**Cost:** $65 per day (covers your entire group for the length of stay)\n\n` +
-            `${hostNames} will submit your names to Reunion Resort to activate your access. ` +
-            `Contact them at ${hostContact} to get this set up!\n\n` +
-            `Your resort access card is located inside the home - you'll need it for gym access and security gate re-entry.`;
+          if (serviceInfo.source === 'structured' || serviceInfo.source === 'ai_extracted') {
+            const priceText = serviceInfo.price 
+              ? `$${serviceInfo.price}${serviceInfo.unit ? ' ' + serviceInfo.unit.replace(/_/g, ' ') : ''}`
+              : 'Contact for pricing';
+            
+            const description = serviceInfo.description || 'the waterpark, pools, golf, gym, tennis, and more';
+            
+            response = `Great choice! Resort amenity access includes ${description}. 🎉\n\n` +
+              `**Cost:** ${priceText}\n\n`;
+            
+            if (serviceInfo.notes) {
+              response += `${serviceInfo.notes}\n\n`;
+            } else {
+              response += `${serviceInfo.managementName} will coordinate your access. `;
+            }
+            
+            response += `Contact them at ${serviceInfo.contactInfo} to get this set up!`;
+          } else {
+            response = `Great choice! Please contact ${serviceInfo.managementName} at ${serviceInfo.contactInfo} ` +
+              `to arrange resort amenity access. They'll provide pricing and get everything set up for you.`;
+          }
         } else {
-          response = `I can help coordinate that! Please contact ${hostNames} at ${hostContact} to arrange access. ` +
+          response = `I can help coordinate that! Please contact ${serviceInfo.managementName} at ${serviceInfo.contactInfo} to arrange access. ` +
             `They'll get everything set up for you.`;
         }
         break;
+      }
         
-      case 'request_additional_service':
-        const serviceType = this.detectRequestedService(message);
-        response = `${hostNames} offer ${serviceType} services! Contact them at ${hostContact} for pricing and availability. ` +
-          `They'll be happy to coordinate this for your stay. 🌟`;
+      case 'request_additional_service': {
+        const detectedService = this.detectRequestedService(message);
+        const serviceKey = detectedService.toLowerCase().replace(/\s+/g, '_');
+        const serviceInfo = await this.extractServiceInfo(property, serviceKey);
+        
+        if (serviceInfo.source === 'structured' || serviceInfo.source === 'ai_extracted') {
+          const priceText = serviceInfo.price 
+            ? `$${serviceInfo.price}${serviceInfo.unit ? ' ' + serviceInfo.unit.replace(/_/g, ' ') : ''}`
+            : 'available';
+          
+          response = `${serviceInfo.managementName} offer ${detectedService} services! ${priceText ? `Pricing: ${priceText}.` : ''}\n\n`;
+          
+          if (serviceInfo.description) {
+            response += `${serviceInfo.description}\n\n`;
+          }
+          
+          response += `Contact them at ${serviceInfo.contactInfo} for details and to coordinate. 🌟`;
+        } else {
+          response = `${serviceInfo.managementName} may offer ${detectedService} services! Contact them at ${serviceInfo.contactInfo} ` +
+            `for pricing and availability. They'll be happy to coordinate this for your stay. 🌟`;
+        }
         break;
+      }
         
-      default:
-        response = `I can help coordinate that with ${hostNames}. Contact them at ${hostContact} for assistance!`;
+      default: {
+        const serviceInfo = await this.extractServiceInfo(property, 'general');
+        response = `I can help coordinate that with ${serviceInfo.managementName}. Contact them at ${serviceInfo.contactInfo} for assistance!`;
+      }
     }
     
     // Track this as shared information
