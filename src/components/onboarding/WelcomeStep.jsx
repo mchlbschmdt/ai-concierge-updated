@@ -8,13 +8,22 @@ export const WelcomeStep = ({ formData, updateFormData, onNext, onSaveProgress }
   const [fullName, setFullName] = useState(formData.fullName || '');
   const [avatarFile, setAvatarFile] = useState(formData.avatarFile || null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleNext = async () => {
     setLoading(true);
+    setError('');
+    
     updateFormData({ fullName, avatarFile });
-    await onSaveProgress({ fullName, avatarFile });
+    const success = await onSaveProgress({ fullName, avatarFile });
+    
     setLoading(false);
-    onNext();
+    
+    if (success) {
+      onNext();
+    } else {
+      setError('Failed to save your information. Please try again.');
+    }
   };
 
   return (
@@ -41,29 +50,35 @@ export const WelcomeStep = ({ formData, updateFormData, onNext, onSaveProgress }
             placeholder="Enter your full name"
             className="w-full"
           />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-2">
-            Profile Picture (Optional)
-          </label>
-          <AvatarUpload
-            currentAvatar={formData.avatarUrl}
-            onAvatarChange={setAvatarFile}
-            preview={avatarFile}
-          />
-        </div>
       </div>
 
-      <div className="flex justify-end">
-        <Button
-          onClick={handleNext}
-          disabled={!fullName.trim() || loading}
-          className="min-w-32"
-        >
-          {loading ? 'Saving...' : 'Continue'}
-        </Button>
+      <div>
+        <label className="block text-sm font-medium text-foreground mb-2">
+          Profile Picture (Optional)
+        </label>
+        <AvatarUpload
+          currentAvatar={formData.avatarUrl}
+          onAvatarChange={setAvatarFile}
+          preview={avatarFile}
+        />
       </div>
+    </div>
+
+    {error && (
+      <div className="text-destructive text-sm text-center p-3 bg-destructive/10 rounded-md">
+        {error}
+      </div>
+    )}
+
+    <div className="flex justify-end">
+      <Button
+        onClick={handleNext}
+        disabled={!fullName.trim() || loading}
+        className="min-w-32"
+      >
+        {loading ? 'Saving...' : 'Continue'}
+      </Button>
+    </div>
     </div>
   );
 };

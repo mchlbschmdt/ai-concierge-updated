@@ -77,7 +77,18 @@ export const useOnboarding = () => {
   }, [currentUser]);
 
   const saveProgress = useCallback(async (stepData) => {
-    if (!currentUser?.id) return;
+    if (!currentUser?.id) {
+      console.error('No current user found - auth may not be ready yet');
+      
+      // Wait a bit and retry once
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      if (!currentUser?.id) {
+        console.error('Still no current user after retry');
+        showToast('Authentication error. Please try logging in again.', 'error');
+        return false;
+      }
+    }
     
     try {
       setLoading(true);
@@ -94,9 +105,11 @@ export const useOnboarding = () => {
         await profileService.uploadAvatar(currentUser.id, stepData.avatarFile);
       }
       
+      return true;
     } catch (error) {
       console.error('Error saving progress:', error);
       showToast('Failed to save progress', 'error');
+      return false;
     } finally {
       setLoading(false);
     }
