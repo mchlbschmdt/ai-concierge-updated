@@ -25,15 +25,6 @@ export default function EmailManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredMessages, setFilteredMessages] = useState([]);
   const [showSwipeHint, setShowSwipeHint] = useState(true);
-  const { toast } = useToast();
-  const [properties, setProperties] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedPropertyId, setSelectedPropertyId] = useState('');
-  const [selectedProperty, setSelectedProperty] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [selectedMessage, setSelectedMessage] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filteredMessages, setFilteredMessages] = useState([]);
 
   useEffect(() => {
     const fetchProperties = async () => {
