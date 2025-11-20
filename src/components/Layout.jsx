@@ -3,14 +3,14 @@ import React from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { User, ChevronDown } from "lucide-react";
+import { User, ChevronDown, Shield } from "lucide-react";
 import { ProfileCompletionBadge } from './profile/ProfileCompletionBadge';
 import Sidebar from "./Sidebar";
 import Footer from "./Footer";
 
 export default function Layout({ children }) {
   const navigate = useNavigate();
-  const { currentUser, signOut } = useAuth();
+  const { currentUser, signOut, isSuperAdmin } = useAuth();
   const { showToast } = useToast();
   const [showDropdown, setShowDropdown] = React.useState(false);
 
@@ -45,6 +45,13 @@ export default function Layout({ children }) {
           </div>
           
           <div className="flex items-center gap-4">
+            {isSuperAdmin && (
+              <div className="flex items-center gap-2 px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm font-medium">
+                <Shield className="h-4 w-4" />
+                Super Admin
+              </div>
+            )}
+            
             <button className="p-2 rounded-full hover:bg-white/10">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" viewBox="0 0 20 20" fill="currentColor">
                 <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
