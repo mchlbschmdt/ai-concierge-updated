@@ -1,6 +1,5 @@
 
 import React, { useState } from 'react';
-import { Button } from "@/components/ui/button";
 import { Loader2, Save } from "lucide-react";
 import Layout from '../components/Layout';
 import useAddPropertyForm from '../hooks/useAddPropertyForm';
@@ -11,11 +10,16 @@ import EmergencyContactSection from '../components/property-forms/EmergencyConta
 import HouseRulesAmenitiesSection from '../components/property-forms/HouseRulesAmenitiesSection';
 import AdditionalInfoSection from '../components/property-forms/AdditionalInfoSection';
 import FileUploadSection from '../components/property-forms/FileUploadSection';
+import { SaveButton } from '@/components/ui/SaveButton';
+import { FormErrorAlert } from '@/components/ui/FormErrorAlert';
+import { FieldError } from '@/components/ui/FieldError';
 
 export default function AddProperty() {
   const {
     form,
     loading,
+    error,
+    fieldErrors,
     uploadProgress,
     handleChange,
     handleAmenityToggle,
@@ -31,11 +35,23 @@ export default function AddProperty() {
 
   return (
     <Layout>
-      <div className="p-6 max-w-4xl mx-auto bg-white rounded-lg shadow-sm">
-        <h1 className="text-2xl font-bold mb-6 text-primary">Add New Vacation Rental Property</h1>
+      <div className="p-6 max-w-4xl mx-auto bg-background rounded-lg shadow-sm">
+        <h1 className="text-2xl font-bold mb-6 text-foreground">Add New Vacation Rental Property</h1>
+        
+        {error && (
+          <FormErrorAlert 
+            error={error} 
+            onDismiss={() => {}} 
+            className="mb-6"
+          />
+        )}
+        
         <form className="space-y-6" onSubmit={onSubmit}>
-          
-          <BasicInfoSection form={form} handleChange={handleChange} />
+          <div>
+            <BasicInfoSection form={form} handleChange={handleChange} />
+            {fieldErrors.property_name && <FieldError error={fieldErrors.property_name} />}
+            {fieldErrors.address && <FieldError error={fieldErrors.address} />}
+          </div>
           
           <WifiAccessSection form={form} handleChange={handleChange} />
           
@@ -56,23 +72,16 @@ export default function AddProperty() {
             uploadProgress={uploadProgress} 
           />
           
-          <Button 
-            type="submit" 
-            className="w-full flex items-center justify-center gap-2 py-3 text-lg"
+          <SaveButton
+            type="submit"
+            loading={loading}
             disabled={loading}
+            loadingText={selectedFile ? 'Uploading...' : 'Adding Property...'}
+            className="w-full py-3 text-lg"
+            size="lg"
           >
-            {loading ? (
-              <>
-                <Loader2 className="h-5 w-5 animate-spin" />
-                {selectedFile ? 'Uploading...' : 'Adding Property...'}
-              </>
-            ) : (
-              <>
-                <Save className="h-5 w-5" />
-                Save Property
-              </>
-            )}
-          </Button>
+            Save Property
+          </SaveButton>
         </form>
       </div>
     </Layout>

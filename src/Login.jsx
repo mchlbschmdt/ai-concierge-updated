@@ -347,27 +347,32 @@ export default function Login() {
             />
           </div>
 
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="rememberMe"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
+              />
+              <label 
+                htmlFor="rememberMe" 
+                className="text-sm text-gray-700 cursor-pointer select-none"
+              >
+                Keep me signed in
+              </label>
+              <span className="text-xs text-gray-500">
+                ({rememberMe ? 'Persistent' : 'Session only'})
+              </span>
+            </div>
             <button
               type="button"
               onClick={() => setShowForgotPassword(true)}
-              className="text-sm text-blue-600 hover:text-blue-700"
+              className="text-sm text-blue-600 hover:text-blue-700 transition-colors"
             >
-              Forgot your password?
+              Forgot password?
             </button>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="rememberMe"
-              checked={rememberMe}
-              onChange={(e) => setRememberMe(e.target.checked)}
-              className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-            />
-            <label htmlFor="rememberMe" className="text-sm text-gray-700 cursor-pointer">
-              Remember me
-            </label>
           </div>
 
           <button
