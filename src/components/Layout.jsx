@@ -3,8 +3,11 @@ import React from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { User, ChevronDown, Shield } from "lucide-react";
+import { User, ChevronDown, Shield, Menu, Search, Command } from "lucide-react";
 import { ProfileCompletionBadge } from './profile/ProfileCompletionBadge';
+import { useSidebar } from '@/context/SidebarContext';
+import { useCommandPalette } from '@/hooks/useCommandPalette';
+import CommandPalette from './CommandPalette';
 import Sidebar from "./Sidebar";
 import Footer from "./Footer";
 
@@ -13,6 +16,8 @@ export default function Layout({ children }) {
   const { currentUser, signOut, isSuperAdmin } = useAuth();
   const { showToast } = useToast();
   const [showDropdown, setShowDropdown] = React.useState(false);
+  const { toggleSidebar, isMobile } = useSidebar();
+  const { isOpen: isCommandPaletteOpen, setIsOpen: setIsCommandPaletteOpen } = useCommandPalette();
 
   const handleLogout = async () => {
     try {
@@ -34,21 +39,43 @@ export default function Layout({ children }) {
       <Sidebar />
       <div className="flex flex-col flex-1">
         {/* App Bar/Header */}
-        <header className="h-16 bg-gradient-to-r from-primary to-secondary border-b border-gray-200 px-8 flex items-center justify-between shadow-md">
+        <header className="h-16 bg-gradient-to-r from-primary to-secondary border-b border-gray-200 px-4 md:px-8 flex items-center justify-between shadow-md">
           <div className="flex items-center gap-3">
+            {/* Hamburger Menu Button (mobile only) */}
+            <button
+              onClick={toggleSidebar}
+              className="lg:hidden p-2 rounded-lg hover:bg-white/10 transition-colors"
+              aria-label="Toggle navigation menu"
+            >
+              <Menu className="h-6 w-6 text-white" />
+            </button>
+
             <span className="text-3xl font-bold font-display text-white drop-shadow-sm">
               <span className="sr-only">Hostly AI Concierge</span>🏨
             </span>
-            <h1 className="text-xl font-semibold font-display text-white tracking-tight">
+            <h1 className="text-xl font-semibold font-display text-white tracking-tight hidden sm:block">
               Hostly AI Concierge
             </h1>
           </div>
           
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 md:gap-4">
+            {/* Command Palette Button */}
+            <button
+              onClick={() => setIsCommandPaletteOpen(true)}
+              className="hidden md:flex items-center gap-2 px-3 py-1.5 text-sm text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+              aria-label="Quick search"
+            >
+              <Search className="h-4 w-4" />
+              <span className="hidden lg:inline">Quick search</span>
+              <kbd className="hidden lg:inline-flex items-center gap-1 px-1.5 py-0.5 text-xs bg-white/20 rounded">
+                <Command className="h-3 w-3" />K
+              </kbd>
+            </button>
+
             {isSuperAdmin && (
-              <div className="flex items-center gap-2 px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm font-medium">
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm font-medium">
                 <Shield className="h-4 w-4" />
-                Super Admin
+                <span className="hidden md:inline">Super Admin</span>
               </div>
             )}
             
