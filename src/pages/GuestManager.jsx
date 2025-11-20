@@ -176,9 +176,9 @@ export default function GuestManager() {
 
   return (
     <Layout>
-      <div className="p-6 space-y-6">
-        <h2 className="text-2xl font-bold">Add New Guest</h2>
-        <div className="flex flex-col md:flex-row gap-4">
+      <div className="p-4 sm:p-6 space-y-6">
+        <h2 className="text-xl sm:text-2xl font-bold">Add New Guest</h2>
+        <div className="flex flex-col sm:flex-row gap-4">
           <Input
             placeholder="Guest Name"
             value={name}

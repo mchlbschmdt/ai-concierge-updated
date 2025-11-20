@@ -156,10 +156,10 @@ export default function EmailManagement() {
 
   return (
     <Layout>
-      <div className="container mx-auto p-4">
-        <h1 className="text-2xl font-bold text-primary mb-6">Communication Management</h1>
+      <div className="container mx-auto p-4 sm:p-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-primary mb-6">Communication Management</h1>
         
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
           <div className="col-span-1">
             <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
               <h2 className="text-lg font-semibold mb-4">Property Selection</h2>
@@ -181,7 +181,7 @@ export default function EmailManagement() {
               
               {selectedPropertyId && (
                 <Tabs defaultValue="email" className="w-full">
-                  <TabsList className="grid w-full grid-cols-3">
+                  <TabsList className="grid w-full grid-cols-3 gap-1">
                     <TabsTrigger value="email">Email</TabsTrigger>
                     <TabsTrigger value="sms">SMS</TabsTrigger>
                     <TabsTrigger value="setup">Setup</TabsTrigger>
