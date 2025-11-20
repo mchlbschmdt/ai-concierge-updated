@@ -135,8 +135,6 @@ export default function Dashboard() {
           <CommonQuestionsAnalytics />
         </div>
 
-        {/* SMS Integration Section */}
-        <div>
         {/* Recent Activity */}
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">
