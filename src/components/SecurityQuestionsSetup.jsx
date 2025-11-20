@@ -1,7 +1,7 @@
 
 import { useState } from "react";
 import { supabase } from "../integrations/supabase/client";
-import { useToast } from "./ui/use-toast";
+import { useToast } from "../context/ToastContext";
 import { Button } from "./ui/button";
 
 const SECURITY_QUESTIONS = [
@@ -21,7 +21,7 @@ export default function SecurityQuestionsSetup({ onComplete, onSkip }) {
   const [questions, setQuestions] = useState(['', '', '']);
   const [answers, setAnswers] = useState(['', '', '']);
   const [loading, setLoading] = useState(false);
-  const { toast } = useToast();
+  const { showToast } = useToast();
 
   const handleQuestionChange = (index, value) => {
     const newQuestions = [...questions];
@@ -39,20 +39,12 @@ export default function SecurityQuestionsSetup({ onComplete, onSkip }) {
     e.preventDefault();
     
     if (questions.some(q => !q) || answers.some(a => !a)) {
-      toast({
-        variant: "destructive",
-        title: "All fields required",
-        description: "Please fill in all security questions and answers."
-      });
+      showToast("Please fill in all security questions and answers.", "error");
       return;
     }
 
     if (new Set(questions).size !== 3) {
-      toast({
-        variant: "destructive",
-        title: "Duplicate questions",
-        description: "Please select different questions for each field."
-      });
+      showToast("Please select different questions for each field.", "error");
       return;
     }
 
@@ -89,19 +81,12 @@ export default function SecurityQuestionsSetup({ onComplete, onSkip }) {
 
       if (error) throw error;
 
-      toast({
-        title: "Security questions saved",
-        description: "Your security questions have been set up successfully."
-      });
+      showToast("Your security questions have been set up successfully!", "success");
       
       onComplete();
     } catch (err) {
       console.error("Error saving security questions:", err);
-      toast({
-        variant: "destructive",
-        title: "Setup failed",
-        description: err.message || "Failed to save security questions."
-      });
+      showToast(err.message || "Failed to save security questions.", "error");
     } finally {
       setLoading(false);
     }

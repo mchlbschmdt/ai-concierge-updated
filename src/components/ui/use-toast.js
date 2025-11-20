@@ -1,60 +1,25 @@
+/**
+ * DEPRECATED: This file is kept for backward compatibility only.
+ * Please use @/context/ToastContext directly in new code.
+ * 
+ * This wrapper redirects to the centralized ToastContext.
+ */
 
-import { useState, useCallback, useEffect } from 'react';
-
-// Simple in-memory toast state
-let toastQueue = [];
-let listeners = [];
-
-const addToast = (toast) => {
-  const id = Date.now() + Math.random();
-  const newToast = { 
-    ...toast, 
-    id,
-    timestamp: Date.now()
-  };
-  
-  toastQueue = [...toastQueue, newToast];
-  listeners.forEach(listener => listener(toastQueue));
-  
-  // Auto remove after 5 seconds
-  setTimeout(() => {
-    toastQueue = toastQueue.filter(t => t.id !== id);
-    listeners.forEach(listener => listener(toastQueue));
-  }, 5000);
-};
-
-const removeToast = (id) => {
-  toastQueue = toastQueue.filter(t => t.id !== id);
-  listeners.forEach(listener => listener(toastQueue));
-};
+import { useToast as useToastContext } from '../../context/ToastContext';
 
 export function useToast() {
-  const [toasts, setToasts] = useState(toastQueue);
-
-  const subscribe = useCallback((listener) => {
-    listeners.push(listener);
-    return () => {
-      listeners = listeners.filter(l => l !== listener);
-    };
-  }, []);
-
-  useEffect(() => {
-    const unsubscribe = subscribe(setToasts);
-    return unsubscribe;
-  }, [subscribe]);
-
-  const toast = useCallback(({ title, description, variant = 'default' }) => {
-    console.log(`Toast: ${title} - ${description} (${variant})`);
-    addToast({ title, description, variant });
-  }, []);
-
-  const dismiss = useCallback((id) => {
-    removeToast(id);
-  }, []);
-
+  const { showToast } = useToastContext();
+  
+  // Provide backward-compatible toast function that matches old API
+  const toast = ({ title, description, variant }) => {
+    const message = description || title;
+    const type = variant === 'destructive' ? 'error' : 'success';
+    showToast(message, type);
+  };
+  
   return {
     toast,
-    dismiss,
-    toasts
+    dismiss: () => {}, // No-op for backward compatibility
+    toasts: [] // Empty array for backward compatibility
   };
 }
