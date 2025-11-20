@@ -1,12 +1,10 @@
 
 import React from "react";
 import Layout from "../components/Layout";
-import SmsIntegration from "../components/SmsIntegration";
-import TestSmsIntegration from "../components/TestSmsIntegration";
 import HostAiChat from "../components/HostAiChat";
 import CommonQuestionsAnalytics from "../components/CommonQuestionsAnalytics";
 import { Link } from "react-router-dom";
-import { Building, Users, MessageSquare, Mail, Phone, Plus, BarChart3, Bot, TrendingUp } from "lucide-react";
+import { Building, Users, MessageSquare, Mail, Phone, Plus, BarChart3, Bot, TrendingUp, TestTube } from "lucide-react";
 
 export default function Dashboard() {
   const quickActions = [
@@ -25,10 +23,10 @@ export default function Dashboard() {
       color: "bg-green-500 hover:bg-green-600"
     },
     {
-      title: "Guest Management",
-      description: "Add and manage guest information",
-      icon: Users,
-      path: "/guests",
+      title: "Test AI Responses",
+      description: "Test how your AI concierge responds to guests",
+      icon: TestTube,
+      path: "/test-responses",
       color: "bg-purple-500 hover:bg-purple-600"
     },
     {
@@ -139,13 +137,6 @@ export default function Dashboard() {
 
         {/* SMS Integration Section */}
         <div>
-          <h2 className="text-xl font-semibold mb-4">SMS Communication</h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <SmsIntegration />
-            <TestSmsIntegration />
-          </div>
-        </div>
-
         {/* Recent Activity */}
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">

@@ -1,7 +1,4 @@
 
-/* Font imports for Plus Jakarta Sans & Playfair Display (as on hostlyai.co) */
-@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Playfair+Display:wght@700;800&display=swap");
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -10,13 +7,17 @@
   body {
     margin: 0;
     padding: 0;
-    font-family: 'Plus Jakarta Sans', sans-serif;
-    @apply text-body bg-background antialiased;
+    font-family: Tahoma, Verdana, Geneva, sans-serif;
+    color: #16213d;
+    background: #dde4ff;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Playfair Display', serif;
-    @apply text-heading;
+    font-family: Tahoma, Verdana, Geneva, sans-serif;
+    font-weight: 700;
+    color: #16213d;
   }
 }
 
@@ -115,7 +116,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-gray-soft rounded hover:bg-gray-dark;
+  background: #e2e5f3;
+  border-radius: 0.375rem;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #263361;
 }
 
 /* Focus Visible for Accessibility */
