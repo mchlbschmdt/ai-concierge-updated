@@ -11,6 +11,7 @@ import { PasswordChangeForm } from '@/components/profile/PasswordChangeForm';
 import { ProfileCompletionCard } from '@/components/profile/ProfileCompletionCard';
 import { ResumeOnboardingSection } from '@/components/profile/ResumeOnboardingSection';
 import SecurityQuestionsSetup from '@/components/SecurityQuestionsSetup';
+import Layout from '@/components/Layout';
 import { User, Lock, Shield, Settings, Calendar, Trash2 } from 'lucide-react';
 
 export default function ProfileSettings() {
@@ -156,7 +157,8 @@ export default function ProfileSettings() {
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-4xl">
+    <Layout>
+      <div className="container mx-auto p-6 max-w-4xl">
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-foreground">Profile Settings</h1>
         <p className="text-muted-foreground mt-1">
@@ -365,6 +367,7 @@ export default function ProfileSettings() {
           </div>
         </TabsContent>
       </Tabs>
-    </div>
+      </div>
+    </Layout>
   );
 }
