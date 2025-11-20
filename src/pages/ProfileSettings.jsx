@@ -3,7 +3,8 @@ import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { profileService } from '@/services/profileService';
 import { profileCompletionService } from '@/services/profileCompletionService';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { SwipeableTabs, TabsContent } from '@/components/ui/swipeable-tabs';
+import SwipeIndicator from '@/components/ui/SwipeIndicator';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AvatarUpload } from '@/components/profile/AvatarUpload';
@@ -24,8 +25,8 @@ export default function ProfileSettings() {
   const [showSecurityQuestions, setShowSecurityQuestions] = useState(false);
   const [completion, setCompletion] = useState(null);
   const [skippedSteps, setSkippedSteps] = useState([]);
+  const [showSwipeHint, setShowSwipeHint] = useState(true);
   
-  // Refs for scrolling to incomplete sections
   const profileTabRef = useRef(null);
   const securityTabRef = useRef(null);
 
@@ -174,7 +175,6 @@ export default function ProfileSettings() {
         />
       )}
 
-      {/* Resume Onboarding Section */}
       {skippedSteps.length > 0 && (
         <ResumeOnboardingSection
           skippedSteps={skippedSteps}
@@ -183,25 +183,16 @@ export default function ProfileSettings() {
         />
       )}
 
-      <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="profile">
-            <User className="w-4 h-4 mr-2" />
-            Profile
-          </TabsTrigger>
-          <TabsTrigger value="password">
-            <Lock className="w-4 h-4 mr-2" />
-            Password
-          </TabsTrigger>
-          <TabsTrigger value="security">
-            <Shield className="w-4 h-4 mr-2" />
-            Security
-          </TabsTrigger>
-          <TabsTrigger value="account">
-            <Settings className="w-4 h-4 mr-2" />
-            Account
-          </TabsTrigger>
-        </TabsList>
+      <SwipeableTabs 
+        defaultValue="profile" 
+        tabs={[
+          { value: 'profile', label: 'Profile', icon: <User className="w-4 h-4" /> },
+          { value: 'password', label: 'Password', icon: <Lock className="w-4 h-4" /> },
+          { value: 'security', label: 'Security', icon: <Shield className="w-4 h-4" /> },
+          { value: 'account', label: 'Account', icon: <Settings className="w-4 h-4" /> }
+        ]}
+        className="w-full"
+      >
 
         <TabsContent value="profile" className="space-y-6 mt-6">
           <div className="bg-card border border-border rounded-lg p-6">
@@ -366,7 +357,9 @@ export default function ProfileSettings() {
             </p>
           </div>
         </TabsContent>
-      </Tabs>
+      </SwipeableTabs>
+
+      <SwipeIndicator show={showSwipeHint} onDismiss={() => setShowSwipeHint(false)} />
       </div>
     </Layout>
   );

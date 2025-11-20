@@ -5,12 +5,19 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { SwipeableTabs, TabsContent } from '@/components/ui/swipeable-tabs';
+import SwipeIndicator from '@/components/ui/SwipeIndicator';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2, Save, Plus, Trash2, FileText, Eye } from 'lucide-react';
 
 const KnowledgeBaseEditor = () => {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [property, setProperty] = useState(null);
+  const [showSwipeHint, setShowSwipeHint] = useState(true);
   const navigate = useNavigate();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -254,19 +261,19 @@ const KnowledgeBaseEditor = () => {
           </Button>
         </div>
 
-        <Tabs defaultValue="details" className="w-full">
-          <TabsList className="grid w-full grid-cols-7">
-            <TabsTrigger value="details">Details</TabsTrigger>
-            <TabsTrigger value="amenities">Amenities</TabsTrigger>
-            <TabsTrigger value="rules">House Rules</TabsTrigger>
-            <TabsTrigger value="checkout">Checkout</TabsTrigger>
-            <TabsTrigger value="resort">Resort</TabsTrigger>
-            <TabsTrigger value="faq">FAQs</TabsTrigger>
-            <TabsTrigger value="preview">
-              <Eye className="mr-2 h-4 w-4" />
-              Preview
-            </TabsTrigger>
-          </TabsList>
+        <SwipeableTabs 
+          defaultValue="details" 
+          tabs={[
+            { value: 'details', label: 'Details' },
+            { value: 'amenities', label: 'Amenities' },
+            { value: 'rules', label: 'House Rules' },
+            { value: 'checkout', label: 'Checkout' },
+            { value: 'resort', label: 'Resort' },
+            { value: 'faq', label: 'FAQs' },
+            { value: 'preview', label: 'Preview', icon: <Eye className="h-4 w-4" /> }
+          ]}
+          className="w-full"
+        >
 
           <TabsContent value="details">
             <Card>
@@ -540,7 +547,9 @@ const KnowledgeBaseEditor = () => {
               </CardContent>
             </Card>
           </TabsContent>
-        </Tabs>
+        </SwipeableTabs>
+
+        <SwipeIndicator show={showSwipeHint} onDismiss={() => setShowSwipeHint(false)} />
       </div>
     </Layout>
   );

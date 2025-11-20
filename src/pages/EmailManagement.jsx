@@ -10,10 +10,21 @@ import EmailDraftGenerator from '../components/EmailDraftGenerator';
 import SmsIntegration from '../components/SmsIntegration';
 import PropertyCodeManager from '../components/PropertyCodeManager';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SwipeableTabs, TabsContent } from "@/components/ui/swipeable-tabs";
+import SwipeIndicator from "@/components/ui/SwipeIndicator";
 import { Search, MessageSquare, Mail, MessageCircle, Settings } from "lucide-react";
 
 export default function EmailManagement() {
+  const { toast } = useToast();
+  const [properties, setProperties] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedPropertyId, setSelectedPropertyId] = useState('');
+  const [selectedProperty, setSelectedProperty] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [selectedMessage, setSelectedMessage] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredMessages, setFilteredMessages] = useState([]);
+  const [showSwipeHint, setShowSwipeHint] = useState(true);
   const { toast } = useToast();
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -180,12 +191,15 @@ export default function EmailManagement() {
               </Select>
               
               {selectedPropertyId && (
-                <Tabs defaultValue="email" className="w-full">
-                  <TabsList className="grid w-full grid-cols-3 gap-1">
-                    <TabsTrigger value="email">Email</TabsTrigger>
-                    <TabsTrigger value="sms">SMS</TabsTrigger>
-                    <TabsTrigger value="setup">Setup</TabsTrigger>
-                  </TabsList>
+                <SwipeableTabs 
+                  defaultValue="email" 
+                  tabs={[
+                    { value: 'email', label: 'Email', icon: <Mail className="h-4 w-4" /> },
+                    { value: 'sms', label: 'SMS', icon: <MessageCircle className="h-4 w-4" /> },
+                    { value: 'setup', label: 'Setup', icon: <Settings className="h-4 w-4" /> }
+                  ]}
+                  className="w-full"
+                >
                   <TabsContent value="email">
                     <GmailIntegration 
                       propertyId={selectedPropertyId}
@@ -203,7 +217,7 @@ export default function EmailManagement() {
                       <PropertyCodeManager />
                     </div>
                   </TabsContent>
-                </Tabs>
+                </SwipeableTabs>
               )}
             </div>
           </div>
@@ -282,6 +296,8 @@ export default function EmailManagement() {
             </div>
           </div>
         </div>
+
+        <SwipeIndicator show={showSwipeHint} onDismiss={() => setShowSwipeHint(false)} />
       </div>
     </Layout>
   );

@@ -35,6 +35,9 @@ import AdminDashboard from "./pages/AdminDashboard";
 import AdminPropertiesView from "./pages/AdminPropertiesView";
 import UserSmsTest from "./pages/UserSmsTest";
 import SystemDiagnostics from "./pages/SystemDiagnostics";
+import InstallApp from "./pages/InstallApp";
+import PwaUpdatePrompt from "./components/PwaUpdatePrompt";
+import PwaInstallPrompt from "./components/PwaInstallPrompt";
 
 const queryClient = new QueryClient();
 
@@ -169,6 +172,13 @@ const App = () => (
                 </ProtectedRoute>
               } />
               
+              {/* PWA Install Page */}
+              <Route path="/install" element={
+                <ProtectedRoute>
+                  <InstallApp />
+                </ProtectedRoute>
+              } />
+              
               {/* Backward compatibility redirects */}
               <Route path="/dashboard" element={<Navigate to="/" replace />} />
               <Route path="/dashboard/*" element={<Navigate to="/" replace />} />
@@ -176,6 +186,8 @@ const App = () => (
               {/* 404 Catch-all - must be last */}
               <Route path="*" element={<NotFound />} />
                 </Routes>
+                <PwaUpdatePrompt />
+                <PwaInstallPrompt />
               </ToastProvider>
             </GmailAuthProvider>
           </SidebarProvider>
