@@ -132,6 +132,11 @@ export default function Layout({ children }) {
         <main className="p-6 flex-1 overflow-y-auto">{children}</main>
         <Footer />
       </div>
+      
+      <CommandPalette 
+        isOpen={isCommandPaletteOpen} 
+        onClose={() => setIsCommandPaletteOpen(false)} 
+      />
     </div>
   );
 }
