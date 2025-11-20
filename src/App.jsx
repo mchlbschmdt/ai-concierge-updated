@@ -5,6 +5,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { GmailAuthProvider } from "./context/GmailAuthContext";
 import { ToastProvider } from "./context/ToastContext";
+import { SidebarProvider } from "./context/SidebarContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./Login";
 import Dashboard from "./pages/Dashboard";
@@ -42,9 +43,10 @@ const App = () => (
     <TooltipProvider>
       <BrowserRouter>
         <AuthProvider>
-          <GmailAuthProvider>
-            <ToastProvider>
-              <Routes>
+          <SidebarProvider>
+            <GmailAuthProvider>
+              <ToastProvider>
+                <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/reset-password" element={<ResetPassword />} />
@@ -173,9 +175,10 @@ const App = () => (
               
               {/* 404 Catch-all - must be last */}
               <Route path="*" element={<NotFound />} />
-            </Routes>
-            </ToastProvider>
-          </GmailAuthProvider>
+                </Routes>
+              </ToastProvider>
+            </GmailAuthProvider>
+          </SidebarProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
