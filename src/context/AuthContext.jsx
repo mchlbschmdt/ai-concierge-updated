@@ -18,47 +18,70 @@ export const AuthProvider = ({ children }) => {
       const { data: { session }, error } = await supabase.auth.getSession();
       if (error) {
         console.error("Error getting session:", error);
-      } else {
-        setSession(session);
-        setCurrentUser(session?.user || null);
-        
-        // Fetch user roles if logged in
-        if (session?.user) {
+      }
+      
+      setSession(session);
+      setCurrentUser(session?.user || null);
+      setLoading(false); // Set loading false immediately after session is confirmed
+      
+      // Fetch user roles asynchronously (non-blocking)
+      if (session?.user) {
+        const fetchRolesWithTimeout = async () => {
           try {
-            const roles = await roleService.getUserRoles(session.user.id);
+            const timeoutPromise = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Role fetch timeout')), 5000)
+            );
+            const rolesPromise = roleService.getUserRoles(session.user.id);
+            
+            const roles = await Promise.race([rolesPromise, timeoutPromise]);
             setUserRoles(roles);
             setIsSuperAdmin(roles.includes('super_admin'));
           } catch (err) {
             console.error("Error fetching roles:", err);
+            // Set default user role on error
+            setUserRoles([]);
+            setIsSuperAdmin(false);
           }
-        }
+        };
+        
+        fetchRolesWithTimeout();
       }
-      setLoading(false);
     };
 
     getSession();
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
         console.log("Auth state changed:", event, session);
         setSession(session);
         setCurrentUser(session?.user || null);
+        setLoading(false); // Set loading false immediately
         
+        // Fetch roles asynchronously (non-blocking)
         if (session?.user) {
-          try {
-            const roles = await roleService.getUserRoles(session.user.id);
-            setUserRoles(roles);
-            setIsSuperAdmin(roles.includes('super_admin'));
-          } catch (err) {
-            console.error("Error fetching roles:", err);
-          }
+          const fetchRolesWithTimeout = async () => {
+            try {
+              const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Role fetch timeout')), 5000)
+              );
+              const rolesPromise = roleService.getUserRoles(session.user.id);
+              
+              const roles = await Promise.race([rolesPromise, timeoutPromise]);
+              setUserRoles(roles);
+              setIsSuperAdmin(roles.includes('super_admin'));
+            } catch (err) {
+              console.error("Error fetching roles:", err);
+              setUserRoles([]);
+              setIsSuperAdmin(false);
+            }
+          };
+          
+          fetchRolesWithTimeout();
         } else {
           setUserRoles([]);
           setIsSuperAdmin(false);
         }
-        
-        setLoading(false);
       }
     );
 
