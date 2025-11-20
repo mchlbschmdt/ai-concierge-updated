@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { supabase } from "../integrations/supabase/client";
-import { useToast } from "../components/ui/use-toast";
+import { useToast } from "../context/ToastContext";
 
 export default function ResetPassword() {
   const [password, setPassword] = useState("");
@@ -12,7 +12,7 @@ export default function ResetPassword() {
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const { showToast } = useToast();
 
   useEffect(() => {
     const checkTokenValidity = async () => {
@@ -62,11 +62,7 @@ export default function ResetPassword() {
 
           if (error) {
             console.error("Token hash verification error:", error);
-            toast({
-              variant: "destructive",
-              title: "Invalid reset link",
-              description: "This password reset link is invalid or has expired. Please request a new one."
-            });
+            showToast("This password reset link is invalid or has expired. Please request a new one.", "error");
             setValidToken(false);
           } else {
             console.log("Token hash verification successful");
@@ -88,11 +84,7 @@ export default function ResetPassword() {
 
           if (error) {
             console.error("Session verification error:", error);
-            toast({
-              variant: "destructive",
-              title: "Invalid reset link",
-              description: "This password reset link is invalid or has expired. Please request a new one."
-            });
+            showToast("This password reset link is invalid or has expired. Please request a new one.", "error");
             setValidToken(false);
           } else {
             console.log("Session verification successful");
@@ -104,11 +96,7 @@ export default function ResetPassword() {
         }
       } else {
         console.log("Missing or invalid tokens for password reset");
-        toast({
-          variant: "destructive",
-          title: "Invalid reset link",
-          description: "This password reset link is missing required parameters. Please request a new one."
-        });
+        showToast("This password reset link is missing required parameters. Please request a new one.", "error");
         setValidToken(false);
       }
       
@@ -116,26 +104,18 @@ export default function ResetPassword() {
     };
 
     checkTokenValidity();
-  }, [searchParams, location, toast]);
+  }, [searchParams, location, showToast]);
 
   const handleResetPassword = async (e) => {
     e.preventDefault();
     
     if (password !== confirmPassword) {
-      toast({
-        variant: "destructive",
-        title: "Passwords don't match",
-        description: "Please make sure both passwords are the same."
-      });
+      showToast("Passwords don't match. Please make sure both passwords are the same.", "error");
       return;
     }
 
     if (password.length < 6) {
-      toast({
-        variant: "destructive",
-        title: "Password too short",
-        description: "Password must be at least 6 characters long."
-      });
+      showToast("Password must be at least 6 characters long.", "error");
       return;
     }
 
@@ -151,21 +131,14 @@ export default function ResetPassword() {
         throw error;
       }
 
-      toast({
-        title: "Password updated successfully",
-        description: "You can now sign in with your new password."
-      });
+      showToast("Password updated successfully! You can now sign in with your new password.", "success");
       
       // Sign out to clear the recovery session
       await supabase.auth.signOut();
       navigate("/login");
     } catch (err) {
       console.error("Password reset error:", err);
-      toast({
-        variant: "destructive",
-        title: "Password reset failed",
-        description: err.message || "An error occurred while updating your password."
-      });
+      showToast(err.message || "An error occurred while updating your password.", "error");
     } finally {
       setLoading(false);
     }
