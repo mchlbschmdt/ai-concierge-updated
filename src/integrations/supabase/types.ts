@@ -328,8 +328,10 @@ export type Database = {
           id: string
           knowledge_base: string | null
           local_recommendations: string | null
+          management_company_name: string | null
           parking_instructions: string | null
           property_name: string
+          service_fees: Json | null
           special_notes: string | null
           updated_at: string
           user_id: string | null
@@ -351,8 +353,10 @@ export type Database = {
           id?: string
           knowledge_base?: string | null
           local_recommendations?: string | null
+          management_company_name?: string | null
           parking_instructions?: string | null
           property_name: string
+          service_fees?: Json | null
           special_notes?: string | null
           updated_at?: string
           user_id?: string | null
@@ -374,8 +378,10 @@ export type Database = {
           id?: string
           knowledge_base?: string | null
           local_recommendations?: string | null
+          management_company_name?: string | null
           parking_instructions?: string | null
           property_name?: string
+          service_fees?: Json | null
           special_notes?: string | null
           updated_at?: string
           user_id?: string | null
