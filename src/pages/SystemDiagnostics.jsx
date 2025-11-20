@@ -9,38 +9,35 @@ import ApiKeyResolutionGuide from "../components/ApiKeyResolutionGuide";
 import DeploymentVerifier from "../components/DeploymentVerifier";
 import EdgeFunctionDiagnostics from "../components/EdgeFunctionDiagnostics";
 import ClientSideApiTest from "../components/ClientSideApiTest";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SwipeableTabs, TabsContent } from "@/components/ui/swipeable-tabs";
+import SwipeIndicator from "@/components/ui/SwipeIndicator";
 import { Shield, Activity, MessageSquare, Wrench } from "lucide-react";
 
 export default function SystemDiagnostics() {
+  const [showSwipeHint, setShowSwipeHint] = useState(true);
+
   return (
     <Layout>
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-2">
-            <Shield className="h-8 w-8 text-error" />
-            <h1 className="text-3xl font-bold text-heading">System Diagnostics</h1>
+            <Shield className="h-6 sm:h-8 w-6 sm:w-8 text-error" />
+            <h1 className="text-2xl sm:text-3xl font-bold text-heading">System Diagnostics</h1>
           </div>
-          <p className="text-muted-foreground">
+          <p className="text-sm sm:text-base text-muted-foreground">
             Super Admin testing and debugging tools
           </p>
         </div>
 
-        <Tabs defaultValue="api" className="w-full">
-          <TabsList className="mb-6">
-            <TabsTrigger value="api" className="flex items-center gap-2">
-              <Wrench className="h-4 w-4" />
-              API Testing
-            </TabsTrigger>
-            <TabsTrigger value="sms" className="flex items-center gap-2">
-              <MessageSquare className="h-4 w-4" />
-              SMS Testing
-            </TabsTrigger>
-            <TabsTrigger value="health" className="flex items-center gap-2">
-              <Activity className="h-4 w-4" />
-              System Health
-            </TabsTrigger>
-          </TabsList>
+        <SwipeableTabs 
+          defaultValue="api" 
+          tabs={[
+            { value: 'api', label: 'API Testing', icon: <Wrench className="h-4 w-4" /> },
+            { value: 'sms', label: 'SMS Testing', icon: <MessageSquare className="h-4 w-4" /> },
+            { value: 'health', label: 'System Health', icon: <Activity className="h-4 w-4" /> }
+          ]}
+          className="w-full"
+        >
 
           <TabsContent value="api" className="space-y-6">
             <div className="bg-card rounded-lg shadow-card p-6">
@@ -92,7 +89,9 @@ export default function SystemDiagnostics() {
               <EdgeFunctionDiagnostics />
             </div>
           </TabsContent>
-        </Tabs>
+        </SwipeableTabs>
+
+        <SwipeIndicator show={showSwipeHint} onDismiss={() => setShowSwipeHint(false)} />
       </div>
     </Layout>
   );

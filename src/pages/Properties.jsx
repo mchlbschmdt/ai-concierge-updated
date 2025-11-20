@@ -7,7 +7,7 @@ import PropertyGrid from "../components/properties/PropertyGrid";
 import PropertyLoadingState from "../components/properties/PropertyLoadingState";
 import PropertyEmptyState from "../components/properties/PropertyEmptyState";
 import PropertyErrorState from "../components/properties/PropertyErrorState";
-import PropertySearch from "../components/properties/PropertySearch";
+import PropertySearchDrawer from "../components/properties/PropertySearchDrawer";
 import { useProperties } from '../hooks/useProperties';
 
 export default function Properties() {
@@ -89,11 +89,11 @@ export default function Properties() {
 
         {properties.length > 0 && (
           <div className="mb-6">
-            <PropertySearch 
-              search={search}
-              setSearch={setSearch}
-              suggestions={suggestions}
-              handleSuggestionSelect={handleSuggestionSelect}
+            <PropertySearchDrawer 
+              onSearch={(query) => setSearch(query)}
+              onFilterChange={(filters) => {
+                console.log('Filters applied:', filters);
+              }}
             />
           </div>
         )}
