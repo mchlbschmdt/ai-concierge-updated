@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "../integrations/supabase/client";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
 
 export default function Register() {
@@ -14,7 +14,7 @@ export default function Register() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const { showToast } = useToast();
   const { currentUser } = useAuth();
 
   // Redirect if already authenticated
@@ -117,19 +117,13 @@ export default function Register() {
       }
 
       if (data.user && !data.user.email_confirmed_at) {
-        toast({
-          title: "Registration successful!",
-          description: "Please check your email to confirm your account before signing in."
-        });
+        showToast("Registration successful! Please check your email to confirm your account.", "success");
         // Navigate to login if email confirmation is required
         setTimeout(() => {
           navigate("/login");
         }, 2000);
       } else {
-        toast({
-          title: "Registration successful!",
-          description: "Let's set up your account."
-        });
+        showToast("Registration successful! Let's set up your account.", "success");
         // Navigate to onboarding for immediate setup
         setTimeout(() => {
           navigate("/onboarding");
@@ -138,11 +132,7 @@ export default function Register() {
     } catch (err) {
       console.error("Registration error:", err);
       setError(err.message || "Failed to create account");
-      toast({
-        variant: "destructive",
-        title: "Registration Failed",
-        description: err.message || "Failed to create account"
-      });
+      showToast(err.message || "Failed to create account", "error");
     } finally {
       setIsLoading(false);
     }
