@@ -29,6 +29,9 @@ import SmsConversationsAdmin from "./pages/SmsConversationsAdmin";
 import NotFound from "./pages/NotFound";
 import Onboarding from "./pages/Onboarding";
 import ProfileSettings from "./pages/ProfileSettings";
+import UserManagement from "./pages/UserManagement";
+import AdminDashboard from "./pages/AdminDashboard";
+import AdminPropertiesView from "./pages/AdminPropertiesView";
 
 const queryClient = new QueryClient();
 
@@ -132,6 +135,23 @@ const App = () => (
               <Route path="/sms-conversations" element={
                 <ProtectedRoute>
                   <SmsConversationsAdmin />
+                </ProtectedRoute>
+              } />
+              
+              {/* Admin Routes */}
+              <Route path="/admin" element={
+                <ProtectedRoute requireSuperAdmin>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              } />
+              <Route path="/admin/users" element={
+                <ProtectedRoute requireSuperAdmin>
+                  <UserManagement />
+                </ProtectedRoute>
+              } />
+              <Route path="/admin/properties" element={
+                <ProtectedRoute requireSuperAdmin>
+                  <AdminPropertiesView />
                 </ProtectedRoute>
               } />
               
