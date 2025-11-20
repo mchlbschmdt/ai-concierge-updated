@@ -89,14 +89,27 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      console.error("Error signing out:", error);
-      return { error };
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error("Error signing out:", error);
+        return { error };
+      }
+      
+      // Clear all session data
+      setUserRoles([]);
+      setIsSuperAdmin(false);
+      setSession(null);
+      setCurrentUser(null);
+      
+      // Clear remember me preference
+      localStorage.removeItem('rememberMe');
+      
+      return { error: null };
+    } catch (err) {
+      console.error("Unexpected error during sign out:", err);
+      return { error: err };
     }
-    setUserRoles([]);
-    setIsSuperAdmin(false);
-    return { error: null };
   };
 
   const value = {

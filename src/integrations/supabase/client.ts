@@ -6,25 +6,71 @@ import type { Database } from './types';
 const SUPABASE_URL = "https://zutwyyepahbbvrcbsbke.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dHd5eWVwYWhiYnZyY2JzYmtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0MDg3MDMsImV4cCI6MjA2MDk4NDcwM30.kUje38W2D2vXjYos6laaZ_rOzADLGiftoHAztFqSP9g";
 
-// Custom storage that checks sessionStorage first (for "remember me" functionality)
+// Enhanced custom storage with validation and error handling
 const customStorage = {
   getItem: (key: string) => {
-    const sessionValue = sessionStorage.getItem(key);
-    if (sessionValue) return sessionValue;
-    return localStorage.getItem(key);
-  },
-  setItem: (key: string, value: string) => {
-    // Check if we should use sessionStorage (when remember me is false)
-    const rememberMe = localStorage.getItem('rememberMe');
-    if (rememberMe === 'false') {
-      sessionStorage.setItem(key, value);
-    } else {
-      localStorage.setItem(key, value);
+    try {
+      // Check sessionStorage first (temporary sessions)
+      const sessionValue = sessionStorage.getItem(key);
+      if (sessionValue) {
+        // Validate session data before returning
+        try {
+          JSON.parse(sessionValue);
+          return sessionValue;
+        } catch {
+          // Corrupted session data, clear it
+          sessionStorage.removeItem(key);
+        }
+      }
+      
+      // Check localStorage (persistent sessions)
+      const localValue = localStorage.getItem(key);
+      if (localValue) {
+        try {
+          JSON.parse(localValue);
+          return localValue;
+        } catch {
+          // Corrupted session data, clear it
+          localStorage.removeItem(key);
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error reading session:', error);
+      return null;
     }
   },
+  
+  setItem: (key: string, value: string) => {
+    try {
+      // Validate that we're storing valid JSON
+      JSON.parse(value);
+      
+      // Check if we should use sessionStorage (when remember me is false)
+      const rememberMe = localStorage.getItem('rememberMe');
+      
+      if (rememberMe === 'false') {
+        sessionStorage.setItem(key, value);
+        // Clear from localStorage to prevent duplication
+        localStorage.removeItem(key);
+      } else {
+        localStorage.setItem(key, value);
+        // Clear from sessionStorage to prevent duplication
+        sessionStorage.removeItem(key);
+      }
+    } catch (error) {
+      console.error('Error storing session:', error);
+    }
+  },
+  
   removeItem: (key: string) => {
-    sessionStorage.removeItem(key);
-    localStorage.removeItem(key);
+    try {
+      sessionStorage.removeItem(key);
+      localStorage.removeItem(key);
+    } catch (error) {
+      console.error('Error removing session:', error);
+    }
   }
 };
 

@@ -1,13 +1,13 @@
 
 import { useState } from 'react';
 import { useNavigate } from "react-router-dom";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/context/ToastContext";
 import { addProperty, uploadFile } from '../services/propertyService';
+import { useFormState } from './useFormState';
 
 export default function useAddPropertyForm() {
   const navigate = useNavigate();
-  const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
+  const { showToast } = useToast();
   const [uploadProgress, setUploadProgress] = useState(0);
   
   const [form, setForm] = useState({
@@ -43,93 +43,93 @@ export default function useAddPropertyForm() {
     }));
   };
 
-  const handleSubmit = async (file) => {
-    try {
-      setLoading(true);
-      
-      if (!form.property_name || !form.address) {
-        toast({
-          title: "Missing Information",
-          description: "Please fill in property name and address.",
-          variant: "destructive"
-        });
-        return;
-      }
+  // Validation function
+  const validateForm = () => {
+    const errors = {};
+    
+    if (!form.property_name || form.property_name.trim() === '') {
+      errors.property_name = 'Property name is required';
+    }
+    
+    if (!form.address || form.address.trim() === '') {
+      errors.address = 'Address is required';
+    }
+    
+    return {
+      isValid: Object.keys(errors).length === 0,
+      errors,
+      message: Object.keys(errors).length > 0 ? 'Please fill in all required fields' : null
+    };
+  };
 
-      const propertyCode = form.code || `PROP-${Date.now()}`;
+  // Submit handler
+  const submitProperty = async (file) => {
+    const propertyCode = form.code || `PROP-${Date.now()}`;
+    
+    const propertyData = {
+      property_name: form.property_name,
+      code: propertyCode,
+      address: form.address,
+      check_in_time: form.check_in_time,
+      check_out_time: form.check_out_time,
+      knowledge_base: form.knowledge_base,
+      local_recommendations: form.local_recommendations
+    };
+    
+    const result = await addProperty(propertyData);
+    
+    if (file) {
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return 90;
+          }
+          return prev + 10;
+        });
+      }, 200);
       
-      console.log("Saving property with data:", {
-        ...form,
-        code: propertyCode
-      });
-      
-      // Only include fields that exist in the database schema
-      const propertyData = {
-        property_name: form.property_name,
-        code: propertyCode,
-        address: form.address,
-        check_in_time: form.check_in_time,
-        check_out_time: form.check_out_time,
-        knowledge_base: form.knowledge_base,
-        local_recommendations: form.local_recommendations
-      };
-      
-      const result = await addProperty(propertyData);
-      
-      console.log("Property added:", result);
-      
-      if (file) {
-        const progressInterval = setInterval(() => {
-          setUploadProgress(prev => {
-            if (prev >= 90) {
-              clearInterval(progressInterval);
-              return 90;
-            }
-            return prev + 10;
-          });
-        }, 200);
-        
-        try {
-          const fileResult = await uploadFile(result.propertyId, file);
-          console.log("File uploaded:", fileResult);
-          clearInterval(progressInterval);
-          setUploadProgress(100);
-        } catch (fileError) {
-          console.error("File upload failed:", fileError);
-          clearInterval(progressInterval);
-          setUploadProgress(0);
-          // Don't fail the whole process if file upload fails
-          toast({
-            title: "Property Added",
-            description: "Property saved successfully, but file upload failed. You can add files later.",
-            variant: "default"
-          });
-        }
+      try {
+        await uploadFile(result.propertyId, file);
+        clearInterval(progressInterval);
+        setUploadProgress(100);
+      } catch (fileError) {
+        console.error("File upload failed:", fileError);
+        clearInterval(progressInterval);
+        setUploadProgress(0);
+        showToast("Property saved successfully, but file upload failed. You can add files later.", "warning");
       }
-      
-      toast({
-        title: "Success!",
-        description: "Property has been successfully added.",
-      });
-      
-      // Navigate to properties with timestamp to force refresh
-      navigate("/dashboard/properties?t=" + Date.now());
-    } catch (error) {
-      console.error("Error adding property:", error);
-      toast({
-        title: "Error",
-        description: `Failed to add property: ${error.message}`,
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
+    }
+    
+    showToast("Property has been successfully added!", "success");
+    navigate("/dashboard/properties?t=" + Date.now());
+    
+    return result;
+  };
+
+  // Use the form state hook
+  const {
+    loading,
+    error,
+    fieldErrors,
+    handleSubmit: handleFormSubmit
+  } = useFormState(submitProperty, {
+    validateBeforeSubmit: validateForm,
+    onError: (err) => {
+      showToast(`Failed to add property: ${err.message}`, "error");
       setUploadProgress(0);
     }
+  });
+
+  const handleSubmit = async (file) => {
+    return await handleFormSubmit(file);
   };
 
   return {
     form,
     loading,
+    error,
+    fieldErrors,
     uploadProgress,
     handleChange,
     handleAmenityToggle,

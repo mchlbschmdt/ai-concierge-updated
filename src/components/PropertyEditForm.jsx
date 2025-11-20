@@ -1,11 +1,12 @@
 
 import React, { useState } from 'react';
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Wifi, Key, MapPin, Car, Phone, FileText, Home, AlertTriangle } from "lucide-react";
 import { validateServiceFees, sanitizeServiceFees } from "@/utils/inputValidation";
 import { useToast } from "@/context/ToastContext";
+import { SaveButton } from "@/components/ui/SaveButton";
+import { FormLoadingOverlay } from "@/components/ui/FormLoadingOverlay";
 
 export default function PropertyEditForm({ formData, setFormData, handleUpdate, handleCancel }) {
   const [amenities, setAmenities] = useState(() => {
@@ -24,6 +25,8 @@ export default function PropertyEditForm({ formData, setFormData, handleUpdate, 
 
   const [validationErrors, setValidationErrors] = useState({});
   const [validationWarnings, setValidationWarnings] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
   const { showToast } = useToast();
 
   const commonAmenities = [
@@ -74,29 +77,42 @@ export default function PropertyEditForm({ formData, setFormData, handleUpdate, 
     setFormData({ ...formData, service_fees: JSON.stringify(updatedFees) });
   };
 
-  const handleUpdateWithValidation = () => {
-    // Validate service fees
-    const validation = validateServiceFees(serviceFees);
+  const handleUpdateWithValidation = async () => {
+    setIsSubmitting(true);
+    setSubmitSuccess(false);
     
-    if (!validation.isValid) {
-      setValidationErrors(validation.errors);
-      showToast('Please fix validation errors before saving', 'error');
-      return;
+    try {
+      // Validate service fees
+      const validation = validateServiceFees(serviceFees);
+      
+      if (!validation.isValid) {
+        setValidationErrors(validation.errors);
+        showToast('Please fix validation errors before saving', 'error');
+        return;
+      }
+      
+      if (validation.hasWarnings) {
+        setValidationWarnings(validation.warnings);
+      }
+      
+      // Sanitize and proceed
+      const sanitizedFees = sanitizeServiceFees(serviceFees);
+      const updatedFormData = { ...formData, service_fees: sanitizedFees };
+      setFormData(updatedFormData);
+      
+      await handleUpdate(updatedFormData);
+      
+      setSubmitSuccess(true);
+      setTimeout(() => setSubmitSuccess(false), 2000);
+    } catch (error) {
+      showToast(`Failed to update property: ${error.message}`, 'error');
+    } finally {
+      setIsSubmitting(false);
     }
-    
-    if (validation.hasWarnings) {
-      setValidationWarnings(validation.warnings);
-    }
-    
-    // Sanitize and proceed
-    const sanitizedFees = sanitizeServiceFees(serviceFees);
-    const updatedFormData = { ...formData, service_fees: sanitizedFees };
-    setFormData(updatedFormData);
-    handleUpdate(updatedFormData);
   };
 
   return (
-    <div className="space-y-6 max-h-96 overflow-y-auto">
+    <div className="space-y-6 max-h-96 overflow-y-auto relative">
       {/* Basic Information */}
       <div className="bg-gray-50 p-4 rounded-lg">
         <h3 className="font-medium mb-3 flex items-center gap-2">
@@ -382,9 +398,25 @@ export default function PropertyEditForm({ formData, setFormData, handleUpdate, 
         </div>
       </div>
       
+      <FormLoadingOverlay show={isSubmitting} message="Saving property..." />
+      
       <div className="flex gap-2 pt-4 border-t">
-        <Button onClick={handleUpdateWithValidation} className="flex-1">Save Changes</Button>
-        <Button variant="outline" onClick={handleCancel} className="flex-1">Cancel</Button>
+        <SaveButton 
+          onClick={handleUpdateWithValidation} 
+          loading={isSubmitting}
+          success={submitSuccess}
+          className="flex-1"
+        >
+          Save Changes
+        </SaveButton>
+        <SaveButton
+          variant="outline" 
+          onClick={handleCancel} 
+          className="flex-1"
+          showIcon={false}
+        >
+          Cancel
+        </SaveButton>
       </div>
       
       {Object.keys(validationWarnings).length > 0 && (
