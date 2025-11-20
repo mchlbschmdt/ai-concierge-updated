@@ -43,6 +43,8 @@ export async function updateProperty(propertyId, propertyData) {
       cleaning_instructions: propertyData.cleaning_instructions,
       special_notes: propertyData.special_notes,
       knowledge_base: propertyData.knowledge_base,
+      management_company_name: propertyData.management_company_name,
+      service_fees: propertyData.service_fees,
       updated_at: new Date().toISOString()
     };
     

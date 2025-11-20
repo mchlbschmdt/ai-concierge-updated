@@ -4,6 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Wifi, Key, MapPin, Car, Phone, FileText, Home, AlertTriangle } from "lucide-react";
+import { validateServiceFees, sanitizeServiceFees } from "@/utils/inputValidation";
+import { useToast } from "@/context/ToastContext";
 
 export default function PropertyEditForm({ formData, setFormData, handleUpdate, handleCancel }) {
   const [amenities, setAmenities] = useState(() => {
@@ -19,6 +21,10 @@ export default function PropertyEditForm({ formData, setFormData, handleUpdate, 
     }
     return {};
   });
+
+  const [validationErrors, setValidationErrors] = useState({});
+  const [validationWarnings, setValidationWarnings] = useState({});
+  const { showToast } = useToast();
 
   const commonAmenities = [
     'WiFi', 'Kitchen', 'Washer/Dryer', 'Parking', 'Pool', 'Hot Tub', 'BBQ Grill',
@@ -47,6 +53,11 @@ export default function PropertyEditForm({ formData, setFormData, handleUpdate, 
     updatedFees[serviceKey][field] = value;
     setServiceFees(updatedFees);
     setFormData({ ...formData, service_fees: JSON.stringify(updatedFees) });
+    
+    // Real-time validation
+    const validation = validateServiceFees(updatedFees);
+    setValidationErrors(validation.errors);
+    setValidationWarnings(validation.warnings);
   };
 
   const removeServiceFee = (serviceKey) => {
@@ -61,6 +72,27 @@ export default function PropertyEditForm({ formData, setFormData, handleUpdate, 
     const updatedFees = { ...serviceFees, [serviceKey]: { price: '', unit: 'per_day', description: '', notes: '' } };
     setServiceFees(updatedFees);
     setFormData({ ...formData, service_fees: JSON.stringify(updatedFees) });
+  };
+
+  const handleUpdateWithValidation = () => {
+    // Validate service fees
+    const validation = validateServiceFees(serviceFees);
+    
+    if (!validation.isValid) {
+      setValidationErrors(validation.errors);
+      showToast('Please fix validation errors before saving', 'error');
+      return;
+    }
+    
+    if (validation.hasWarnings) {
+      setValidationWarnings(validation.warnings);
+    }
+    
+    // Sanitize and proceed
+    const sanitizedFees = sanitizeServiceFees(serviceFees);
+    const updatedFormData = { ...formData, service_fees: sanitizedFees };
+    setFormData(updatedFormData);
+    handleUpdate(updatedFormData);
   };
 
   return (
@@ -215,36 +247,74 @@ export default function PropertyEditForm({ formData, setFormData, handleUpdate, 
                 </Button>
               </div>
               <div className="grid grid-cols-2 gap-2 mb-2">
-                <Input 
-                  type="number"
-                  value={service.price || ''} 
-                  onChange={(e) => handleServiceFeeChange(serviceKey, 'price', parseFloat(e.target.value) || '')} 
-                  placeholder="Price" 
-                  className="text-sm"
-                />
-                <select
-                  value={service.unit || 'per_day'}
-                  onChange={(e) => handleServiceFeeChange(serviceKey, 'unit', e.target.value)}
-                  className="text-sm border border-gray-300 rounded-md px-2"
-                >
-                  <option value="per_day">Per Day</option>
-                  <option value="per_booking">Per Booking</option>
-                  <option value="per_person">Per Person</option>
-                  <option value="flat_fee">Flat Fee</option>
-                </select>
+                  <div className="space-y-1">
+                    <Input 
+                      type="number"
+                      value={service.price || ''} 
+                      onChange={(e) => handleServiceFeeChange(serviceKey, 'price', parseFloat(e.target.value) || '')} 
+                      placeholder="Price" 
+                      className={`text-sm ${validationErrors[serviceKey]?.price ? 'border-destructive' : ''}`}
+                    />
+                    {validationErrors[serviceKey]?.price && (
+                      <p className="text-destructive text-xs flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        {validationErrors[serviceKey].price}
+                      </p>
+                    )}
+                </div>
+                <div className="space-y-1">
+                  <select
+                    value={service.unit || 'per_day'}
+                    onChange={(e) => handleServiceFeeChange(serviceKey, 'unit', e.target.value)}
+                    className={`text-sm border rounded-md px-2 ${validationErrors[serviceKey]?.unit ? 'border-destructive' : 'border-gray-300'}`}
+                  >
+                    <option value="per_day">Per Day</option>
+                    <option value="per_booking">Per Booking</option>
+                    <option value="per_person">Per Person</option>
+                    <option value="flat_fee">Flat Fee</option>
+                  </select>
+                  {validationErrors[serviceKey]?.unit && (
+                    <p className="text-destructive text-xs flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      {validationErrors[serviceKey].unit}
+                    </p>
+                  )}
+                </div>
               </div>
-              <Input 
-                value={service.description || ''} 
-                onChange={(e) => handleServiceFeeChange(serviceKey, 'description', e.target.value)} 
-                placeholder="Description (e.g., includes waterpark, pools, gym)" 
-                className="text-sm mb-2"
-              />
-              <Textarea
-                value={service.notes || ''}
-                onChange={(e) => handleServiceFeeChange(serviceKey, 'notes', e.target.value)}
-                placeholder="Notes (e.g., Must be scheduled 24 hours in advance)"
-                className="text-sm resize-y min-h-[50px]"
-              />
+              <div className="space-y-1">
+                <Input 
+                  value={service.description || ''} 
+                  onChange={(e) => handleServiceFeeChange(serviceKey, 'description', e.target.value)} 
+                  placeholder="Description (e.g., includes waterpark, pools, gym)" 
+                  className={`text-sm ${validationErrors[serviceKey]?.description ? 'border-destructive' : ''}`}
+                />
+                {validationErrors[serviceKey]?.description && (
+                  <p className="text-destructive text-xs flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    {validationErrors[serviceKey].description}
+                  </p>
+                )}
+                {validationWarnings[`${serviceKey}_description`] && !validationErrors[serviceKey]?.description && (
+                  <p className="text-yellow-600 text-xs flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    {validationWarnings[`${serviceKey}_description`]}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-1">
+                <Textarea
+                  value={service.notes || ''}
+                  onChange={(e) => handleServiceFeeChange(serviceKey, 'notes', e.target.value)}
+                  placeholder="Notes (e.g., Must be scheduled 24 hours in advance)"
+                  className={`text-sm resize-y min-h-[50px] ${validationErrors[serviceKey]?.notes ? 'border-destructive' : ''}`}
+                />
+                {validationErrors[serviceKey]?.notes && (
+                  <p className="text-destructive text-xs flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    {validationErrors[serviceKey].notes}
+                  </p>
+                )}
+              </div>
             </div>
           ))}
           
@@ -313,9 +383,23 @@ export default function PropertyEditForm({ formData, setFormData, handleUpdate, 
       </div>
       
       <div className="flex gap-2 pt-4 border-t">
-        <Button onClick={handleUpdate} className="flex-1">Save Changes</Button>
+        <Button onClick={handleUpdateWithValidation} className="flex-1">Save Changes</Button>
         <Button variant="outline" onClick={handleCancel} className="flex-1">Cancel</Button>
       </div>
+      
+      {Object.keys(validationWarnings).length > 0 && (
+        <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <p className="text-sm text-yellow-800 font-medium mb-1 flex items-center gap-1">
+            <AlertTriangle className="h-4 w-4" />
+            Warnings (can still save):
+          </p>
+          <ul className="text-xs text-yellow-700 list-disc list-inside">
+            {Object.values(validationWarnings).map((warning, idx) => (
+              <li key={idx}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

@@ -156,6 +156,78 @@ export class RateLimiter {
   }
 }
 
+/**
+ * Validates service fees structure
+ */
+export const validateServiceFees = (serviceFees) => {
+  const errors = {};
+  const warnings = {};
+  
+  Object.entries(serviceFees).forEach(([serviceKey, service]) => {
+    const serviceErrors = {};
+    
+    // Required: Price must be present and valid
+    if (!service.price || service.price === '') {
+      serviceErrors.price = 'Price is required';
+    } else if (isNaN(service.price) || service.price < 0) {
+      serviceErrors.price = 'Price must be a positive number';
+    } else if (service.price > 10000) {
+      warnings[serviceKey] = 'Price seems unusually high. Please verify.';
+    } else if (service.price < 1 && service.price > 0) {
+      warnings[serviceKey] = 'Price seems unusually low. Please verify.';
+    }
+    
+    // Required: Unit must be selected
+    if (!service.unit) {
+      serviceErrors.unit = 'Pricing unit is required';
+    }
+    
+    // Optional but recommended: Description
+    if (!service.description || service.description.trim() === '') {
+      warnings[`${serviceKey}_description`] = 'Description recommended for clarity';
+    }
+    
+    // Validation: Description length
+    if (service.description && service.description.length > 200) {
+      serviceErrors.description = 'Description must be under 200 characters';
+    }
+    
+    // Validation: Notes length
+    if (service.notes && service.notes.length > 500) {
+      serviceErrors.notes = 'Notes must be under 500 characters';
+    }
+    
+    if (Object.keys(serviceErrors).length > 0) {
+      errors[serviceKey] = serviceErrors;
+    }
+  });
+  
+  return {
+    isValid: Object.keys(errors).length === 0,
+    errors,
+    warnings,
+    hasWarnings: Object.keys(warnings).length > 0
+  };
+};
+
+/**
+ * Sanitizes service fees data
+ */
+export const sanitizeServiceFees = (serviceFees) => {
+  const sanitized = {};
+  
+  Object.entries(serviceFees).forEach(([serviceKey, service]) => {
+    sanitized[serviceKey] = {
+      price: parseFloat(service.price) || 0,
+      unit: service.unit || 'per_day',
+      description: sanitizeTextInput(service.description || ''),
+      notes: sanitizeTextInput(service.notes || '')
+    };
+  });
+  
+  return sanitized;
+};
+
 // Create global rate limiter instances
 export const loginRateLimiter = new RateLimiter(5, 15 * 60 * 1000); // 5 attempts per 15 minutes
 export const registerRateLimiter = new RateLimiter(3, 60 * 60 * 1000); // 3 attempts per hour
