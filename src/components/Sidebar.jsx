@@ -30,13 +30,11 @@ const Sidebar = () => {
     { icon: Building2, label: 'Properties', path: '/properties' },
     { icon: Users, label: 'Guests', path: '/guests' },
     { icon: MessageSquare, label: 'Messages', path: '/messages' },
-    { icon: MessagesSquare, label: 'SMS Conversations', path: '/sms-conversations' },
+    { icon: TestTube, label: 'Test AI Responses', path: '/test-responses' },
     { icon: BarChart3, label: 'Analytics', path: '/analytics' },
     { icon: BarChart3, label: 'Smart Insights', path: '/insights' },
     { icon: TrendingUp, label: 'Quality Analytics', path: '/quality-analytics' },
     { icon: Mail, label: 'Email Management', path: '/email-management' },
-    { icon: TestTube, label: 'SMS Testing', path: '/sms-testing' },
-    { icon: Bot, label: 'SMS Concierge Test', path: '/sms-concierge-test' },
     { icon: FileText, label: 'Knowledge Base', path: '/knowledge-base' },
     { icon: HelpCircle, label: 'FAQ Editor', path: '/faq-editor' },
     { icon: MapPin, label: 'Travel Guide', path: '/travel-admin' },
@@ -47,6 +45,8 @@ const Sidebar = () => {
     { icon: Shield, label: 'Admin Dashboard', path: '/admin' },
     { icon: UsersIcon, label: 'User Management', path: '/admin/users' },
     { icon: Building2, label: 'All Properties', path: '/admin/properties' },
+    { icon: MessagesSquare, label: 'SMS Conversations', path: '/sms-conversations' },
+    { icon: TestTube, label: 'System Diagnostics', path: '/admin/system-diagnostics' },
   ];
 
   return (

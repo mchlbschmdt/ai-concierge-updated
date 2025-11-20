@@ -32,6 +32,8 @@ import ProfileSettings from "./pages/ProfileSettings";
 import UserManagement from "./pages/UserManagement";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminPropertiesView from "./pages/AdminPropertiesView";
+import UserSmsTest from "./pages/UserSmsTest";
+import SystemDiagnostics from "./pages/SystemDiagnostics";
 
 const queryClient = new QueryClient();
 
@@ -97,13 +99,18 @@ const App = () => (
                   <EmailManagement />
                 </ProtectedRoute>
               } />
-              <Route path="/sms-testing" element={
+              <Route path="/test-responses" element={
                 <ProtectedRoute>
+                  <UserSmsTest />
+                </ProtectedRoute>
+              } />
+              <Route path="/sms-testing" element={
+                <ProtectedRoute requireSuperAdmin>
                   <SmsTestingDashboard />
                 </ProtectedRoute>
               } />
               <Route path="/sms-concierge-test" element={
-                <ProtectedRoute>
+                <ProtectedRoute requireSuperAdmin>
                   <SmsConciergeTest />
                 </ProtectedRoute>
               } />
@@ -152,6 +159,11 @@ const App = () => (
               <Route path="/admin/properties" element={
                 <ProtectedRoute requireSuperAdmin>
                   <AdminPropertiesView />
+                </ProtectedRoute>
+              } />
+              <Route path="/admin/system-diagnostics" element={
+                <ProtectedRoute requireSuperAdmin>
+                  <SystemDiagnostics />
                 </ProtectedRoute>
               } />
               

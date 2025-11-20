@@ -11,7 +11,7 @@ import PropertySearch from "../components/properties/PropertySearch";
 import { useProperties } from '../hooks/useProperties';
 
 export default function Properties() {
-  const { properties, loading, error } = useProperties();
+  const { properties, loading, error, handlePropertyUpdate } = useProperties();
   const [search, setSearch] = useState("");
 
   // Filter properties based on search
@@ -103,7 +103,10 @@ export default function Properties() {
         ) : filteredProperties.length === 0 ? (
           <PropertyEmptyState isSearchResults={true} />
         ) : (
-          <PropertyGrid properties={filteredProperties} />
+          <PropertyGrid 
+            properties={filteredProperties} 
+            onUpdate={handlePropertyUpdate}
+          />
         )}
       </div>
     </Layout>

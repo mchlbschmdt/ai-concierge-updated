@@ -303,8 +303,105 @@ export default function Login() {
   }
 
   return (
-    <div className="flex justify-center items-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <form onSubmit={handleLogin} className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
+    <div 
+      className="min-h-screen flex items-center justify-center px-4 py-12"
+      style={{
+        backgroundImage: `linear-gradient(135deg, rgba(27, 56, 152, 0.7), rgba(27, 56, 152, 0.4)), url('https://images.unsplash.com/photo-1564501049412-61c2a3083791?q=80&w=1920&auto=format&fit=crop')`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }}
+    >
+      <form onSubmit={handleLogin} className="bg-white bg-opacity-10 backdrop-blur-xl p-8 rounded-lg shadow-2xl w-full max-w-md border border-white border-opacity-20">
+        <div className="text-center mb-6">
+          <h2 className="text-3xl font-bold text-white">Welcome Back</h2>
+          <p className="text-white text-opacity-90 mt-2">Sign in to your account</p>
+        </div>
+
+        {error && (
+          <div className="bg-red-500 bg-opacity-20 border border-red-300 border-opacity-50 text-white px-4 py-3 rounded mb-4 backdrop-blur-sm">
+            {error}
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium text-white mb-1">
+              Email Address
+            </label>
+            <input
+              id="email"
+              type="email"
+              className="w-full px-3 py-2 bg-white bg-opacity-20 border border-white border-opacity-30 text-white placeholder-white placeholder-opacity-60 rounded-md focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50 backdrop-blur-sm"
+              placeholder="Enter your email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+
+          <div>
+            <label htmlFor="password" className="block text-sm font-medium text-white mb-1">
+              Password
+            </label>
+            <input
+              id="password"
+              type="password"
+              className="w-full px-3 py-2 bg-white bg-opacity-20 border border-white border-opacity-30 text-white placeholder-white placeholder-opacity-60 rounded-md focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50 backdrop-blur-sm"
+              placeholder="Enter your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="rememberMe"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="h-4 w-4 cursor-pointer"
+              />
+              <label htmlFor="rememberMe" className="text-sm text-white cursor-pointer select-none">
+                Keep me signed in
+              </label>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowForgotPassword(true)}
+              className="text-sm text-white hover:text-white hover:opacity-80 transition-colors underline"
+            >
+              Forgot password?
+            </button>
+          </div>
+
+          <button
+            type="submit" 
+            disabled={isLoading}
+            className="w-full bg-white text-primary py-2 px-4 rounded-md hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-lg font-medium"
+          >
+            {isLoading ? "Signing In..." : "Sign In"}
+          </button>
+        </div>
+        
+        <div className="flex items-center my-4">
+          <div className="flex-1 h-px bg-white bg-opacity-20"></div>
+          <span className="px-4 text-xs text-white text-opacity-70">OR</span>
+          <div className="flex-1 h-px bg-white bg-opacity-20"></div>
+        </div>
+
+        <GoogleOAuthButton />
+        
+        <p className="text-center text-sm text-white text-opacity-90 mt-6">
+          Don't have an account?{' '}
+          <Link to="/register" className="text-white hover:opacity-80 font-medium underline">
+            Sign up
+          </Link>
+        </p>
+      </form>
+    </div>
+  );
         <div className="text-center mb-6">
           <h2 className="text-3xl font-bold text-gray-900">Welcome Back</h2>
           <p className="text-gray-600 mt-2">Sign in to your account</p>
