@@ -18,11 +18,6 @@ const KnowledgeBaseEditor = () => {
   const [saving, setSaving] = useState(false);
   const [property, setProperty] = useState(null);
   const [showSwipeHint, setShowSwipeHint] = useState(true);
-  const navigate = useNavigate();
-  const { toast } = useToast();
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [property, setProperty] = useState(null);
   
   // Structured sections state
   const [propertyDetails, setPropertyDetails] = useState('');
