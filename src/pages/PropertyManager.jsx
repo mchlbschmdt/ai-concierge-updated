@@ -1,14 +1,17 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from "react-router-dom";
-import { Plus } from "lucide-react";
+import { Plus, Upload } from "lucide-react";
 import Layout from '../components/Layout';
 import PropertyCard from '../components/PropertyCard';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyProperties from '../components/EmptyProperties';
+import ServiceFeeBulkImport from '../components/ServiceFeeBulkImport';
 import { useProperties } from '../hooks/useProperties';
+import { Button } from '../components/ui/button';
 
 export default function PropertyManager() {
+  const [activeTab, setActiveTab] = useState('properties');
   const {
     properties,
     loading,
@@ -17,7 +20,8 @@ export default function PropertyManager() {
     handlePropertyDelete,
     handleFileAdded,
     handleFileDeleted,
-    handleMessagesAdded
+    handleMessagesAdded,
+    refreshProperties
   } = useProperties();
 
   if (loading) {
@@ -77,22 +81,56 @@ export default function PropertyManager() {
           </Link>
         </div>
 
-        {properties.length === 0 ? (
-          <EmptyProperties />
-        ) : (
-          <div className="space-y-4">
-            {properties.map((property) => (
-              <PropertyCard
-                key={property.id}
-                property={property}
-                onUpdate={handlePropertyUpdate}
-                onDelete={handlePropertyDelete}
-                onFileAdded={handleFileAdded}
-                onFileDeleted={handleFileDeleted}
-                onMessagesAdded={handleMessagesAdded}
-              />
-            ))}
+        <div className="mb-6 border-b">
+          <div className="flex gap-4">
+            <button
+              onClick={() => setActiveTab('properties')}
+              className={`px-4 py-2 font-medium transition-colors ${
+                activeTab === 'properties'
+                  ? 'text-primary border-b-2 border-primary'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Properties
+            </button>
+            <button
+              onClick={() => setActiveTab('bulk-import')}
+              className={`px-4 py-2 font-medium transition-colors flex items-center gap-2 ${
+                activeTab === 'bulk-import'
+                  ? 'text-primary border-b-2 border-primary'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Upload size={16} />
+              Bulk Import Service Fees
+            </button>
           </div>
+        </div>
+
+        {activeTab === 'properties' && (
+          <>
+            {properties.length === 0 ? (
+              <EmptyProperties />
+            ) : (
+              <div className="space-y-4">
+                {properties.map((property) => (
+                  <PropertyCard
+                    key={property.id}
+                    property={property}
+                    onUpdate={handlePropertyUpdate}
+                    onDelete={handlePropertyDelete}
+                    onFileAdded={handleFileAdded}
+                    onFileDeleted={handleFileDeleted}
+                    onMessagesAdded={handleMessagesAdded}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {activeTab === 'bulk-import' && (
+          <ServiceFeeBulkImport onImportComplete={() => refreshProperties()} />
         )}
       </div>
     </Layout>
