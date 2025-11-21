@@ -35,28 +35,23 @@ export default function Layout({ children }) {
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-100">
-      <Sidebar />
-      <div className="flex flex-col flex-1">
-        {/* App Bar/Header */}
-        <header className="h-16 bg-gradient-to-r from-primary to-secondary border-b border-gray-200 px-4 md:px-8 flex items-center justify-between shadow-md">
-          <div className="flex items-center gap-3">
-            {/* Hamburger Menu Button (mobile only) */}
-            <button
-              onClick={toggleSidebar}
-              className="lg:hidden p-2 rounded-lg hover:bg-white/10 transition-colors"
-              aria-label="Toggle navigation menu"
-            >
-              <Menu className="h-6 w-6 text-white" />
-            </button>
+    <div className="min-h-screen bg-slate-100">
+      {/* Header spans full width - positioned at top */}
+      <header className="fixed top-0 left-0 right-0 h-16 bg-gradient-to-r from-primary to-secondary border-b border-gray-200 px-4 md:px-8 flex items-center justify-between shadow-md z-50">
+        <div className="flex items-center gap-3">
+          {/* Hamburger Menu Button (mobile only) */}
+          <button
+            onClick={toggleSidebar}
+            className="lg:hidden p-2 rounded-lg hover:bg-white/10 transition-colors"
+            aria-label="Toggle navigation menu"
+          >
+            <Menu className="h-6 w-6 text-white" />
+          </button>
 
-            <span className="text-3xl font-bold font-display text-white drop-shadow-sm">
-              <span className="sr-only">Hostly AI Concierge</span>🏨
-            </span>
-            <h1 className="text-xl font-semibold font-display text-white tracking-tight hidden sm:block">
-              Hostly AI Concierge
-            </h1>
-          </div>
+          <h1 className="text-xl font-semibold text-white tracking-tight" style={{ fontFamily: 'Tahoma, Verdana, Geneva, sans-serif' }}>
+            Hostly.ai Concierge
+          </h1>
+        </div>
           
           <div className="flex items-center gap-2 md:gap-4">
             {/* Command Palette Button */}
@@ -127,10 +122,16 @@ export default function Layout({ children }) {
                 </div>
               )}
             </div>
-          </div>
-        </header>
-        <main className="p-6 flex-1 overflow-y-auto">{children}</main>
-        <Footer />
+        </div>
+      </header>
+
+      {/* Sidebar and main content below header */}
+      <div className="flex pt-16">
+        <Sidebar />
+        <div className="flex flex-col flex-1">
+          <main className="p-6 flex-1 overflow-y-auto">{children}</main>
+          <Footer />
+        </div>
       </div>
       
       <CommandPalette 
