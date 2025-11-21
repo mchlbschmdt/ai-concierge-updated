@@ -37,7 +37,7 @@ export default function Layout({ children }) {
   return (
     <div className="min-h-screen bg-slate-100">
       {/* Header spans full width - positioned at top */}
-      <header className="fixed top-0 left-0 right-0 h-16 bg-gradient-to-r from-primary to-secondary border-b border-gray-200 px-4 md:px-8 flex items-center justify-between shadow-md z-50">
+      <header className="fixed top-0 left-0 right-0 h-16 bg-gradient-to-r from-primary to-secondary border-b border-gray-200 px-4 md:px-8 flex items-center justify-between shadow-md z-50" style={{ animation: 'headerPulse 4s ease-in-out infinite' }}>
         <div className="flex items-center gap-3">
           {/* Hamburger Menu Button (mobile only) */}
           <button
