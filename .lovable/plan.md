@@ -1,35 +1,37 @@
 
 
-# Fix: Allow JSON Uploads in Storage Bucket
+# Fix: Add JSON to Storage Bucket Allowed MIME Types
 
-## What's Happening
+## Problem
 
-The `property-files` storage bucket in Supabase is rejecting `.json` files because `application/json` is not in its allowed MIME types list. The migration to fix this was not executed previously.
+The `property-files` storage bucket currently only allows these MIME types:
+- `image/jpeg`, `image/png`, `image/gif`, `image/webp`
+- `application/pdf`, `text/plain`
+- `application/msword`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document`
 
-## Steps
+It is **missing** `application/json`, `text/csv`, and `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` -- which is why `.json` uploads fail.
 
-1. **Run SQL migration** to update the `property-files` bucket's `allowed_mime_types` to include all file types the UI supports:
-   - `application/pdf`
-   - `application/vnd.openxmlformats-officedocument.wordprocessingml.document` (DOCX)
-   - `text/plain` (TXT)
-   - `text/csv` (CSV)
-   - `application/json` (JSON)
-   - `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` (XLSX)
+## Solution
 
-2. **Notify PostgREST to reload its schema cache** so the updated bucket configuration takes effect immediately. Without this step, the old restrictions may persist due to caching.
+Run a single SQL statement to update the bucket's allowed MIME types to include all file types the Knowledge Base uploader supports, while keeping the existing image types.
 
 ## Technical Details
 
-### Migration SQL
+### SQL to execute (database migration)
 
 ```text
 UPDATE storage.buckets
 SET allowed_mime_types = ARRAY[
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
   'application/pdf',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'text/plain',
   'text/csv',
   'application/json',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 ]
 WHERE id = 'property-files';
@@ -37,6 +39,11 @@ WHERE id = 'property-files';
 NOTIFY pgrst, 'reload schema';
 ```
 
-### Files Changed
-- One new SQL migration file (no frontend code changes needed)
+### What this adds
+- `application/json` -- for .json files
+- `text/csv` -- for .csv files
+- `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` -- for .xlsx files
+
+### No frontend changes needed
+The client-side code already accepts these file types.
 
