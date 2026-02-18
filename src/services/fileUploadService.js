@@ -44,10 +44,21 @@ export async function uploadFileToProperty(file, propertyId, onProgressUpdate) {
     
     if (onProgressUpdate) onProgressUpdate(40);
     
+    // Re-wrap unsupported MIME types as text/plain for storage
+    let uploadFile = file;
+    const unsupportedTypes = [
+      'application/json',
+      'text/csv',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    ];
+    if (unsupportedTypes.includes(file.type)) {
+      uploadFile = new File([file], file.name, { type: 'text/plain' });
+    }
+
     // Upload file to Supabase Storage
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('property-files')
-      .upload(storagePath, file);
+      .upload(storagePath, uploadFile);
     
     if (uploadError) {
       console.error("Upload error:", uploadError);
