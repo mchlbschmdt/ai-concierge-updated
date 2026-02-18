@@ -78,15 +78,20 @@ export async function uploadFileToProperty(file, propertyId, onProgressUpdate) {
     
     if (onProgressUpdate) onProgressUpdate(90);
     
+    // Get authenticated user
+    const { data: { user } } = await supabase.auth.getUser();
+    
     // Create file record in database
     const fileData = {
-      property_id: propertyId,
-      name: file.name,
-      type: file.type,
-      size: file.size,
+      user_id: user.id,
+      original_name: file.name,
+      file_type: file.type,
+      file_size: file.size,
       storage_path: storagePath,
-      url: publicUrl,
-      uploaded_at: new Date().toISOString()
+      metadata: {
+        property_id: propertyId,
+        url: publicUrl
+      }
     };
     
     const { error: insertError } = await supabase
@@ -129,11 +134,12 @@ export async function deleteFileFromProperty(propertyId, filePath) {
     console.log("File deleted from storage");
     
     // Remove the file record from database
+    const { data: { user } } = await supabase.auth.getUser();
     const { error: dbDeleteError } = await supabase
       .from('file_uploads')
       .delete()
       .eq('storage_path', filePath)
-      .eq('property_id', propertyId);
+      .eq('user_id', user.id);
     
     if (dbDeleteError) {
       console.error("Error deleting file record:", dbDeleteError);
