@@ -127,13 +127,17 @@ export function useProperties() {
   }, [properties, toast]);
 
   const handleFileAdded = useCallback((propertyId, fileData) => {
+    const normalized = {
+      name: fileData.original_name || fileData.name,
+      path: fileData.storage_path || fileData.path,
+      type: fileData.file_type || fileData.type,
+      size: fileData.file_size || fileData.size,
+      uploaded_at: fileData.created_at || new Date().toISOString(),
+      url: fileData.metadata?.url || fileData.url || null
+    };
     const updatedProperties = properties.map(p => {
       if (p.id !== propertyId) return p;
-      
-      return {
-        ...p,
-        files: [...(p.files || []), fileData]
-      };
+      return { ...p, files: [...(p.files || []), normalized] };
     });
     setProperties(updatedProperties);
     propertiesCache = updatedProperties;
