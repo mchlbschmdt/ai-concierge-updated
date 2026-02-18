@@ -1,48 +1,59 @@
 
 
-# Fix JSON Upload by Bypassing Storage MIME Restriction
+# Fix: Align fileUploadService with file_uploads Table Schema
 
 ## Problem
-The Supabase storage bucket has been rejecting `application/json` uploads for 5+ attempts because the migration to update its allowed MIME types never executes successfully. We need a different approach.
+The upload code inserts columns that don't exist in the `file_uploads` table, causing the error "Could not find the 'name' column."
 
-## Solution
-Instead of fighting the storage bucket configuration, we'll modify the upload code to re-wrap JSON (and CSV/XLSX) files as `text/plain` before uploading to storage. Supabase storage already allows `text/plain`. The original file name and type are preserved in the metadata, so nothing is lost.
+## Column Mapping
 
-This is a simple, reliable fix that requires changing only one file -- no database changes needed.
+| Code currently sends | Actual table column | Notes |
+|---|---|---|
+| `name` | `original_name` | Rename |
+| `type` | `file_type` | Rename |
+| `size` | `file_size` | Rename |
+| `property_id` | `user_id` | Use authenticated user's ID instead |
+| `url` | _(does not exist)_ | Store in `metadata` JSON |
+| `uploaded_at` | _(does not exist)_ | `created_at` is auto-set |
+| `storage_path` | `storage_path` | Already correct |
 
 ## Technical Details
 
-### File Changed: `src/services/fileUploadService.js`
+### File: `src/services/fileUploadService.js`
 
-Before the `supabase.storage.upload()` call, if the file type is `application/json`, `text/csv`, or the XLSX type, create a new `Blob` with `type: 'text/plain'` containing the same data. This tricks Supabase storage into accepting the file. The original file name (e.g., `messages.json`) and original MIME type are still saved in the metadata record.
-
-Key change (around line 48):
+Replace the `fileData` object (around line 72) from:
 
 ```javascript
-// Re-wrap unsupported MIME types as text/plain for storage
-let uploadFile = file;
-const unsupportedTypes = [
-  'application/json',
-  'text/csv',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-];
-if (unsupportedTypes.includes(file.type)) {
-  uploadFile = new File([file], file.name, { type: 'text/plain' });
-}
-
-const { data: uploadData, error: uploadError } = await supabase.storage
-  .from('property-files')
-  .upload(storagePath, uploadFile);
+const fileData = {
+  property_id: propertyId,
+  name: file.name,
+  type: file.type,
+  size: file.size,
+  storage_path: storagePath,
+  url: publicUrl,
+  uploaded_at: new Date().toISOString()
+};
 ```
 
-### No other files need to change
-- The uploader UI already accepts `.json` files
-- The file metadata record preserves the original type and name
-- Downloads will still work since the content is unchanged
+To:
 
-### Why this approach
-- Zero database/storage config changes needed
-- Works immediately without any migration approval
-- The file content is identical -- only the upload MIME header changes
-- Original file type is preserved in the database record for display purposes
+```javascript
+const { data: { user } } = await supabase.auth.getUser();
 
+const fileData = {
+  user_id: user.id,
+  original_name: file.name,
+  file_type: file.type,
+  file_size: file.size,
+  storage_path: storagePath,
+  metadata: {
+    property_id: propertyId,
+    url: publicUrl
+  }
+};
+```
+
+Also update the delete function to match: the `.eq('storage_path', filePath)` is fine, but remove the `.eq('property_id', propertyId)` filter since the table uses `user_id` not `property_id`. Replace with `.eq('user_id', user.id)`.
+
+### No database changes needed
+The table schema is correct as-is. Only the frontend code needs to use the right column names.
