@@ -68,7 +68,7 @@ export default function PropertyGridCard({ property, onUpdate }) {
             {property.files?.length || 0} files
           </span>
           <Link 
-            to={`/properties#${property.id}`}
+            to={`/property/${property.id}`}
             className="text-xs text-primary hover:text-primary/80 font-medium transition-colors"
           >
             View Details →
