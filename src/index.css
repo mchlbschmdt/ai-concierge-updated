@@ -7,15 +7,15 @@
   body {
     margin: 0;
     padding: 0;
-    font-family: Tahoma, Verdana, Geneva, sans-serif;
+    font-family: 'Inter', system-ui, sans-serif;
     color: #16213d;
-    background: #dde4ff;
+    background: #f8f9fc;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: Tahoma, Verdana, Geneva, sans-serif;
+    font-family: 'Inter', system-ui, sans-serif;
     font-weight: 700;
     color: #16213d;
   }
