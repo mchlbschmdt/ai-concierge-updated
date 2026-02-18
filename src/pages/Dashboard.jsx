@@ -1,95 +1,68 @@
 
 import React from "react";
 import Layout from "../components/Layout";
-import HostAiChat from "../components/HostAiChat";
-import CommonQuestionsAnalytics from "../components/CommonQuestionsAnalytics";
 import { Link } from "react-router-dom";
-import { Building, Users, MessageSquare, Mail, Phone, Plus, BarChart3, Bot, TrendingUp, TestTube } from "lucide-react";
+import { Building, Users, MessageSquare, Phone, Plus, BarChart3, Bot, TrendingUp, ArrowRight } from "lucide-react";
 
 export default function Dashboard() {
+  const statusCards = [
+    { title: "Properties", count: "—", subtitle: "Active listings", icon: Building },
+    { title: "Messages", count: "—", subtitle: "This week", icon: MessageSquare },
+    { title: "Guests", count: "—", subtitle: "Total managed", icon: Users },
+    { title: "SMS Status", count: "✓", subtitle: "Operational", icon: Phone },
+  ];
+
   const quickActions = [
     {
       title: "Add Property",
       description: "Register a new property in your portfolio",
       icon: Plus,
       path: "/add-property",
-      color: "bg-blue-500 hover:bg-blue-600"
     },
     {
       title: "Manage Properties",
       description: "View and edit your property details",
       icon: Building,
       path: "/properties",
-      color: "bg-green-500 hover:bg-green-600"
     },
     {
       title: "Test AI Responses",
-      description: "Test how your AI concierge responds to guests",
-      icon: TestTube,
+      description: "Test how your AI concierge responds",
+      icon: Bot,
       path: "/test-responses",
-      color: "bg-purple-500 hover:bg-purple-600"
     },
     {
-      title: "Email Management",
-      description: "Handle guest communications",
-      icon: Mail,
-      path: "/email-management",
-      color: "bg-orange-500 hover:bg-orange-600"
-    }
-  ];
-
-  const systemStatus = [
-    {
-      title: "Properties",
-      count: "12",
-      subtitle: "Active listings",
-      icon: Building,
-      color: "text-blue-600"
+      title: "View Analytics",
+      description: "Monitor performance and insights",
+      icon: BarChart3,
+      path: "/analytics",
     },
-    {
-      title: "Messages",
-      count: "48",
-      subtitle: "This week",
-      icon: MessageSquare,
-      color: "text-green-600"
-    },
-    {
-      title: "Guests",
-      count: "156",
-      subtitle: "Total managed",
-      icon: Users,
-      color: "text-purple-600"
-    },
-    {
-      title: "SMS Active",
-      count: "✓",
-      subtitle: "System operational",
-      icon: Phone,
-      color: "text-emerald-600"
-    }
   ];
 
   return (
     <Layout>
-      <div className="space-y-6">
+      <div className="space-y-8">
+        {/* Page Header */}
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-600">Welcome back! Here's an overview of your property management system.</p>
+          <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+          <p className="text-sm text-muted-foreground mt-1">Welcome back. Here's an overview of your property management system.</p>
         </div>
 
-        {/* System Status Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {systemStatus.map((status, index) => {
-            const Icon = status.icon;
+        {/* Status Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {statusCards.map((card, i) => {
+            const Icon = card.icon;
             return (
-              <div key={index} className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+              <div key={i} className="bg-card border border-border rounded-lg p-5">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-600">{status.title}</p>
-                    <p className="text-2xl font-bold text-gray-900">{status.count}</p>
-                    <p className="text-xs text-gray-500">{status.subtitle}</p>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{card.title}</p>
+                    <p className="text-2xl font-bold text-foreground mt-1">{card.count}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{card.subtitle}</p>
                   </div>
-                  <Icon className={`h-8 w-8 ${status.color}`} />
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Icon className="h-5 w-5 text-primary" />
+                  </div>
                 </div>
               </div>
             );
@@ -98,76 +71,60 @@ export default function Dashboard() {
 
         {/* Quick Actions */}
         <div>
-          <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {quickActions.map((action, index) => {
+          <h2 className="text-lg font-semibold text-foreground mb-3">Quick Actions</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {quickActions.map((action, i) => {
               const Icon = action.icon;
               return (
                 <Link
-                  key={index}
+                  key={i}
                   to={action.path}
-                  className={`${action.color} text-white p-6 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 transform hover:scale-105`}
+                  className="group bg-card border border-border rounded-lg p-5 hover:border-primary/30 hover:shadow-md transition-all duration-200"
                 >
-                  <Icon className="h-8 w-8 mb-3" />
-                  <h3 className="font-semibold text-lg mb-2">{action.title}</h3>
-                  <p className="text-sm opacity-90">{action.description}</p>
+                  <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center mb-3 group-hover:bg-primary/15 transition-colors">
+                    <Icon className="h-4.5 w-4.5 text-primary" />
+                  </div>
+                  <h3 className="font-semibold text-foreground text-sm">{action.title}</h3>
+                  <p className="text-xs text-muted-foreground mt-1">{action.description}</p>
+                  <div className="flex items-center gap-1 mt-3 text-xs font-medium text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+                    Go <ArrowRight className="h-3 w-3" />
+                  </div>
                 </Link>
               );
             })}
           </div>
         </div>
 
-        {/* Personal AI Host Support */}
-        <div>
-          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-            <Bot className="h-6 w-6" />
-            Personal AI Host Support
-          </h2>
-          <HostAiChat />
-        </div>
-
-        {/* Common Questions & Recommendations Analytics */}
-        <div>
-          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-            <TrendingUp className="h-6 w-6" />
-            Guest Insights & Analytics
-          </h2>
-          <CommonQuestionsAnalytics />
-        </div>
-
         {/* Recent Activity */}
-        <div className="bg-white rounded-lg shadow-sm p-6">
+        <div className="bg-card border border-border rounded-lg p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">Recent Activity</h2>
+            <h2 className="text-lg font-semibold text-foreground">Recent Activity</h2>
             <Link 
-              to="/dashboard/messages" 
-              className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+              to="/messages" 
+              className="text-primary hover:text-primary/80 text-sm font-medium transition-colors"
             >
-              View all messages →
+              View all →
             </Link>
           </div>
           <div className="space-y-3">
-            <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-              <MessageSquare className="h-5 w-5 text-blue-600" />
-              <div>
-                <p className="text-sm font-medium">New guest message received</p>
-                <p className="text-xs text-gray-500">2 minutes ago</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-              <Users className="h-5 w-5 text-green-600" />
-              <div>
-                <p className="text-sm font-medium">Guest check-in confirmed</p>
-                <p className="text-xs text-gray-500">1 hour ago</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-              <Phone className="h-5 w-5 text-purple-600" />
-              <div>
-                <p className="text-sm font-medium">SMS automation triggered</p>
-                <p className="text-xs text-gray-500">3 hours ago</p>
-              </div>
-            </div>
+            {[
+              { icon: MessageSquare, text: "New guest message received", time: "2 minutes ago" },
+              { icon: Users, text: "Guest check-in confirmed", time: "1 hour ago" },
+              { icon: Phone, text: "SMS automation triggered", time: "3 hours ago" },
+            ].map((item, i) => {
+              const Icon = item.icon;
+              return (
+                <div key={i} className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <Icon className="h-4 w-4 text-primary" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground">{item.text}</p>
+                    <p className="text-xs text-muted-foreground">{item.time}</p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

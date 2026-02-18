@@ -18,7 +18,7 @@ export default {
         'accent-foreground': "#ffffff",
         
         // Backgrounds
-        background: "#dde4ff",
+        background: "#f8f9fc",
         foreground: "#16213d",
         card: "#ffffff",
         'card-foreground': "#16213d",
@@ -61,8 +61,8 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Tahoma', 'Verdana', 'Geneva', 'sans-serif'],
-        display: ['Tahoma', 'Verdana', 'Geneva', 'sans-serif'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        display: ['Inter', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
         sm: "0 1px 2px 0 rgba(0, 0, 0, 0.05)",
