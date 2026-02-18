@@ -1,22 +1,28 @@
 
 
-# Fix: JSON File Upload Rejected by Storage Bucket
+# Fix: Allow JSON Uploads in Storage Bucket
 
-## Problem
+## What's Happening
 
-The Knowledge Base uploader correctly lists `.json` as a supported file type in the UI, and the client-side validation passes it through. However, when the file reaches Supabase Storage, the `property-files` bucket rejects it because its allowed MIME types do not include `application/json`.
+The `property-files` storage bucket in Supabase is rejecting `.json` files because `application/json` is not in its allowed MIME types list. The migration to fix this was not executed previously.
 
-## Solution
+## Steps
 
-Run a SQL migration to update the `property-files` storage bucket configuration to allow all the MIME types that the UI advertises as supported. This ensures the bucket accepts the same file types the client allows.
+1. **Run SQL migration** to update the `property-files` bucket's `allowed_mime_types` to include all file types the UI supports:
+   - `application/pdf`
+   - `application/vnd.openxmlformats-officedocument.wordprocessingml.document` (DOCX)
+   - `text/plain` (TXT)
+   - `text/csv` (CSV)
+   - `application/json` (JSON)
+   - `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` (XLSX)
+
+2. **Notify PostgREST to reload its schema cache** so the updated bucket configuration takes effect immediately. Without this step, the old restrictions may persist due to caching.
 
 ## Technical Details
 
-### File: New SQL migration
+### Migration SQL
 
-Add a migration that updates the `property-files` bucket's `allowed_mime_types` to include all supported types:
-
-```sql
+```text
 UPDATE storage.buckets
 SET allowed_mime_types = ARRAY[
   'application/pdf',
@@ -27,10 +33,10 @@ SET allowed_mime_types = ARRAY[
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 ]
 WHERE id = 'property-files';
+
+NOTIFY pgrst, 'reload schema';
 ```
 
-### Files Modified (1 file)
-1. New migration in `supabase/migrations/` -- update bucket allowed MIME types
-
-No frontend code changes needed -- the client-side already supports `.json`.
+### Files Changed
+- One new SQL migration file (no frontend code changes needed)
 
