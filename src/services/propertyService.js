@@ -1,6 +1,18 @@
 
 import { supabase } from '../integrations/supabase/client';
 
+function normalizeFile(row) {
+  return {
+    name: row.original_name,
+    path: row.storage_path,
+    type: row.file_type,
+    size: row.file_size,
+    uploaded_at: row.created_at,
+    url: row.metadata?.url || null,
+    property_id: row.metadata?.property_id || null
+  };
+}
+
 export async function fetchProperties() {
   try {
     const { data: properties, error } = await supabase
@@ -12,8 +24,27 @@ export async function fetchProperties() {
       console.error("Supabase error:", error.message);
       throw new Error(`Database error: ${error.message}`);
     }
+
+    // Fetch files for the current user
+    const { data: files } = await supabase
+      .from('file_uploads')
+      .select('*');
+
+    const filesByProperty = {};
+    (files || []).forEach(row => {
+      const propId = row.metadata?.property_id;
+      if (propId) {
+        if (!filesByProperty[propId]) filesByProperty[propId] = [];
+        filesByProperty[propId].push(normalizeFile(row));
+      }
+    });
+
+    const propertiesWithFiles = (properties || []).map(p => ({
+      ...p,
+      files: filesByProperty[p.id] || []
+    }));
     
-    return properties || [];
+    return propertiesWithFiles;
   } catch (error) {
     console.error("Error fetching properties:", error);
     throw error;
