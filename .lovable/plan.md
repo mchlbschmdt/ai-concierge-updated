@@ -1,90 +1,92 @@
 
 
-# Fix: Complete the Test Response Flow
+# Fix: AI Response Display and Conversation Memory
 
-## What's Happening Now
+## Problem 1: "No Response Returned"
 
-The payload fix is working -- the webhook correctly receives and processes messages. But two problems remain:
-
-1. **The conversation requires a property code first.** The SMS concierge uses a state machine: guests must text their property code (e.g., "0404") before asking questions. The test page skips this step and sends the question directly, so the system responds with "I couldn't find property [your question]."
-
-2. **The AI response isn't captured.** The webhook generates a response but doesn't save `last_response` back to the database consistently. The test page queries `sms_conversations.last_response` which remains empty.
-
-## Solution
-
-Restructure the test page to call the `sms-conversation-service` edge function directly (instead of going through `openphone-webhook`). This function accepts a `processMessage` action that returns the AI response in the HTTP response body -- no need to query the database afterward.
-
-### Changes to `src/pages/UserSmsTest.jsx`
-
-**Step 1: Set up the conversation with the property code first**
-
-Before sending the user's test message, automatically send the property code to establish the conversation context:
-
+The edge function returns this structure:
 ```text
-1. Call sms-conversation-service with action: "processMessage", phoneNumber: testPhone, message: property.code
-2. Wait for confirmation response
-3. If state is "awaiting_confirmation", send "Y" to confirm
-4. Then send the actual test message
-5. Display the response from step 4
+{
+  messages: ["(1/2) Check-in time: 4:00 PM...", "(2/2) Unit 803 keyless entry..."],
+  shouldUpdateState: false
+}
 ```
 
-**Step 2: Use the direct response from the edge function**
+But the UI reads `result.response` -- a field that doesn't exist. The actual field is `messages` (an array of strings).
 
-Instead of querying `sms_conversations.last_response` after a 2-second delay, read the response directly from the edge function's return value:
+**Fix:** Read `result.messages` and join them for display.
+
+## Problem 2: Every Test Resets the Conversation
+
+The current code runs `forceResetMemory` before every test, so follow-up questions are impossible. The user wants a "conversation mode" where they can ask multiple questions in sequence.
+
+**Fix:** Split the flow into two modes:
+- **"New Conversation" button** -- runs the full reset + property code + confirm sequence, then sends the message (current behavior, but only when explicitly requested)
+- **Default behavior** -- sends the message directly without resetting, allowing follow-ups
+
+## Technical Details
+
+### File: `src/pages/UserSmsTest.jsx`
+
+**Change 1: Fix response reading (line 87-90)**
+
+Replace:
+```javascript
+setResponse({
+  message: result?.response || "No response returned",
+  intent: result?.intent || result?.last_intent || "detected",
+});
+```
+
+With:
+```javascript
+const responseText = Array.isArray(result?.messages)
+  ? result.messages.join("\n\n")
+  : result?.response || result?.message || "No response returned";
+
+setResponse({
+  message: responseText,
+  intent: result?.intent || result?.last_intent || "detected",
+});
+```
+
+**Change 2: Add conversation state tracking**
+
+Add a new state variable `conversationReady` (boolean) to track whether the property setup has been completed. Once setup runs once, follow-up messages skip the reset/setup steps.
 
 ```javascript
-const { data } = await supabase.functions.invoke("sms-conversation-service", {
-  body: {
-    action: "processMessage",
-    phoneNumber: testPhone,
-    message: message,
-  },
-});
-// data.response contains the AI's reply text
-setResponse({ message: data.response, intent: data.intent || "unknown" });
+const [conversationReady, setConversationReady] = useState(false);
 ```
 
-**Step 3: Add a "Reset Conversation" step before each test**
+**Change 3: Split testResponse into setup + send**
 
-Call the `forceResetMemory` action before each test to ensure a clean state, then walk through the property code flow:
+Modify `testResponse` to check `conversationReady`:
+- If `false`: run the full setup (reset, property code, confirm, then send message), set `conversationReady = true`
+- If `true`: just send the message directly (follow-up mode)
 
-```javascript
-// Step 1: Reset conversation memory
-await supabase.functions.invoke("sms-conversation-service", {
-  body: { action: "forceResetMemory", phoneNumber: testPhone }
-});
+When the user changes the selected property, reset `conversationReady` to `false` so the next message triggers a new setup.
 
-// Step 2: Send property code
-await supabase.functions.invoke("sms-conversation-service", {
-  body: { action: "processMessage", phoneNumber: testPhone, message: property.code }
-});
+**Change 4: Add a "Reset Conversation" button**
 
-// Step 3: Confirm property
-await supabase.functions.invoke("sms-conversation-service", {
-  body: { action: "processMessage", phoneNumber: testPhone, message: "Y" }
-});
+Add a visible button that manually resets the conversation, setting `conversationReady = false`. This lets users explicitly start fresh when they want to.
 
-// Step 4: Send actual question and capture response
-const { data } = await supabase.functions.invoke("sms-conversation-service", {
-  body: { action: "processMessage", phoneNumber: testPhone, message: userMessage }
-});
+**Change 5: Add conversation history display**
 
-setResponse({ message: data.response, intent: "detected" });
-```
+Show a running list of sent messages and AI responses below the response area so users can see the full conversation thread during testing.
 
-### UI Updates
+### UI Changes
 
-- Show a progress indicator during the multi-step setup ("Setting up property... Confirming... Sending question...")
-- Remove the 2-second `setTimeout` delay and database query since the response comes directly from the edge function
-- Keep the existing property dropdown and quick test scenarios unchanged
+- Add a small "Reset Conversation" button near the property selector
+- Show a badge indicating "Conversation active" or "New conversation" status
+- Display conversation history as a scrollable chat-style list
+- When property selection changes, auto-reset the conversation state
 
 ### Summary
 
-| What | Before | After |
-|---|---|---|
-| Edge function called | `openphone-webhook` | `sms-conversation-service` (direct) |
-| Property setup | Skipped (caused errors) | Auto-sends code + confirmation |
-| Response capture | Query DB after 2s delay | Read from edge function return |
-| Conversation reset | Not done | `forceResetMemory` before each test |
+| Change | Detail |
+|---|---|
+| Fix response field | Read `messages` array instead of `response` string |
+| Conversation memory | Only reset when explicitly requested or property changes |
+| History display | Show full message thread for debugging |
+| Reset button | Manual control to start fresh conversations |
 
-### One file changed: `src/pages/UserSmsTest.jsx`
