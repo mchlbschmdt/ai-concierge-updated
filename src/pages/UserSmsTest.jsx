@@ -32,7 +32,7 @@ export default function UserSmsTest() {
       const { data, error } = await supabase
         .from("properties")
         .select("id, code, property_name, address")
-        .eq("user_id", user.id);
+        .order("property_name");
 
       if (error) throw error;
       setProperties(data || []);
@@ -120,6 +120,7 @@ export default function UserSmsTest() {
               onChange={(e) => setSelectedProperty(e.target.value)}
               className="w-full px-4 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
             >
+              <option value="">Select a property...</option>
               {properties.map((property) => (
                 <option key={property.id} value={property.id}>
                   {property.property_name} ({property.code})
