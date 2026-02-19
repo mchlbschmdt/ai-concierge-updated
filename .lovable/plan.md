@@ -1,73 +1,40 @@
 
 
-# Fix File Upload Flow and Add File Type Badges
+# Fix: Property Dropdown Empty in Test AI Responses
 
-## Problems Found
+## Root Cause
 
-1. **Files never load on page refresh**: `fetchProperties` only queries the `properties` table. Nobody ever fetches from the `file_uploads` table, so `property.files` is always empty after a page reload.
-2. **Field name mismatch**: After upload, the service returns `{ original_name, storage_path, file_type, ... }` but `PropertyFilesList` renders `file.name` and `file.path` -- so even newly uploaded files won't display correctly.
-3. **No file type badges**: The file list shows a generic icon for every file type.
+All properties in the database have `user_id = NULL`. The `UserSmsTest.jsx` page filters properties with `.eq("user_id", user.id)`, which returns zero results. That's why the dropdown is empty and no property can be selected.
 
-## Plan
+## Solution
 
-### 1. Load files from `file_uploads` table on property fetch
+Remove the `user_id` filter from the property query in `UserSmsTest.jsx`. Since this is a small deployment (not multi-tenant with strict isolation), all properties should be available to the logged-in user for testing.
 
-**File: `src/services/propertyService.js`**
+## Technical Details
 
-After fetching properties, query `file_uploads` for the current user and group them by `metadata->property_id`. Attach the matching files to each property object as `property.files`.
+### File: `src/pages/UserSmsTest.jsx` (line ~35)
 
-### 2. Normalize file data shape
-
-**File: `src/hooks/useProperties.js`**
-
-Update `handleFileAdded` to normalize the file data from the upload service into a consistent shape used throughout the app:
-
-```text
-{
-  name: fileData.original_name,
-  path: fileData.storage_path,
-  type: fileData.file_type,
-  size: fileData.file_size,
-  uploaded_at: new Date().toISOString()
-}
+Change:
+```
+.eq("user_id", user.id)
 ```
 
-Update `handleFileDeleted` to filter by `file.path` (already does this).
+To: remove this filter entirely, so the query becomes:
 
-### 3. Add file type badges to the files list
-
-**File: `src/components/PropertyFilesList.jsx`**
-
-- Import `Badge` from `@/components/ui/badge`
-- Map the file type string to a short label (JSON, PDF, TXT, CSV, XLSX, DOCX)
-- Display a colored badge next to each file name
-- Use the file's `type` or fall back to extension parsing from the file name
-- Fix the date display to use a simple ISO string instead of `file.uploaded_at?.seconds * 1000`
-
-### 4. Normalize files fetched from the database
-
-**File: `src/services/propertyService.js`**
-
-Create a helper that maps `file_uploads` rows into the normalized shape:
-
-```text
-{
-  name: row.original_name,
-  path: row.storage_path,
-  type: row.file_type,
-  size: row.file_size,
-  uploaded_at: row.created_at
-}
+```javascript
+const { data, error } = await supabase
+  .from("properties")
+  .select("id, code, property_name, address")
+  .order("property_name");
 ```
 
-## Files Changed
+Also add a placeholder option so the dropdown is never blank:
 
-| File | Change |
-|---|---|
-| `src/services/propertyService.js` | Fetch files from `file_uploads` and attach to properties |
-| `src/hooks/useProperties.js` | Normalize file data in `handleFileAdded` |
-| `src/components/PropertyFilesList.jsx` | Add file type badges, fix field names and date display |
+```html
+<option value="">Select a property...</option>
+```
 
-## No database changes needed
+### No other files need to change
 
-The `file_uploads` table schema is already correct. This is purely a frontend data-flow fix.
+The `QuickSmsTest.jsx` component already fetches properties without a `user_id` filter, so it works correctly.
+
