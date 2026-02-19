@@ -1,156 +1,101 @@
 
 
-# Overhaul: AI-First Smart Concierge Response System
+# Feed Uploaded Files into the AI Concierge + Knowledge Base Editor + Quality Ratings
 
-## The Problem
+## Problem
 
-The current system uses a rigid keyword-matching pipeline (3,081 lines of if/else chains) to classify guest messages. When a question like "How can I turn the A/C down?" doesn't match any keyword list, it falls through to a generic food recommendation fallback -- completely wrong. The system has 40+ hardcoded intent categories but can't handle natural language that doesn't fit a predefined bucket.
+The Airbnb JSON files (`messages.json`, `host_quick_replies.json`) uploaded to properties are stored in Supabase Storage and tracked in `file_uploads`, but the AI concierge never reads them. The `PropertyService` only queries the `properties` table's `knowledge_base` text column -- uploaded files are completely invisible to the AI brain.
 
-## The Solution
+Additionally, the `AirbnbMessageParser` component references Firebase methods (`doc`, `getDoc`, `updateDoc`) and is non-functional with Supabase.
 
-Replace the keyword-first architecture with an **AI-first approach**: send every confirmed-state message to an LLM that has the full property context (knowledge base, amenities, local recommendations, conversation history). The AI acts as the concierge brain, and the system only falls back to keyword matching for simple lookups (wifi password, checkout time) as a fast-path optimization.
+## Part 1: Feed Uploaded Files to the AI Concierge
 
-## Architecture
+### Changes to `supabase/functions/sms-conversation-service/propertyService.ts`
 
-### Current Flow (Broken)
-```text
-Message -> Keyword Intent Detection (895 lines)
-        -> 40+ if/else branches (3081 lines)
-        -> Maybe hits AI for food recs
-        -> Usually hits generic fallback
-```
-
-### New Flow
-```text
-Message -> Quick Property Data Check (wifi, parking, checkout = instant answer)
-        -> If not a quick lookup: AI Concierge (with full property context + conversation history)
-        -> AI generates natural, contextual response
-        -> Update conversation memory
-```
-
-## Technical Changes
-
-### 1. New Edge Function: `ai-concierge` (New File)
-
-A clean edge function that wraps the existing OpenAI API key to act as the concierge brain.
-
-**System prompt includes:**
-- Full property details (name, address, wifi, parking, check-in/out, access, house rules, amenities, knowledge base, local recommendations, special notes)
-- Last 10 messages from the conversation for context
-- Guest name if known
-- Property location context
-
-**Key behaviors baked into the prompt:**
-- Answer like a friendly local who knows the property inside and out
-- For property questions (A/C, TV, appliances): check the knowledge base and special notes first, give specific instructions
-- For local recommendations: give 2-3 specific places with why they're great, distance, and vibe
-- Never give generic responses -- always tie answers back to the specific property and area
-- If you truly don't know, say so honestly and offer to connect them with the host
-- Remember what was discussed earlier in the conversation
-
-### 2. Simplified `enhancedConversationService.ts` -- Rewrite the `processMessage` Confirmed State
-
-Replace the massive confirmed-state processing (lines 169-226) with:
+After fetching the property from the `properties` table, also query `file_uploads` for any files linked to that property via `metadata->property_id`. For text-based files (JSON, TXT, CSV), fetch the actual file content from Supabase Storage and append it to the property context.
 
 ```text
-1. Quick-check: Is this a simple property data lookup? (wifi, parking, checkout, access, emergency)
-   - If yes: return the data directly (fast path, no AI needed)
-   
-2. For everything else: Call ai-concierge with:
-   - The guest's message
-   - Full property object
-   - Last 10 conversation messages from sms_conversation_messages table
-   - Guest name from conversation context
-   
-3. Store the AI response in conversation history (sms_conversation_messages table)
-
-4. Return the response
+1. Query file_uploads WHERE metadata->>'property_id' = property.id
+2. For each file:
+   - Fetch the file content from the storage URL in metadata->>'url'
+   - For JSON files: parse and stringify for context
+   - For text/CSV: include raw content (truncated to 3000 chars per file)
+3. Attach as a new field: property.uploaded_files_content
 ```
 
-This replaces the 2,500+ lines of intent routing, follow-up detection, diversification, multi-query parsing, etc. with a single AI call that handles all of it naturally.
+### Changes to `supabase/functions/ai-concierge/index.ts`
 
-### 3. Conversation Memory via `sms_conversation_messages` Table
+Add the uploaded files content to the system prompt under a new section:
 
-The table already exists. Each message exchange will be stored:
-- Guest message (role: "user")  
-- AI response (role: "assistant")
+```text
+=== UPLOADED KNOWLEDGE BASE FILES ===
+{property.uploaded_files_content}
+```
 
-When calling the AI concierge, load the last 10 messages to provide conversation context. This enables natural follow-ups without any special "follow-up detection" code.
+This gives the AI access to the Airbnb message history and host quick replies, so it can learn from past guest interactions and use the host's own language patterns.
 
-### 4. Quick Property Data Lookups (Fast Path)
+## Part 2: Structured Knowledge Base Editor
 
-Keep a simplified version of property data extraction for instant answers that don't need AI:
+### Changes to `src/components/property-forms/AdditionalInfoSection.jsx`
 
-| Query Pattern | Response Source |
+Replace the single "Knowledge Base" textarea with categorized sub-sections:
+
+| Section | Placeholder Example |
 |---|---|
-| wifi, password, network | `property.wifi_name` + `property.wifi_password` |
-| checkout, check out | `property.check_out_time` |
-| check in | `property.check_in_time` |
-| parking | `property.parking_instructions` |
-| access, door, code, locked out | `property.access_instructions` |
-| emergency, contact, host | `property.emergency_contact` |
+| A/C and Climate Control | "Thermostat is on hallway wall. Set to Cool, adjust with arrows." |
+| TV and Entertainment | "Samsung Smart TV, use black remote. Netflix pre-logged in." |
+| Kitchen and Appliances | "Keurig on counter, pods in drawer. Dishwasher pods under sink." |
+| Washer/Dryer | "Stacked in hallway closet. Detergent on shelf." |
+| General Notes | Existing free-form knowledge_base content |
 
-If the data field is empty, fall through to the AI concierge which can search the knowledge base.
+On save, all sections are concatenated into the single `knowledge_base` column using markdown headers (e.g., `## A/C and Climate Control`). On load, the existing text is parsed back into sections by splitting on those headers. No database migration needed.
 
-### 5. Files Changed
+### Changes to `src/components/PropertyEditForm.jsx`
 
-| File | Action |
+Apply the same structured editor to the edit form for existing properties.
+
+## Part 3: Response Quality Rating System
+
+### New Database Table: `response_quality_ratings`
+
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid | Primary key |
+| property_id | uuid | FK to properties |
+| user_id | uuid | Who rated |
+| test_message | text | The question asked |
+| ai_response | text | The AI response |
+| rating | text | "thumbs_up" or "thumbs_down" |
+| feedback | text | Optional text feedback |
+| created_at | timestamptz | Auto-set |
+
+RLS policy: users can insert and select their own ratings.
+
+### Changes to `src/pages/UserSmsTest.jsx`
+
+- Add ThumbsUp/ThumbsDown icon buttons next to each AI response in the conversation history
+- Clicking saves the rating to `response_quality_ratings` via Supabase
+- Show a small stats bar at the top: "X responses rated, Y% positive"
+- Rated messages show a subtle checkmark so they aren't re-rated
+
+## Part 4: Fix AirbnbMessageParser
+
+### Changes to `src/components/AirbnbMessageParser.jsx`
+
+Replace the broken Firebase calls with Supabase equivalents:
+- Instead of writing to Firestore, store parsed messages as a JSON file in Supabase Storage under the property's knowledge base path
+- Create a `file_uploads` record linking it to the property
+- This makes the parsed Airbnb messages automatically available to the AI concierge (via Part 1)
+
+## Files Changed Summary
+
+| File | Change |
 |---|---|
-| `supabase/functions/ai-concierge/index.ts` | **New** -- Clean AI concierge edge function |
-| `supabase/functions/sms-conversation-service/enhancedConversationService.ts` | **Major rewrite** -- Replace 2500+ lines of intent routing with AI-first flow |
-| `supabase/functions/sms-conversation-service/index.ts` | Minor update to pass conversation messages |
-
-### 6. What Gets Removed
-
-The following complexity is replaced by the AI's natural language understanding:
-- `intentRecognitionService.ts` -- 895 lines of keyword matching (kept only for backward compat, but no longer primary)
-- `conversationalResponseGenerator.ts` -- 500+ lines of templated responses
-- `multiQueryParser.ts` -- AI handles multi-part questions naturally
-- `followUpDetection` logic -- conversation history handles this
-- `recommendationDiversifier.ts` -- AI prompt handles this
-- `vibeDetectionService.ts` -- AI understands vibes naturally
-- `troubleshootingDetectionService.ts` -- AI handles troubleshooting naturally
-
-These files won't be deleted (to avoid breaking anything), but the main flow will bypass them.
-
-### 7. AI Concierge System Prompt (Key Section)
-
-```text
-You are the personal concierge for guests staying at {property_name} at {address}.
-
-PROPERTY DETAILS:
-- WiFi: {wifi_name} / {wifi_password}
-- Check-in: {check_in_time} | Check-out: {check_out_time}
-- Parking: {parking_instructions}
-- Access: {access_instructions}
-- Emergency Contact: {emergency_contact}
-- House Rules: {house_rules}
-- Amenities: {amenities}
-
-PROPERTY KNOWLEDGE BASE:
-{knowledge_base}
-
-LOCAL RECOMMENDATIONS:
-{local_recommendations}
-
-SPECIAL NOTES:
-{special_notes}
-
-INSTRUCTIONS:
-- You are a friendly, knowledgeable local. Respond naturally and specifically.
-- For property questions (A/C, TV, appliances, wifi issues): check the knowledge base above for specific instructions. If found, give step-by-step help.
-- For local recommendations: give 2-3 specific places with brief descriptions and approximate distance.
-- Never say "I don't have that information" if the answer is in the property details above.
-- If you truly can't help, offer to connect them with the host at {emergency_contact}.
-- Keep responses concise (under 300 chars for SMS). Split into multiple messages if needed.
-- Remember the conversation context from previous messages.
-```
-
-### 8. What This Fixes
-
-- **"How can I turn the A/C down?"** -- AI reads the knowledge base, finds A/C instructions, gives specific answer
-- **Follow-up questions** -- AI has conversation history, maintains context naturally
-- **Generic responses** -- AI always has the full property context, never falls back to generic
-- **Unknown queries** -- AI can reason about the property and area even for novel questions
-- **Multi-part questions** -- AI handles "What's the wifi and where should we eat?" in one natural response
+| `supabase/functions/sms-conversation-service/propertyService.ts` | Fetch uploaded files content from storage |
+| `supabase/functions/ai-concierge/index.ts` | Add uploaded files section to system prompt |
+| `src/components/property-forms/AdditionalInfoSection.jsx` | Structured knowledge base editor |
+| `src/components/PropertyEditForm.jsx` | Same structured editor for edit flow |
+| `src/pages/UserSmsTest.jsx` | Thumbs up/down rating UI and stats |
+| `src/components/AirbnbMessageParser.jsx` | Fix Firebase to Supabase |
+| Database migration | New `response_quality_ratings` table |
 
