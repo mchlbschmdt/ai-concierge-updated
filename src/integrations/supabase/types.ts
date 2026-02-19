@@ -471,6 +471,47 @@ export type Database = {
         }
         Relationships: []
       }
+      response_quality_ratings: {
+        Row: {
+          ai_response: string
+          created_at: string
+          feedback: string | null
+          id: string
+          property_id: string | null
+          rating: string
+          test_message: string
+          user_id: string
+        }
+        Insert: {
+          ai_response: string
+          created_at?: string
+          feedback?: string | null
+          id?: string
+          property_id?: string | null
+          rating: string
+          test_message: string
+          user_id: string
+        }
+        Update: {
+          ai_response?: string
+          created_at?: string
+          feedback?: string | null
+          id?: string
+          property_id?: string | null
+          rating?: string
+          test_message?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "response_quality_ratings_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       service_connections: {
         Row: {
           connection_details: Json

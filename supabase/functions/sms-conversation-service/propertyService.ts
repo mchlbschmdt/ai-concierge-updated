@@ -10,7 +10,6 @@ export class PropertyService {
     console.log('🔍 PropertyService: Looking up property by phone number:', phoneNumber);
     
     try {
-      // First, get the conversation for this phone number
       const { data: conversation, error: convError } = await supabase
         .from('sms_conversations')
         .select('property_id, property_confirmed')
@@ -27,7 +26,6 @@ export class PropertyService {
         return null;
       }
 
-      // Now get the property details
       const { data: property, error: propError } = await supabase
         .from('properties')
         .select('*')
@@ -61,7 +59,10 @@ export class PropertyService {
           knowledge_base: property.knowledge_base
         };
         
-        return this.enrichPropertyWithLocationContext(baseProperty);
+        // Enrich with uploaded files content
+        const enrichedProperty = this.enrichPropertyWithLocationContext(baseProperty);
+        enrichedProperty.uploaded_files_content = await this.fetchUploadedFilesContent(supabase, property.id);
+        return enrichedProperty;
       }
 
       console.log('❌ PropertyService: Property not found for ID:', conversation.property_id);
@@ -89,7 +90,7 @@ export class PropertyService {
 
       if (property) {
         console.log("✅ PropertyService: Found property:", property.property_name);
-        return {
+        const baseProperty = {
           property_id: property.id,
           property_name: property.property_name,
           address: property.address,
@@ -108,6 +109,10 @@ export class PropertyService {
           special_notes: property.special_notes,
           knowledge_base: property.knowledge_base
         };
+
+        const enriched = PropertyService.enrichPropertyWithLocationContext(baseProperty);
+        enriched.uploaded_files_content = await PropertyService.fetchUploadedFilesContent(this.supabase, property.id);
+        return enriched;
       }
 
       console.log("❌ PropertyService: No property found for code:", code);
@@ -140,7 +145,7 @@ export class PropertyService {
 
       if (property) {
         console.log("✅ PropertyService: Retrieved property:", property.property_name);
-        return {
+        const baseProperty = {
           property_id: property.id,
           property_name: property.property_name,
           address: property.address,
@@ -159,6 +164,10 @@ export class PropertyService {
           special_notes: property.special_notes,
           knowledge_base: property.knowledge_base
         };
+
+        const enriched = PropertyService.enrichPropertyWithLocationContext(baseProperty);
+        enriched.uploaded_files_content = await PropertyService.fetchUploadedFilesContent(this.supabase, property.id);
+        return enriched;
       }
 
       console.log("❌ PropertyService: Property not found for ID:", propertyId);
@@ -169,7 +178,6 @@ export class PropertyService {
     }
   }
 
-  // Add the missing linkPhoneToProperty method
   static async linkPhoneToProperty(supabase: any, phoneNumber: string, propertyId: string): Promise<boolean> {
     console.log("🔗 PropertyService: Linking phone to property:", phoneNumber, "->", propertyId);
     
@@ -194,6 +202,66 @@ export class PropertyService {
     } catch (error) {
       console.error("❌ PropertyService: Error in linkPhoneToProperty:", error);
       return false;
+    }
+  }
+
+  /**
+   * Fetch uploaded file contents for a property from Supabase Storage
+   */
+  static async fetchUploadedFilesContent(supabase: any, propertyId: string): Promise<string> {
+    try {
+      console.log('📁 PropertyService: Fetching uploaded files for property:', propertyId);
+
+      const { data: files, error } = await supabase
+        .from('file_uploads')
+        .select('*')
+        .eq('metadata->>property_id', propertyId);
+
+      if (error) {
+        console.error('❌ PropertyService: Error fetching file_uploads:', error);
+        return '';
+      }
+
+      if (!files || files.length === 0) {
+        console.log('📁 PropertyService: No uploaded files found for property');
+        return '';
+      }
+
+      console.log(`📁 PropertyService: Found ${files.length} uploaded files`);
+
+      const textTypes = ['application/json', 'text/plain', 'text/csv'];
+      const contentParts: string[] = [];
+
+      for (const file of files) {
+        if (!textTypes.includes(file.file_type)) {
+          console.log(`📁 Skipping non-text file: ${file.original_name} (${file.file_type})`);
+          continue;
+        }
+
+        try {
+          const { data: fileData, error: downloadError } = await supabase.storage
+            .from('property-files')
+            .download(file.storage_path);
+
+          if (downloadError) {
+            console.error(`❌ Error downloading ${file.original_name}:`, downloadError);
+            continue;
+          }
+
+          const text = await fileData.text();
+          // Truncate to 3000 chars per file
+          const truncated = text.length > 3000 ? text.substring(0, 3000) + '... [truncated]' : text;
+          contentParts.push(`--- File: ${file.original_name} ---\n${truncated}`);
+          console.log(`✅ Loaded file content: ${file.original_name} (${text.length} chars)`);
+        } catch (fileErr) {
+          console.error(`❌ Error reading file ${file.original_name}:`, fileErr);
+        }
+      }
+
+      return contentParts.join('\n\n');
+    } catch (error) {
+      console.error('❌ PropertyService: Error in fetchUploadedFilesContent:', error);
+      return '';
     }
   }
   
