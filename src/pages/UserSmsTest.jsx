@@ -4,13 +4,14 @@ import { supabase } from "../integrations/supabase/client";
 import { MessageSquare, Loader2 } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
 
-const BUSINESS_PHONE_NUMBER = "+18333301032";
+const TEST_PHONE = "+15555555555";
 
 export default function UserSmsTest() {
   const [properties, setProperties] = useState([]);
   const [selectedProperty, setSelectedProperty] = useState("");
   const [testMessage, setTestMessage] = useState("");
   const [testing, setTesting] = useState(false);
+  const [setupStep, setSetupStep] = useState("");
   const [response, setResponse] = useState(null);
   const { showToast } = useToast();
 
@@ -47,6 +48,14 @@ export default function UserSmsTest() {
     }
   };
 
+  const invokeConversation = async (action, extra = {}) => {
+    const { data, error } = await supabase.functions.invoke("sms-conversation-service", {
+      body: { action, phoneNumber: TEST_PHONE, ...extra },
+    });
+    if (error) throw error;
+    return data;
+  };
+
   const testResponse = async (message) => {
     if (!selectedProperty) {
       showToast("Please select a property", "error");
@@ -58,56 +67,34 @@ export default function UserSmsTest() {
 
     try {
       const property = properties.find(p => p.id === selectedProperty);
-      const testPhone = "+15555555555";
 
-      // Send test message
-      const { data, error } = await supabase.functions.invoke("openphone-webhook", {
-        body: {
-          type: "message.received",
-          data: {
-            object: {
-              id: `test-${Date.now()}`,
-              from: testPhone,
-              to: BUSINESS_PHONE_NUMBER,
-              body: message,
-              direction: "incoming",
-            },
-          },
-        },
+      // Step 1: Reset conversation
+      setSetupStep("Resetting conversation...");
+      await invokeConversation("forceResetMemory");
+
+      // Step 2: Send property code
+      setSetupStep(`Sending property code (${property.code})...`);
+      await invokeConversation("processMessage", { message: property.code });
+
+      // Step 3: Confirm property
+      setSetupStep("Confirming property...");
+      await invokeConversation("processMessage", { message: "Y" });
+
+      // Step 4: Send actual question
+      setSetupStep("Sending your question...");
+      const result = await invokeConversation("processMessage", { message });
+
+      setResponse({
+        message: result?.response || "No response returned",
+        intent: result?.intent || result?.last_intent || "detected",
       });
-
-      if (error) throw error;
-
-      // Wait a moment then fetch conversation
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      const { data: conversation } = await supabase
-        .from("sms_conversations")
-        .select("last_response, last_intent")
-        .eq("phone_number", testPhone)
-        .eq("property_id", property.code)
-        .order("updated_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (conversation) {
-        setResponse({
-          message: conversation.last_response,
-          intent: conversation.last_intent,
-        });
-        showToast("Test completed successfully", "success");
-      } else {
-        setResponse({
-          message: "No response recorded. The webhook may not have saved a reply yet.",
-          intent: "none",
-        });
-        showToast("No conversation found for this property", "warning");
-      }
+      showToast("Test completed successfully", "success");
     } catch (error) {
       console.error("Test error:", error);
       showToast(error.message || "Test failed", "error");
     } finally {
       setTesting(false);
+      setSetupStep("");
     }
   };
 
@@ -178,7 +165,7 @@ export default function UserSmsTest() {
                 {testing ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Testing...
+                    {setupStep || "Testing..."}
                   </>
                 ) : (
                   <>
