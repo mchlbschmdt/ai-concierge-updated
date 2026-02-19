@@ -1,92 +1,156 @@
 
 
-# Fix: AI Response Display and Conversation Memory
+# Overhaul: AI-First Smart Concierge Response System
 
-## Problem 1: "No Response Returned"
+## The Problem
 
-The edge function returns this structure:
+The current system uses a rigid keyword-matching pipeline (3,081 lines of if/else chains) to classify guest messages. When a question like "How can I turn the A/C down?" doesn't match any keyword list, it falls through to a generic food recommendation fallback -- completely wrong. The system has 40+ hardcoded intent categories but can't handle natural language that doesn't fit a predefined bucket.
+
+## The Solution
+
+Replace the keyword-first architecture with an **AI-first approach**: send every confirmed-state message to an LLM that has the full property context (knowledge base, amenities, local recommendations, conversation history). The AI acts as the concierge brain, and the system only falls back to keyword matching for simple lookups (wifi password, checkout time) as a fast-path optimization.
+
+## Architecture
+
+### Current Flow (Broken)
 ```text
-{
-  messages: ["(1/2) Check-in time: 4:00 PM...", "(2/2) Unit 803 keyless entry..."],
-  shouldUpdateState: false
-}
+Message -> Keyword Intent Detection (895 lines)
+        -> 40+ if/else branches (3081 lines)
+        -> Maybe hits AI for food recs
+        -> Usually hits generic fallback
 ```
 
-But the UI reads `result.response` -- a field that doesn't exist. The actual field is `messages` (an array of strings).
-
-**Fix:** Read `result.messages` and join them for display.
-
-## Problem 2: Every Test Resets the Conversation
-
-The current code runs `forceResetMemory` before every test, so follow-up questions are impossible. The user wants a "conversation mode" where they can ask multiple questions in sequence.
-
-**Fix:** Split the flow into two modes:
-- **"New Conversation" button** -- runs the full reset + property code + confirm sequence, then sends the message (current behavior, but only when explicitly requested)
-- **Default behavior** -- sends the message directly without resetting, allowing follow-ups
-
-## Technical Details
-
-### File: `src/pages/UserSmsTest.jsx`
-
-**Change 1: Fix response reading (line 87-90)**
-
-Replace:
-```javascript
-setResponse({
-  message: result?.response || "No response returned",
-  intent: result?.intent || result?.last_intent || "detected",
-});
+### New Flow
+```text
+Message -> Quick Property Data Check (wifi, parking, checkout = instant answer)
+        -> If not a quick lookup: AI Concierge (with full property context + conversation history)
+        -> AI generates natural, contextual response
+        -> Update conversation memory
 ```
 
-With:
-```javascript
-const responseText = Array.isArray(result?.messages)
-  ? result.messages.join("\n\n")
-  : result?.response || result?.message || "No response returned";
+## Technical Changes
 
-setResponse({
-  message: responseText,
-  intent: result?.intent || result?.last_intent || "detected",
-});
+### 1. New Edge Function: `ai-concierge` (New File)
+
+A clean edge function that wraps the existing OpenAI API key to act as the concierge brain.
+
+**System prompt includes:**
+- Full property details (name, address, wifi, parking, check-in/out, access, house rules, amenities, knowledge base, local recommendations, special notes)
+- Last 10 messages from the conversation for context
+- Guest name if known
+- Property location context
+
+**Key behaviors baked into the prompt:**
+- Answer like a friendly local who knows the property inside and out
+- For property questions (A/C, TV, appliances): check the knowledge base and special notes first, give specific instructions
+- For local recommendations: give 2-3 specific places with why they're great, distance, and vibe
+- Never give generic responses -- always tie answers back to the specific property and area
+- If you truly don't know, say so honestly and offer to connect them with the host
+- Remember what was discussed earlier in the conversation
+
+### 2. Simplified `enhancedConversationService.ts` -- Rewrite the `processMessage` Confirmed State
+
+Replace the massive confirmed-state processing (lines 169-226) with:
+
+```text
+1. Quick-check: Is this a simple property data lookup? (wifi, parking, checkout, access, emergency)
+   - If yes: return the data directly (fast path, no AI needed)
+   
+2. For everything else: Call ai-concierge with:
+   - The guest's message
+   - Full property object
+   - Last 10 conversation messages from sms_conversation_messages table
+   - Guest name from conversation context
+   
+3. Store the AI response in conversation history (sms_conversation_messages table)
+
+4. Return the response
 ```
 
-**Change 2: Add conversation state tracking**
+This replaces the 2,500+ lines of intent routing, follow-up detection, diversification, multi-query parsing, etc. with a single AI call that handles all of it naturally.
 
-Add a new state variable `conversationReady` (boolean) to track whether the property setup has been completed. Once setup runs once, follow-up messages skip the reset/setup steps.
+### 3. Conversation Memory via `sms_conversation_messages` Table
 
-```javascript
-const [conversationReady, setConversationReady] = useState(false);
-```
+The table already exists. Each message exchange will be stored:
+- Guest message (role: "user")  
+- AI response (role: "assistant")
 
-**Change 3: Split testResponse into setup + send**
+When calling the AI concierge, load the last 10 messages to provide conversation context. This enables natural follow-ups without any special "follow-up detection" code.
 
-Modify `testResponse` to check `conversationReady`:
-- If `false`: run the full setup (reset, property code, confirm, then send message), set `conversationReady = true`
-- If `true`: just send the message directly (follow-up mode)
+### 4. Quick Property Data Lookups (Fast Path)
 
-When the user changes the selected property, reset `conversationReady` to `false` so the next message triggers a new setup.
+Keep a simplified version of property data extraction for instant answers that don't need AI:
 
-**Change 4: Add a "Reset Conversation" button**
-
-Add a visible button that manually resets the conversation, setting `conversationReady = false`. This lets users explicitly start fresh when they want to.
-
-**Change 5: Add conversation history display**
-
-Show a running list of sent messages and AI responses below the response area so users can see the full conversation thread during testing.
-
-### UI Changes
-
-- Add a small "Reset Conversation" button near the property selector
-- Show a badge indicating "Conversation active" or "New conversation" status
-- Display conversation history as a scrollable chat-style list
-- When property selection changes, auto-reset the conversation state
-
-### Summary
-
-| Change | Detail |
+| Query Pattern | Response Source |
 |---|---|
-| Fix response field | Read `messages` array instead of `response` string |
-| Conversation memory | Only reset when explicitly requested or property changes |
-| History display | Show full message thread for debugging |
-| Reset button | Manual control to start fresh conversations |
+| wifi, password, network | `property.wifi_name` + `property.wifi_password` |
+| checkout, check out | `property.check_out_time` |
+| check in | `property.check_in_time` |
+| parking | `property.parking_instructions` |
+| access, door, code, locked out | `property.access_instructions` |
+| emergency, contact, host | `property.emergency_contact` |
+
+If the data field is empty, fall through to the AI concierge which can search the knowledge base.
+
+### 5. Files Changed
+
+| File | Action |
+|---|---|
+| `supabase/functions/ai-concierge/index.ts` | **New** -- Clean AI concierge edge function |
+| `supabase/functions/sms-conversation-service/enhancedConversationService.ts` | **Major rewrite** -- Replace 2500+ lines of intent routing with AI-first flow |
+| `supabase/functions/sms-conversation-service/index.ts` | Minor update to pass conversation messages |
+
+### 6. What Gets Removed
+
+The following complexity is replaced by the AI's natural language understanding:
+- `intentRecognitionService.ts` -- 895 lines of keyword matching (kept only for backward compat, but no longer primary)
+- `conversationalResponseGenerator.ts` -- 500+ lines of templated responses
+- `multiQueryParser.ts` -- AI handles multi-part questions naturally
+- `followUpDetection` logic -- conversation history handles this
+- `recommendationDiversifier.ts` -- AI prompt handles this
+- `vibeDetectionService.ts` -- AI understands vibes naturally
+- `troubleshootingDetectionService.ts` -- AI handles troubleshooting naturally
+
+These files won't be deleted (to avoid breaking anything), but the main flow will bypass them.
+
+### 7. AI Concierge System Prompt (Key Section)
+
+```text
+You are the personal concierge for guests staying at {property_name} at {address}.
+
+PROPERTY DETAILS:
+- WiFi: {wifi_name} / {wifi_password}
+- Check-in: {check_in_time} | Check-out: {check_out_time}
+- Parking: {parking_instructions}
+- Access: {access_instructions}
+- Emergency Contact: {emergency_contact}
+- House Rules: {house_rules}
+- Amenities: {amenities}
+
+PROPERTY KNOWLEDGE BASE:
+{knowledge_base}
+
+LOCAL RECOMMENDATIONS:
+{local_recommendations}
+
+SPECIAL NOTES:
+{special_notes}
+
+INSTRUCTIONS:
+- You are a friendly, knowledgeable local. Respond naturally and specifically.
+- For property questions (A/C, TV, appliances, wifi issues): check the knowledge base above for specific instructions. If found, give step-by-step help.
+- For local recommendations: give 2-3 specific places with brief descriptions and approximate distance.
+- Never say "I don't have that information" if the answer is in the property details above.
+- If you truly can't help, offer to connect them with the host at {emergency_contact}.
+- Keep responses concise (under 300 chars for SMS). Split into multiple messages if needed.
+- Remember the conversation context from previous messages.
+```
+
+### 8. What This Fixes
+
+- **"How can I turn the A/C down?"** -- AI reads the knowledge base, finds A/C instructions, gives specific answer
+- **Follow-up questions** -- AI has conversation history, maintains context naturally
+- **Generic responses** -- AI always has the full property context, never falls back to generic
+- **Unknown queries** -- AI can reason about the property and area even for novel questions
+- **Multi-part questions** -- AI handles "What's the wifi and where should we eat?" in one natural response
 
