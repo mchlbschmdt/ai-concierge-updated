@@ -1,79 +1,90 @@
 
 
-# Fix: Test Message Not Processed by Webhook
+# Fix: Complete the Test Response Flow
 
-## Problem
+## What's Happening Now
 
-The test page sends a payload with this structure:
-```text
-{
-  data: {
-    object: "call",
-    type: "message.created",
-    body: "can I check in early?",
-    from: "+15555555555",
-    to: "0404"
-  }
-}
-```
+The payload fix is working -- the webhook correctly receives and processes messages. But two problems remain:
 
-But the webhook expects:
-```text
-{
-  type: "message.received",
-  data: {
-    object: {
-      from: "+15555555555",
-      to: "+18333301032",
-      body: "can I check in early?",
-      direction: "incoming"
-    }
-  }
-}
-```
+1. **The conversation requires a property code first.** The SMS concierge uses a state machine: guests must text their property code (e.g., "0404") before asking questions. The test page skips this step and sends the question directly, so the system responds with "I couldn't find property [your question]."
 
-Two mismatches:
-1. **Event type**: The webhook checks `payload.type === 'message.received'` at the top level, but the test puts `type` inside `data` and uses `"message.created"` instead of `"message.received"`.
-2. **Payload structure**: The webhook reads `payload.data.object` as the message object (with `from`, `to`, `body`, `direction`). The test puts the message fields directly in `data` and sets `object: "call"` as a string.
-3. **`to` field**: The webhook validates that `message.to` equals the business phone number (`+18333301032`). The test sends the property code (`"0404"`), which fails this check.
-
-Because the type doesn't match, the webhook returns a generic 200 success without processing anything, and no `sms_conversations` row is created.
+2. **The AI response isn't captured.** The webhook generates a response but doesn't save `last_response` back to the database consistently. The test page queries `sms_conversations.last_response` which remains empty.
 
 ## Solution
 
-Fix the test payload in `UserSmsTest.jsx` to match the exact format the webhook expects from OpenPhone.
+Restructure the test page to call the `sms-conversation-service` edge function directly (instead of going through `openphone-webhook`). This function accepts a `processMessage` action that returns the AI response in the HTTP response body -- no need to query the database afterward.
 
-### File: `src/pages/UserSmsTest.jsx` (lines 62-72)
+### Changes to `src/pages/UserSmsTest.jsx`
 
-Change the payload to:
-```javascript
-const { data, error } = await supabase.functions.invoke("openphone-webhook", {
-  body: {
-    type: "message.received",
-    data: {
-      object: {
-        id: `test-${Date.now()}`,
-        from: testPhone,
-        to: BUSINESS_PHONE_NUMBER,
-        body: message,
-        direction: "incoming",
-      },
-    },
-  },
-});
+**Step 1: Set up the conversation with the property code first**
+
+Before sending the user's test message, automatically send the property code to establish the conversation context:
+
+```text
+1. Call sms-conversation-service with action: "processMessage", phoneNumber: testPhone, message: property.code
+2. Wait for confirmation response
+3. If state is "awaiting_confirmation", send "Y" to confirm
+4. Then send the actual test message
+5. Display the response from step 4
 ```
 
-Where `BUSINESS_PHONE_NUMBER` is defined as `"+18333301032"` at the top of the file (matching the webhook's constant).
+**Step 2: Use the direct response from the edge function**
 
-### Also: Update the conversation query to match by phone number and find the latest conversation
+Instead of querying `sms_conversations.last_response` after a 2-second delay, read the response directly from the edge function's return value:
 
-The webhook's conversation service creates/updates conversations keyed by `phone_number`, not by `property_id`. Since the test phone is `+15555555555`, the query should find the most recent conversation for that phone number. However, the property code lookup is still useful if the conversation service stores property_id -- keep it as a secondary filter but make it optional by falling back to phone-only lookup if no results.
+```javascript
+const { data } = await supabase.functions.invoke("sms-conversation-service", {
+  body: {
+    action: "processMessage",
+    phoneNumber: testPhone,
+    message: message,
+  },
+});
+// data.response contains the AI's reply text
+setResponse({ message: data.response, intent: data.intent || "unknown" });
+```
 
-### One file changed
+**Step 3: Add a "Reset Conversation" step before each test**
 
-| Change | Detail |
-|---|---|
-| Fix test payload structure | Match OpenPhone webhook expected format with `type` at top level, message fields inside `data.object` |
-| Use correct `to` number | Send to business phone number, not property code |
-| Add business phone constant | `const BUSINESS_PHONE_NUMBER = "+18333301032"` |
+Call the `forceResetMemory` action before each test to ensure a clean state, then walk through the property code flow:
 
+```javascript
+// Step 1: Reset conversation memory
+await supabase.functions.invoke("sms-conversation-service", {
+  body: { action: "forceResetMemory", phoneNumber: testPhone }
+});
+
+// Step 2: Send property code
+await supabase.functions.invoke("sms-conversation-service", {
+  body: { action: "processMessage", phoneNumber: testPhone, message: property.code }
+});
+
+// Step 3: Confirm property
+await supabase.functions.invoke("sms-conversation-service", {
+  body: { action: "processMessage", phoneNumber: testPhone, message: "Y" }
+});
+
+// Step 4: Send actual question and capture response
+const { data } = await supabase.functions.invoke("sms-conversation-service", {
+  body: { action: "processMessage", phoneNumber: testPhone, message: userMessage }
+});
+
+setResponse({ message: data.response, intent: "detected" });
+```
+
+### UI Updates
+
+- Show a progress indicator during the multi-step setup ("Setting up property... Confirming... Sending question...")
+- Remove the 2-second `setTimeout` delay and database query since the response comes directly from the edge function
+- Keep the existing property dropdown and quick test scenarios unchanged
+
+### Summary
+
+| What | Before | After |
+|---|---|---|
+| Edge function called | `openphone-webhook` | `sms-conversation-service` (direct) |
+| Property setup | Skipped (caused errors) | Auto-sends code + confirmation |
+| Response capture | Query DB after 2s delay | Read from edge function return |
+| Conversation reset | Not done | `forceResetMemory` before each test |
+
+### One file changed: `src/pages/UserSmsTest.jsx`
