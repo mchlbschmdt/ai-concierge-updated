@@ -130,6 +130,8 @@ ${property.local_recommendations || 'No specific local recommendations provided 
 ═══ SPECIAL NOTES ═══
 ${property.special_notes || 'None.'}
 
+${property.uploaded_files_content ? `═══ UPLOADED KNOWLEDGE BASE FILES ═══\nThe following files were uploaded by the host. Use this information to answer guest questions:\n${property.uploaded_files_content}` : ''}
+
 ═══ MANAGEMENT ═══
 ${property.management_company_name ? `Managed by: ${property.management_company_name}` : ''}
 

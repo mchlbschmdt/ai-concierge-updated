@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import Layout from "../components/Layout";
 import { supabase } from "../integrations/supabase/client";
-import { MessageSquare, Loader2, RotateCcw } from "lucide-react";
+import { MessageSquare, Loader2, RotateCcw, ThumbsUp, ThumbsDown, Check } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
 
 const TEST_PHONE = "+15555555555";
@@ -15,6 +15,8 @@ export default function UserSmsTest() {
   const [response, setResponse] = useState(null);
   const [conversationReady, setConversationReady] = useState(false);
   const [conversationHistory, setConversationHistory] = useState([]);
+  const [ratedMessages, setRatedMessages] = useState(new Set());
+  const [ratingStats, setRatingStats] = useState({ total: 0, positive: 0 });
   const { showToast } = useToast();
 
   const testScenarios = [
@@ -23,17 +25,20 @@ export default function UserSmsTest() {
     { label: "Pool Hours", message: "What are the pool hours?" },
     { label: "Coffee Shops", message: "Where are good coffee shops nearby?" },
     { label: "Parking Info", message: "Where should I park?" },
+    { label: "A/C Help", message: "How do I turn the A/C down?" },
+    { label: "TV Setup", message: "How do I use the TV?" },
   ];
 
   useEffect(() => {
     loadUserProperties();
+    loadRatingStats();
   }, []);
 
-  // Reset conversation when property changes
   useEffect(() => {
     setConversationReady(false);
     setConversationHistory([]);
     setResponse(null);
+    setRatedMessages(new Set());
   }, [selectedProperty]);
 
   const loadUserProperties = async () => {
@@ -54,6 +59,56 @@ export default function UserSmsTest() {
     } catch (error) {
       console.error("Error loading properties:", error);
       showToast("Failed to load properties", "error");
+    }
+  };
+
+  const loadRatingStats = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("response_quality_ratings")
+        .select("rating")
+        .eq("user_id", user.id);
+
+      if (error || !data) return;
+      setRatingStats({
+        total: data.length,
+        positive: data.filter(r => r.rating === "thumbs_up").length,
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  const rateResponse = async (index, rating) => {
+    try {
+      const entry = conversationHistory[index];
+      if (!entry || entry.role !== "ai") return;
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase.from("response_quality_ratings").insert({
+        property_id: selectedProperty,
+        user_id: user.id,
+        test_message: conversationHistory[index - 1]?.text || "",
+        ai_response: entry.text,
+        rating,
+      });
+
+      if (error) throw error;
+
+      setRatedMessages(prev => new Set([...prev, index]));
+      setRatingStats(prev => ({
+        total: prev.total + 1,
+        positive: prev.positive + (rating === "thumbs_up" ? 1 : 0),
+      }));
+      showToast("Rating saved", "success");
+    } catch (error) {
+      console.error("Rating error:", error);
+      showToast("Failed to save rating", "error");
     }
   };
 
@@ -79,6 +134,7 @@ export default function UserSmsTest() {
     setConversationReady(false);
     setConversationHistory([]);
     setResponse(null);
+    setRatedMessages(new Set());
   };
 
   const testResponse = async (message) => {
@@ -93,7 +149,6 @@ export default function UserSmsTest() {
     try {
       const property = properties.find(p => p.id === selectedProperty);
 
-      // Only do setup if conversation isn't ready yet
       if (!conversationReady) {
         setSetupStep("Resetting conversation...");
         await invokeConversation("forceResetMemory");
@@ -107,7 +162,6 @@ export default function UserSmsTest() {
         setConversationReady(true);
       }
 
-      // Send actual question
       setSetupStep("Sending your question...");
       const result = await invokeConversation("processMessage", { message });
       const parsed = parseResponse(result);
@@ -124,6 +178,8 @@ export default function UserSmsTest() {
     }
   };
 
+  const approvalPct = ratingStats.total > 0 ? Math.round((ratingStats.positive / ratingStats.total) * 100) : null;
+
   return (
     <Layout>
       <div className="p-6 max-w-4xl mx-auto">
@@ -133,6 +189,18 @@ export default function UserSmsTest() {
             Test how your AI concierge responds to common guest questions
           </p>
         </div>
+
+        {/* Rating Stats Bar */}
+        {ratingStats.total > 0 && (
+          <div className="bg-card rounded-lg shadow-card p-4 mb-6 flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">
+              <strong>{ratingStats.total}</strong> responses rated
+            </span>
+            <span className={`text-sm font-medium ${approvalPct >= 70 ? 'text-green-600' : approvalPct >= 40 ? 'text-yellow-600' : 'text-red-600'}`}>
+              {approvalPct}% positive
+            </span>
+          </div>
+        )}
 
         <div className="bg-card rounded-lg shadow-card p-6 mb-6">
           <div className="mb-4">
@@ -229,14 +297,43 @@ export default function UserSmsTest() {
             <div className="space-y-3 max-h-96 overflow-y-auto">
               {conversationHistory.map((entry, i) => (
                 <div key={i} className={`flex ${entry.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[80%] rounded-lg p-3 ${
-                    entry.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted/50 text-foreground"
-                  }`}>
-                    <p className="text-sm whitespace-pre-wrap">{entry.text}</p>
-                    {entry.intent && (
-                      <p className="text-xs mt-1 opacity-70">Intent: {entry.intent}</p>
+                  <div className="max-w-[80%]">
+                    <div className={`rounded-lg p-3 ${
+                      entry.role === "user"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted/50 text-foreground"
+                    }`}>
+                      <p className="text-sm whitespace-pre-wrap">{entry.text}</p>
+                      {entry.intent && (
+                        <p className="text-xs mt-1 opacity-70">Intent: {entry.intent}</p>
+                      )}
+                    </div>
+                    {/* Rating buttons for AI responses */}
+                    {entry.role === "ai" && (
+                      <div className="flex items-center gap-1 mt-1 ml-1">
+                        {ratedMessages.has(i) ? (
+                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Check className="h-3 w-3" /> Rated
+                          </span>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => rateResponse(i, "thumbs_up")}
+                              className="p-1 rounded hover:bg-green-100 text-muted-foreground hover:text-green-600 transition-colors"
+                              title="Good response"
+                            >
+                              <ThumbsUp className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => rateResponse(i, "thumbs_down")}
+                              className="p-1 rounded hover:bg-red-100 text-muted-foreground hover:text-red-600 transition-colors"
+                              title="Bad response"
+                            >
+                              <ThumbsDown className="h-3.5 w-3.5" />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>

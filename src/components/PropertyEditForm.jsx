@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Wifi, Key, MapPin, Car, Phone, FileText, Home, AlertTriangle } from "lucide-react";
 import { validateServiceFees, sanitizeServiceFees } from "@/utils/inputValidation";
 import { useToast } from "@/context/ToastContext";
+import AdditionalInfoSection from "@/components/property-forms/AdditionalInfoSection";
 import { SaveButton } from "@/components/ui/SaveButton";
 import { FormLoadingOverlay } from "@/components/ui/FormLoadingOverlay";
 
@@ -367,37 +368,15 @@ export default function PropertyEditForm({ formData, setFormData, handleUpdate, 
       </div>
 
       {/* Additional Information */}
-      <div className="bg-yellow-50 p-4 rounded-lg">
-        <h3 className="font-medium mb-3 flex items-center gap-2">
-          <AlertTriangle size={18} /> Additional Information
-        </h3>
-        <div className="space-y-3">
-          <Textarea 
-            value={formData.local_recommendations || ''} 
-            onChange={(e) => handleInputChange('local_recommendations', e.target.value)} 
-            placeholder="Local Recommendations" 
-            className="resize-y min-h-[80px]"
-          />
-          <Textarea
-            value={formData.cleaning_instructions || ''}
-            onChange={(e) => handleInputChange('cleaning_instructions', e.target.value)}
-            placeholder="Cleaning Instructions"
-            className="resize-y min-h-[80px]"
-          />
-          <Textarea
-            value={formData.special_notes || ''}
-            onChange={(e) => handleInputChange('special_notes', e.target.value)}
-            placeholder="Special Notes"
-            className="resize-y min-h-[80px]"
-          />
-          <Textarea
-            value={formData.knowledge_base || ''}
-            onChange={(e) => handleInputChange('knowledge_base', e.target.value)}
-            placeholder="Knowledge Base"
-            className="resize-y min-h-[100px]"
-          />
-        </div>
-      </div>
+      <AdditionalInfoSection
+        form={{
+          local_recommendations: formData.local_recommendations || '',
+          cleaning_instructions: formData.cleaning_instructions || '',
+          special_notes: formData.special_notes || '',
+          knowledge_base: formData.knowledge_base || '',
+        }}
+        handleChange={(e) => handleInputChange(e.target.name, e.target.value)}
+      />
       
       <FormLoadingOverlay show={isSubmitting} message="Saving property..." />
       
