@@ -4,6 +4,8 @@ import { supabase } from "../integrations/supabase/client";
 import { MessageSquare, Loader2 } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
 
+const BUSINESS_PHONE_NUMBER = "+18333301032";
+
 export default function UserSmsTest() {
   const [properties, setProperties] = useState([]);
   const [selectedProperty, setSelectedProperty] = useState("");
@@ -61,12 +63,15 @@ export default function UserSmsTest() {
       // Send test message
       const { data, error } = await supabase.functions.invoke("openphone-webhook", {
         body: {
+          type: "message.received",
           data: {
-            object: "call",
-            type: "message.created",
-            body: message,
-            from: testPhone,
-            to: property.code,
+            object: {
+              id: `test-${Date.now()}`,
+              from: testPhone,
+              to: BUSINESS_PHONE_NUMBER,
+              body: message,
+              direction: "incoming",
+            },
           },
         },
       });
