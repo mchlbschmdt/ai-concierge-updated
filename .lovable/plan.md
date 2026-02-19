@@ -1,52 +1,79 @@
 
 
-# Fix: AI Response Appears Blank on Test Page
+# Fix: Test Message Not Processed by Webhook
 
-## Root Cause
+## Problem
 
-The `sms_conversations` table stores `property_id` as the property **code** (e.g., "1434"), not the property UUID. But the query on line 83 of `UserSmsTest.jsx` filters with `.eq("property_id", selectedProperty)` where `selectedProperty` is the UUID. This always returns 0 rows, so the response is never displayed.
+The test page sends a payload with this structure:
+```text
+{
+  data: {
+    object: "call",
+    type: "message.created",
+    body: "can I check in early?",
+    from: "+15555555555",
+    to: "0404"
+  }
+}
+```
+
+But the webhook expects:
+```text
+{
+  type: "message.received",
+  data: {
+    object: {
+      from: "+15555555555",
+      to: "+18333301032",
+      body: "can I check in early?",
+      direction: "incoming"
+    }
+  }
+}
+```
+
+Two mismatches:
+1. **Event type**: The webhook checks `payload.type === 'message.received'` at the top level, but the test puts `type` inside `data` and uses `"message.created"` instead of `"message.received"`.
+2. **Payload structure**: The webhook reads `payload.data.object` as the message object (with `from`, `to`, `body`, `direction`). The test puts the message fields directly in `data` and sets `object: "call"` as a string.
+3. **`to` field**: The webhook validates that `message.to` equals the business phone number (`+18333301032`). The test sends the property code (`"0404"`), which fails this check.
+
+Because the type doesn't match, the webhook returns a generic 200 success without processing anything, and no `sms_conversations` row is created.
 
 ## Solution
 
-Use `property.code` instead of `property.id` when querying `sms_conversations`.
+Fix the test payload in `UserSmsTest.jsx` to match the exact format the webhook expects from OpenPhone.
 
-## Technical Details
+### File: `src/pages/UserSmsTest.jsx` (lines 62-72)
 
-### File: `src/pages/UserSmsTest.jsx` (line 83)
-
-Change:
+Change the payload to:
 ```javascript
-.eq("property_id", selectedProperty)
+const { data, error } = await supabase.functions.invoke("openphone-webhook", {
+  body: {
+    type: "message.received",
+    data: {
+      object: {
+        id: `test-${Date.now()}`,
+        from: testPhone,
+        to: BUSINESS_PHONE_NUMBER,
+        body: message,
+        direction: "incoming",
+      },
+    },
+  },
+});
 ```
 
-To:
-```javascript
-.eq("property_id", property.code)
-```
+Where `BUSINESS_PHONE_NUMBER` is defined as `"+18333301032"` at the top of the file (matching the webhook's constant).
 
-The `property` variable is already resolved on line 58:
-```javascript
-const property = properties.find(p => p.id === selectedProperty);
-```
+### Also: Update the conversation query to match by phone number and find the latest conversation
 
-So `property.code` gives the correct text code that matches `sms_conversations.property_id`.
+The webhook's conversation service creates/updates conversations keyed by `phone_number`, not by `property_id`. Since the test phone is `+15555555555`, the query should find the most recent conversation for that phone number. However, the property code lookup is still useful if the conversation service stores property_id -- keep it as a secondary filter but make it optional by falling back to phone-only lookup if no results.
 
-### Also use `.maybeSingle()` instead of `.single()` (line 86)
+### One file changed
 
-Replace `.single()` with `.maybeSingle()` to avoid a 406 error when no conversation exists yet, and show a friendly message instead of a thrown error.
+| Change | Detail |
+|---|---|
+| Fix test payload structure | Match OpenPhone webhook expected format with `type` at top level, message fields inside `data.object` |
+| Use correct `to` number | Send to business phone number, not property code |
+| Add business phone constant | `const BUSINESS_PHONE_NUMBER = "+18333301032"` |
 
-### One file changed, two lines modified
-
-| Line | Before | After |
-|---|---|---|
-| 83 | `.eq("property_id", selectedProperty)` | `.eq("property_id", property.code)` |
-| 86 | `.single()` | `.maybeSingle()` |
-
-Add a fallback message if no conversation is found:
-```javascript
-if (conversation) {
-  setResponse({ message: conversation.last_response, intent: conversation.last_intent });
-} else {
-  setResponse({ message: "No response recorded. The webhook may not have saved a reply.", intent: "none" });
-}
-```
