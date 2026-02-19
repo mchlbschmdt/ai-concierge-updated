@@ -177,52 +177,7 @@ export class EnhancedConversationService {
           };
         }
 
-        // ✅ PHASE 1: Enhanced Knowledge-First Response System (HIGHEST PRIORITY)
-        console.log('🎯 Processing with enhanced knowledge-first approach:', intentResult.intent);
-        
-        // CRITICAL: Check property data FIRST for all property-related intents
-        const propertyDataResponse = await this.checkPropertyDataFirst(intentResult.intent, message, property, conversation);
-        if (propertyDataResponse) {
-          console.log('✅ Property data response generated');
-          return propertyDataResponse;
-        }
-        
-        const enhancedResponse = await this.processWithKnowledgeFirst(intentResult.intent, message, property, conversation);
-        if (enhancedResponse && enhancedResponse.response && enhancedResponse.response.length > 10) {
-          console.log('✅ Enhanced knowledge-first response generated');
-          return enhancedResponse;
-        }
-
-        // ✅ Follow-up intents after knowledge check
-        const conversationFlow = conversation.conversation_context?.conversation_flow;
-        if (conversationFlow) {
-          const followUpIntent = ConversationContextTracker.detectFollowUpIntent(message, conversationFlow);
-          if (followUpIntent) {
-            console.log('🔄 Follow-up intent detected:', followUpIntent);
-            return await this.handleFollowUpIntent(followUpIntent, conversation, message, property);
-          }
-        }
-
-        // Enhanced WiFi Troubleshooting Integration
-        const wifiTroubleshootingResponse = await this.handleEnhancedWiFiTroubleshooting(conversation, message, property);
-        if (wifiTroubleshootingResponse) {
-          return wifiTroubleshootingResponse;
-        }
-
-        // Menu and Food Query Integration
-        const menuResponse = await this.handleMenuQueries(conversation, message, property);
-        if (menuResponse) {
-          return menuResponse;
-        }
-
-        // Handle multi-part requests
-        if (intentResult.intent === 'ask_multiple_requests' && intentResult.subIntents) {
-          return await this.handleMultipleRequests(intentResult.subIntents, property, conversation, message);
-        }
-
-        // Final fallback - only if no enhanced response was generated
-        console.log('⚠️ No enhanced response found, using contextual fallback');
-        return await this.generateContextualFallback(conversation, property, intentResult.intent, message);
+        return await this.processConfirmedWithAI(phoneNumber, message, property, conversation);
       }
 
       // Fallback - should not reach here
@@ -282,6 +237,193 @@ export class EnhancedConversationService {
         response: "I'm having trouble switching properties right now. Please try again.",
         shouldUpdateState: false
       };
+    }
+  }
+
+  // ═══ AI-FIRST CONCIERGE: Main confirmed-state handler ═══
+  private async processConfirmedWithAI(phoneNumber: string, message: string, property: Property, conversation: Conversation) {
+    console.log('🤖 AI-First Concierge processing:', message);
+
+    // FAST PATH: Quick property data lookups that don't need AI
+    const quickAnswer = this.checkQuickLookup(message, property);
+    if (quickAnswer) {
+      console.log('⚡ Quick lookup hit');
+      await this.saveConversationMessage(phoneNumber, conversation.id, message, quickAnswer);
+      await this.conversationManager.updateConversationState(phoneNumber, {
+        last_message_type: 'quick_lookup',
+        last_response: quickAnswer,
+      });
+      return {
+        messages: MessageUtils.ensureSmsLimit(quickAnswer),
+        shouldUpdateState: false,
+      };
+    }
+
+    // AI PATH: Everything else goes to the AI concierge
+    try {
+      // Load conversation history for context
+      const history = await this.getConversationHistory(phoneNumber, conversation.id);
+      const guestName = (conversation.conversation_context as any)?.guestName || null;
+
+      console.log(`🧠 Calling AI concierge with ${history.length} history messages`);
+
+      const { data, error } = await this.supabase.functions.invoke('ai-concierge', {
+        body: { message, property, conversationHistory: history, guestName },
+      });
+
+      if (error) {
+        console.error('❌ AI concierge invocation error:', error);
+        throw error;
+      }
+
+      const aiResponse = data?.response;
+      if (!aiResponse) {
+        throw new Error('Empty AI response');
+      }
+
+      console.log('✅ AI concierge responded:', aiResponse.substring(0, 100));
+
+      // Save to conversation history
+      await this.saveConversationMessage(phoneNumber, conversation.id, message, aiResponse);
+
+      // Update conversation state
+      await this.conversationManager.updateConversationState(phoneNumber, {
+        last_message_type: 'ai_concierge',
+        last_response: aiResponse,
+      });
+
+      return {
+        messages: MessageUtils.ensureSmsLimit(aiResponse),
+        shouldUpdateState: false,
+      };
+    } catch (err) {
+      console.error('❌ AI concierge failed, using fallback:', err);
+      const fallback = property.emergency_contact
+        ? `I'm having trouble right now. For immediate help, contact your host at ${property.emergency_contact}.`
+        : "I'm having trouble right now. Please try again in a moment or contact your host directly.";
+      return {
+        messages: MessageUtils.ensureSmsLimit(fallback),
+        shouldUpdateState: false,
+      };
+    }
+  }
+
+  // Quick property data lookups — no AI needed
+  private checkQuickLookup(message: string, property: Property): string | null {
+    const msg = message.toLowerCase().trim();
+
+    // WiFi
+    if (/\b(wifi|wi-fi|password|network|internet)\b/.test(msg)) {
+      if (property.wifi_name || property.wifi_password) {
+        let response = '📶 WiFi Info:';
+        if (property.wifi_name) response += `\nNetwork: ${property.wifi_name}`;
+        if (property.wifi_password) response += `\nPassword: ${property.wifi_password}`;
+        return response;
+      }
+      return null; // Fall through to AI if no wifi data
+    }
+
+    // Check-out
+    if (/\b(check\s*-?\s*out|checkout)\b/.test(msg) && !/recommend|restaurant|food|eat/i.test(msg)) {
+      if (property.check_out_time) {
+        return `🕐 Check-out time is ${property.check_out_time}.${property.cleaning_instructions ? ` ${property.cleaning_instructions}` : ''}`;
+      }
+      return null;
+    }
+
+    // Check-in
+    if (/\b(check\s*-?\s*in|checkin)\b/.test(msg) && !/recommend|restaurant|food|eat/i.test(msg)) {
+      if (property.check_in_time) {
+        let response = `🕐 Check-in time is ${property.check_in_time}.`;
+        if (property.access_instructions) response += `\n🔑 ${property.access_instructions}`;
+        return response;
+      }
+      return null;
+    }
+
+    // Parking — only if it's a direct question
+    if (/\b(parking|where.*(park|car)|garage)\b/.test(msg) && msg.length < 60) {
+      if (property.parking_instructions) {
+        return `🅿️ Parking: ${property.parking_instructions}`;
+      }
+      return null;
+    }
+
+    // Emergency / host contact
+    if (/\b(emergency|host|contact|manager|help.*urgent)\b/.test(msg)) {
+      if (property.emergency_contact) {
+        return `📞 Host/Emergency Contact: ${property.emergency_contact}`;
+      }
+      return null;
+    }
+
+    return null; // Not a quick lookup → go to AI
+  }
+
+  // Load recent conversation messages for AI context
+  private async getConversationHistory(phoneNumber: string, conversationId?: string): Promise<Array<{role: string, content: string}>> {
+    try {
+      let query = this.supabase
+        .from('sms_conversation_messages')
+        .select('role, content, timestamp')
+        .order('timestamp', { ascending: true })
+        .limit(10);
+      
+      if (conversationId) {
+        query = query.eq('sms_conversation_id', conversationId);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error loading conversation history:', error);
+        return [];
+      }
+
+      return (data || []).map((msg: any) => ({
+        role: msg.role === 'user' ? 'user' : 'assistant',
+        content: msg.content,
+      }));
+    } catch (err) {
+      console.error('Failed to load history:', err);
+      return [];
+    }
+  }
+
+  // Save messages to conversation history
+  private async saveConversationMessage(phoneNumber: string, conversationId: string | undefined, userMessage: string, aiResponse: string) {
+    try {
+      if (!conversationId) {
+        console.warn('No conversationId, skipping message save');
+        return;
+      }
+
+      const messages = [
+        {
+          sms_conversation_id: conversationId,
+          role: 'user',
+          content: userMessage,
+          timestamp: new Date().toISOString(),
+        },
+        {
+          sms_conversation_id: conversationId,
+          role: 'assistant',
+          content: aiResponse,
+          timestamp: new Date().toISOString(),
+        },
+      ];
+
+      const { error } = await this.supabase
+        .from('sms_conversation_messages')
+        .insert(messages);
+
+      if (error) {
+        console.error('Error saving conversation messages:', error);
+      } else {
+        console.log('💾 Saved conversation messages');
+      }
+    } catch (err) {
+      console.error('Failed to save messages:', err);
     }
   }
 
