@@ -80,10 +80,10 @@ export default function UserSmsTest() {
         .from("sms_conversations")
         .select("last_response, last_intent")
         .eq("phone_number", testPhone)
-        .eq("property_id", selectedProperty)
+        .eq("property_id", property.code)
         .order("updated_at", { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (conversation) {
         setResponse({
@@ -91,6 +91,12 @@ export default function UserSmsTest() {
           intent: conversation.last_intent,
         });
         showToast("Test completed successfully", "success");
+      } else {
+        setResponse({
+          message: "No response recorded. The webhook may not have saved a reply yet.",
+          intent: "none",
+        });
+        showToast("No conversation found for this property", "warning");
       }
     } catch (error) {
       console.error("Test error:", error);
