@@ -1,40 +1,52 @@
 
 
-# Fix: Property Dropdown Empty in Test AI Responses
+# Fix: AI Response Appears Blank on Test Page
 
 ## Root Cause
 
-All properties in the database have `user_id = NULL`. The `UserSmsTest.jsx` page filters properties with `.eq("user_id", user.id)`, which returns zero results. That's why the dropdown is empty and no property can be selected.
+The `sms_conversations` table stores `property_id` as the property **code** (e.g., "1434"), not the property UUID. But the query on line 83 of `UserSmsTest.jsx` filters with `.eq("property_id", selectedProperty)` where `selectedProperty` is the UUID. This always returns 0 rows, so the response is never displayed.
 
 ## Solution
 
-Remove the `user_id` filter from the property query in `UserSmsTest.jsx`. Since this is a small deployment (not multi-tenant with strict isolation), all properties should be available to the logged-in user for testing.
+Use `property.code` instead of `property.id` when querying `sms_conversations`.
 
 ## Technical Details
 
-### File: `src/pages/UserSmsTest.jsx` (line ~35)
+### File: `src/pages/UserSmsTest.jsx` (line 83)
 
 Change:
-```
-.eq("user_id", user.id)
-```
-
-To: remove this filter entirely, so the query becomes:
-
 ```javascript
-const { data, error } = await supabase
-  .from("properties")
-  .select("id, code, property_name, address")
-  .order("property_name");
+.eq("property_id", selectedProperty)
 ```
 
-Also add a placeholder option so the dropdown is never blank:
-
-```html
-<option value="">Select a property...</option>
+To:
+```javascript
+.eq("property_id", property.code)
 ```
 
-### No other files need to change
+The `property` variable is already resolved on line 58:
+```javascript
+const property = properties.find(p => p.id === selectedProperty);
+```
 
-The `QuickSmsTest.jsx` component already fetches properties without a `user_id` filter, so it works correctly.
+So `property.code` gives the correct text code that matches `sms_conversations.property_id`.
 
+### Also use `.maybeSingle()` instead of `.single()` (line 86)
+
+Replace `.single()` with `.maybeSingle()` to avoid a 406 error when no conversation exists yet, and show a friendly message instead of a thrown error.
+
+### One file changed, two lines modified
+
+| Line | Before | After |
+|---|---|---|
+| 83 | `.eq("property_id", selectedProperty)` | `.eq("property_id", property.code)` |
+| 86 | `.single()` | `.maybeSingle()` |
+
+Add a fallback message if no conversation is found:
+```javascript
+if (conversation) {
+  setResponse({ message: conversation.last_response, intent: conversation.last_intent });
+} else {
+  setResponse({ message: "No response recorded. The webhook may not have saved a reply.", intent: "none" });
+}
+```
