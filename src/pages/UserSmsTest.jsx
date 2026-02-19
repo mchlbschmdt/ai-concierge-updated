@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import Layout from "../components/Layout";
 import { supabase } from "../integrations/supabase/client";
-import { MessageSquare, Loader2 } from "lucide-react";
+import { MessageSquare, Loader2, RotateCcw } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
 
 const TEST_PHONE = "+15555555555";
@@ -13,6 +13,8 @@ export default function UserSmsTest() {
   const [testing, setTesting] = useState(false);
   const [setupStep, setSetupStep] = useState("");
   const [response, setResponse] = useState(null);
+  const [conversationReady, setConversationReady] = useState(false);
+  const [conversationHistory, setConversationHistory] = useState([]);
   const { showToast } = useToast();
 
   const testScenarios = [
@@ -26,6 +28,13 @@ export default function UserSmsTest() {
   useEffect(() => {
     loadUserProperties();
   }, []);
+
+  // Reset conversation when property changes
+  useEffect(() => {
+    setConversationReady(false);
+    setConversationHistory([]);
+    setResponse(null);
+  }, [selectedProperty]);
 
   const loadUserProperties = async () => {
     try {
@@ -56,6 +65,22 @@ export default function UserSmsTest() {
     return data;
   };
 
+  const parseResponse = (result) => {
+    const responseText = Array.isArray(result?.messages)
+      ? result.messages.join("\n\n")
+      : result?.response || result?.message || "No response returned";
+    return {
+      message: responseText,
+      intent: result?.intent || result?.last_intent || "detected",
+    };
+  };
+
+  const resetConversation = () => {
+    setConversationReady(false);
+    setConversationHistory([]);
+    setResponse(null);
+  };
+
   const testResponse = async (message) => {
     if (!selectedProperty) {
       showToast("Please select a property", "error");
@@ -68,26 +93,27 @@ export default function UserSmsTest() {
     try {
       const property = properties.find(p => p.id === selectedProperty);
 
-      // Step 1: Reset conversation
-      setSetupStep("Resetting conversation...");
-      await invokeConversation("forceResetMemory");
+      // Only do setup if conversation isn't ready yet
+      if (!conversationReady) {
+        setSetupStep("Resetting conversation...");
+        await invokeConversation("forceResetMemory");
 
-      // Step 2: Send property code
-      setSetupStep(`Sending property code (${property.code})...`);
-      await invokeConversation("processMessage", { message: property.code });
+        setSetupStep(`Sending property code (${property.code})...`);
+        await invokeConversation("processMessage", { message: property.code });
 
-      // Step 3: Confirm property
-      setSetupStep("Confirming property...");
-      await invokeConversation("processMessage", { message: "Y" });
+        setSetupStep("Confirming property...");
+        await invokeConversation("processMessage", { message: "Y" });
 
-      // Step 4: Send actual question
+        setConversationReady(true);
+      }
+
+      // Send actual question
       setSetupStep("Sending your question...");
       const result = await invokeConversation("processMessage", { message });
+      const parsed = parseResponse(result);
 
-      setResponse({
-        message: result?.response || "No response returned",
-        intent: result?.intent || result?.last_intent || "detected",
-      });
+      setResponse(parsed);
+      setConversationHistory(prev => [...prev, { role: "user", text: message }, { role: "ai", text: parsed.message, intent: parsed.intent }]);
       showToast("Test completed successfully", "success");
     } catch (error) {
       console.error("Test error:", error);
@@ -110,9 +136,26 @@ export default function UserSmsTest() {
 
         <div className="bg-card rounded-lg shadow-card p-6 mb-6">
           <div className="mb-4">
-            <label className="block text-sm font-medium text-foreground mb-2">
-              Select Property
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-foreground">
+                Select Property
+              </label>
+              <div className="flex items-center gap-2">
+                {conversationReady && (
+                  <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full font-medium">
+                    Conversation active
+                  </span>
+                )}
+                <button
+                  onClick={resetConversation}
+                  disabled={testing}
+                  className="text-xs px-3 py-1 border border-border rounded-md hover:bg-muted transition-colors disabled:opacity-50 flex items-center gap-1"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  Reset
+                </button>
+              </div>
+            </div>
             <select
               value={selectedProperty}
               onChange={(e) => setSelectedProperty(e.target.value)}
@@ -154,6 +197,7 @@ export default function UserSmsTest() {
                 type="text"
                 value={testMessage}
                 onChange={(e) => setTestMessage(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && testMessage && !testing && testResponse(testMessage)}
                 placeholder="Type a custom test message..."
                 className="flex-1 px-4 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
               />
@@ -170,7 +214,7 @@ export default function UserSmsTest() {
                 ) : (
                   <>
                     <MessageSquare className="h-4 w-4" />
-                    Test
+                    Send
                   </>
                 )}
               </button>
@@ -178,17 +222,38 @@ export default function UserSmsTest() {
           </div>
         </div>
 
+        {/* Conversation History */}
+        {conversationHistory.length > 0 && (
+          <div className="bg-card rounded-lg shadow-card p-6 mb-6">
+            <h3 className="text-lg font-semibold text-heading mb-4">Conversation History</h3>
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {conversationHistory.map((entry, i) => (
+                <div key={i} className={`flex ${entry.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[80%] rounded-lg p-3 ${
+                    entry.role === "user"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted/50 text-foreground"
+                  }`}>
+                    <p className="text-sm whitespace-pre-wrap">{entry.text}</p>
+                    {entry.intent && (
+                      <p className="text-xs mt-1 opacity-70">Intent: {entry.intent}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {response && (
           <div className="bg-card rounded-lg shadow-card p-6">
-            <h3 className="text-lg font-semibold text-heading mb-4">AI Response</h3>
-            
+            <h3 className="text-lg font-semibold text-heading mb-4">Latest Response</h3>
             <div className="mb-4">
               <p className="text-sm text-muted-foreground mb-1">Detected Intent:</p>
               <span className="inline-block px-3 py-1 bg-primary/10 text-primary rounded-full text-sm font-medium">
                 {response.intent || "Unknown"}
               </span>
             </div>
-
             <div>
               <p className="text-sm text-muted-foreground mb-2">Response:</p>
               <div className="bg-muted/30 rounded-lg p-4">
