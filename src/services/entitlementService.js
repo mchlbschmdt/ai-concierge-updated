@@ -73,7 +73,20 @@ export const entitlementService = {
   },
 
   async incrementUsage(userId, productId) {
-    // Read current usage
+    // If user has active/admin_granted access (direct or via full_suite), allow immediately
+    const { data: paidEnt } = await supabase
+      .from('user_entitlements')
+      .select('status')
+      .eq('user_id', userId)
+      .in('product_id', [productId, PRODUCT_IDS.FULL_SUITE])
+      .in('status', ['active', 'admin_granted'])
+      .limit(1);
+
+    if (paidEnt && paidEnt.length > 0) {
+      return { allowed: true, count: 0, limit: null };
+    }
+
+    // Read current trial usage
     const { data: current, error: readErr } = await supabase
       .from('user_entitlements')
       .select('trial_usage_count, trial_usage_limit')
