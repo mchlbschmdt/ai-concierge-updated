@@ -1,134 +1,101 @@
 
 
-# App Shell and Navigation Rebuild
+# Dashboard Rebuild (Home Screen)
 
 ## Summary
 
-Rebuild the sidebar, header, and mobile navigation to match the new multi-product platform design. The sidebar gets a deep navy background (#1E2A4A), collapsible icon-only mode, product-grouped navigation with status indicators, and new pages/routes. Mobile gets a bottom-sheet navigation instead of the current slide-in drawer.
+Rewrite `src/pages/Dashboard.jsx` to be a dynamic, product-aware home screen with time-aware greeting, product status cards with colored left borders, conditional stats/quick actions, a product spotlight upsell section, a recent activity feed, and a full empty state for new users.
 
 ## What Changes
 
-### 1. Sidebar Context Update (`src/context/SidebarContext.jsx`)
+### Single File: `src/pages/Dashboard.jsx` -- Full Rewrite
 
-Add a `collapsed` state (separate from `isOpen`) for desktop icon-only mode. Persist collapsed preference in localStorage.
+The entire dashboard is rebuilt. No new files needed -- it uses existing hooks (`useEntitlementContext`, `useAuth`, `useProperties`) and components (`Layout`, `StatusBadge`).
 
-- `isOpen` -- controls mobile slide/sheet visibility
-- `isCollapsed` -- controls desktop icon-only vs full-width mode
-- New method: `toggleCollapsed()`
-- Sidebar width: `w-60` (full) or `w-16` (collapsed) on desktop
+---
 
-### 2. Sidebar Rewrite (`src/components/Sidebar.jsx`)
+### Section 1: Page Header
 
-**Visual changes:**
-- Background: `bg-[#1E2A4A]` deep navy instead of `bg-card`
-- Text colors: active = white, inactive = `#94A3B8` (slate-400)
-- Active item: left border accent in `#2563EB` + `bg-white/10`
+- Time-aware greeting: "Good morning/afternoon/evening, [Name]" (uses `currentUser.user_metadata.full_name` or email prefix, plus current hour)
+- Subtext: "Here's your HostlyAI Platform overview"
+- Right side: notification badge ("X new notifications" from announcements query) + formatted current date
 
-**Logo area (top):**
-- "HostlyAI" brand + "Platform" subtitle in small gray text
-- Collapse/expand arrow button (ChevronLeft/ChevronRight) -- desktop only
+### Section 2: My Active Products (Top of page)
 
-**Navigation restructure:**
+Horizontal scrollable row of 4 product cards (excludes `full_suite` since it grants access to the others). Each card:
 
-| Section | Items | Gating |
+| Status | Card Style |
+|---|---|
+| Active (`active` / `admin_granted`) | White bg, green left border (4px `border-l-4 border-success`), green dot, "Go to [Product]" link |
+| Trial | White bg, amber left border, clock icon, "X uses remaining / X days remaining", "Upgrade" text |
+| Locked | Gray bg (`bg-slate-50`), gray padlock, desaturated text, "Unlock from $X/mo" amber button |
+| Expired | White bg, red left border, warning icon, "Reactivate" red text |
+
+Each card shows: large emoji icon (text-3xl), product name, status badge, and contextual CTA.
+
+### Section 3: Quick Stats (Conditional)
+
+Only renders stat cards for products the user has access to. Uses existing `useProperties` hook for property/guest counts. Other stats are placeholder values for now (messages, SMS status, etc.):
+
+- **AI Concierge**: Properties count (linked), Messages this week, Guests total, SMS status
+- **SnapPro**: Photos processed, Photos this month, Edits remaining (all placeholder "---")
+- **Analytics**: Avg response rate, Revenue, Satisfaction score (all placeholder "---")
+- If no products active: skip this section entirely (empty state handles it)
+
+### Section 4: Quick Actions (Conditional)
+
+Grid of action buttons, only showing for active products:
+
+- **Concierge**: Add Property, View Messages, Test AI
+- **SnapPro**: Optimize a Photo, View Photo Library
+- **Analytics**: View Insights, Download Report
+- **Academy**: Continue Learning, Browse Videos
+- Each is a `Link` card with icon, title, description, and hover arrow
+
+### Section 5: Product Spotlight (Upsell)
+
+"You might also like" section -- only shows if user doesn't have ALL products. Displays 1-2 locked/expired product cards with value prop text and "Start Free Trial" CTA linking to `/products`.
+
+### Section 6: Recent Activity Feed
+
+Timeline of recent events. Currently uses placeholder/mock data (same pattern as existing) but organized by product icon:
+
+- AI Concierge events: message icon, guest check-in
+- General events: SMS automation
+- Each row: product emoji, description, relative timestamp, "View" link
+
+### Empty State (No Active Products)
+
+If user has zero active/trial entitlements:
+- Large centered section with wave emoji
+- "Welcome to HostlyAI Platform!"
+- "Choose your first product to get started"
+- Grid of all 5 product cards with "Start Free Trial" CTA linking to `/products`
+
+## Data Sources
+
+| Data | Source | Notes |
 |---|---|---|
-| OVERVIEW | Dashboard, My Products | Always accessible |
-| AI CONCIERGE | Properties, Guests, Messages, Email Management, Knowledge Base, FAQ Editor, Travel Guide, Test AI Responses | `ai_concierge` entitlement |
-| SNAPPRO PHOTOS | Photo Optimizer, My Photo Library | `snappro` entitlement |
-| ANALYTICS | Analytics, Smart Insights, Quality Analytics | `analytics` entitlement |
-| HOST ACADEMY | Video Library, My Progress | `academy` entitlement |
-| ACCOUNT | Profile Settings, Billing and Subscriptions, Support | Always accessible |
-| ADMIN | (existing admin items + Entitlements + Announcements) | `isSuperAdmin` only |
+| User name | `useAuth().currentUser.user_metadata` or `.email` | Already available |
+| Products list | `useEntitlementContext().products` | Already loaded |
+| Access status | `useEntitlementContext().hasAccess(id)` | Returns status + trialInfo |
+| Properties count | `useProperties().properties.length` | Existing hook |
+| Guests count | Supabase query in component | Simple count query |
+| Announcement count | Supabase query (same as Layout header) | For notification badge |
+| Messages/SMS/Analytics stats | Placeholder values | Real data deferred |
 
-**Section header indicators:**
-- Locked: gray padlock icon + "Unlock" amber button
-- Trial: amber clock icon + "Trial" text
-- Active: green dot
+## Technical Notes
 
-**Collapsed mode (desktop):**
-- Show only icons, hide labels and section headers
-- Tooltip on hover showing item label
-- Section dividers remain as thin horizontal lines
-
-### 3. Header Update (`src/components/Layout.jsx`)
-
-**Left:** "HostlyAI Platform" text (updated from "Hostly.ai")
-
-**Right side additions (in order):**
-- Global search (keep existing)
-- Announcement bell icon with unread badge count (queries `announcements` table for active count minus dismissed)
-- Admin badge (keep existing, only for super_admin)
-- Profile dropdown (enhanced)
-
-**Profile dropdown enhancements:**
-- Show user email
-- Show mini product badges for each active entitlement (colored pills)
-- "Manage Subscriptions" link to `/billing`
-- "Profile Settings" link
-- Sign Out button
-
-### 4. Mobile Navigation
-
-Replace the current mobile slide-in sidebar with a bottom sheet using the existing `MobileDrawer.jsx` pattern:
-
-- Hamburger button in header opens a bottom sheet (`h-[85vh]`)
-- Sheet contains the same nav structure as desktop sidebar
-- Pull-down handle at top to dismiss
-- Full-height scrollable content
-
-### 5. New Routes and Pages
-
-| Route | Page | Notes |
-|---|---|---|
-| `/products` | `MyProducts.jsx` | Product catalog showing all 5 products with subscription status, trial info, pricing |
-| `/billing` | `Billing.jsx` | Placeholder -- "Billing coming soon. Contact admin for access." |
-| `/support` | `Support.jsx` | Simple support page with contact info / FAQ link |
-| `/snappro/library` | Extend SnapPro | Add "My Photo Library" tab/section |
-| `/academy/progress` | Extend HostAcademy | Add "My Progress" tab/section |
-
-### 6. App.jsx Route Updates
-
-Add new routes:
-- `/products` -- ungated, always accessible
-- `/billing` -- ungated
-- `/support` -- ungated
-- `/snappro/library` -- gated by `snappro`
-- `/academy/progress` -- gated by `academy`
-
-Move Properties and Guests under AI Concierge gating in the sidebar (but keep routes ungated per existing plan -- the sidebar just visually groups them under AI Concierge).
-
-### 7. Tailwind Config
-
-Add the sidebar navy color as a named token:
-```
-sidebar: '#1E2A4A',
-'sidebar-foreground': '#94A3B8',
-'sidebar-active': '#FFFFFF',
-```
+- No new hooks or services needed
+- Uses `useProperties` for property count (already cached)
+- Guests count: inline `useEffect` with `supabase.from('guests').select('*', { count: 'exact', head: true })`
+- Time greeting: simple `new Date().getHours()` check (< 12 = morning, < 17 = afternoon, else evening)
+- Product cards use `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4` for responsive layout
+- Activity feed is mock data for now (real activity tracking is a future feature)
 
 ## Files Changed
 
 | File | Action |
 |---|---|
-| `tailwind.config.js` | Add sidebar color tokens |
-| `src/context/SidebarContext.jsx` | Add `isCollapsed` state + `toggleCollapsed` |
-| `src/components/Sidebar.jsx` | Full rewrite -- navy bg, collapse mode, new nav structure, section indicators |
-| `src/components/Layout.jsx` | Update header text, add bell icon, enhance profile dropdown, use bottom sheet on mobile |
-| `src/App.jsx` | Add `/products`, `/billing`, `/support`, `/snappro/library`, `/academy/progress` routes |
-| `src/pages/MyProducts.jsx` | **New** -- product catalog with subscription status cards |
-| `src/pages/Billing.jsx` | **New** -- placeholder billing page |
-| `src/pages/Support.jsx` | **New** -- simple support/contact page |
-| `src/pages/SnapPro.jsx` | Update to handle `/snappro/library` sub-route |
-| `src/pages/HostAcademy.jsx` | Update to handle `/academy/progress` sub-route |
-| `src/components/StatusBadge.jsx` | No changes needed (already supports all statuses) |
-
-## Implementation Order
-
-1. Tailwind config -- add sidebar color tokens
-2. SidebarContext -- add collapsed state
-3. Sidebar rewrite -- navy theme, collapsible, new nav structure
-4. Layout header updates -- bell, dropdown enhancements, mobile bottom sheet
-5. New placeholder pages (MyProducts, Billing, Support)
-6. App.jsx route additions
-7. SnapPro/HostAcademy sub-page updates
+| `src/pages/Dashboard.jsx` | Full rewrite |
 
