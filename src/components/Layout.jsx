@@ -3,7 +3,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { User, ChevronDown, Shield, Menu, Search, Command, LogOut, Bell, CreditCard, ShoppingBag } from "lucide-react";
+import { User, ChevronDown, Shield, Menu, Search, Command, LogOut, CreditCard, ShoppingBag } from "lucide-react";
 import { ProfileCompletionBadge } from './profile/ProfileCompletionBadge';
 import { useSidebar } from '@/context/SidebarContext';
 import { useCommandPalette } from '@/hooks/useCommandPalette';
@@ -12,6 +12,7 @@ import CommandPalette from './CommandPalette';
 import Sidebar from "./Sidebar";
 import Footer from "./Footer";
 import AnnouncementBanner from "./AnnouncementBanner";
+import NotificationDropdown from "./NotificationDropdown";
 import { EntitlementProvider } from '@/context/EntitlementContext';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -22,23 +23,6 @@ export default function Layout({ children }) {
   const [showDropdown, setShowDropdown] = useState(false);
   const { toggleSidebar, isMobile, isCollapsed } = useSidebar();
   const { isOpen: isCommandPaletteOpen, setIsOpen: setIsCommandPaletteOpen } = useCommandPalette();
-  const [announcementCount, setAnnouncementCount] = useState(0);
-
-  useEffect(() => {
-    const fetchCount = async () => {
-      try {
-        const dismissed = JSON.parse(localStorage.getItem('dismissed-announcements') || '[]');
-        const { count } = await supabase
-          .from('announcements')
-          .select('*', { count: 'exact', head: true })
-          .eq('is_active', true)
-          .lte('starts_at', new Date().toISOString());
-        const total = count || 0;
-        setAnnouncementCount(Math.max(0, total - dismissed.length));
-      } catch {}
-    };
-    fetchCount();
-  }, []);
 
   const handleLogout = async () => {
     try {
@@ -87,19 +71,8 @@ export default function Layout({ children }) {
               </kbd>
             </button>
 
-            {/* Announcement bell */}
-            <button
-              onClick={() => navigate('/')}
-              className="relative p-2 rounded-lg hover:bg-white/10 transition-colors"
-              aria-label="Announcements"
-            >
-              <Bell className="h-5 w-5 text-primary-foreground/70" />
-              {announcementCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-error text-error-foreground text-[10px] font-bold rounded-full flex items-center justify-center">
-                  {announcementCount}
-                </span>
-              )}
-            </button>
+            {/* Notification bell dropdown */}
+            <NotificationDropdown />
 
             {isSuperAdmin && (
               <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-white/15 text-primary-foreground rounded-full text-xs font-medium">

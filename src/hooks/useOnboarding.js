@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { profileService } from '@/services/profileService';
 import { useToast } from '@/context/ToastContext';
+import { supabase } from '@/integrations/supabase/client';
 
 export const useOnboarding = () => {
   const { currentUser } = useAuth();
@@ -11,18 +12,17 @@ export const useOnboarding = () => {
   const [skippedSteps, setSkippedSteps] = useState([]);
   const [formData, setFormData] = useState({
     fullName: '',
-    avatarFile: null,
-    avatarUrl: null,
-    securityQuestions: [],
-    securityAnswers: [],
+    companyName: '',
+    propertyCount: '',
+    platforms: [],
+    selectedProduct: null,
+    // Property mini-form
     propertyName: '',
     propertyAddress: '',
     propertyCode: '',
-    checkInTime: '',
-    checkOutTime: ''
   });
 
-  const totalSteps = 4;
+  const totalSteps = 5;
 
   const updateFormData = useCallback((updates) => {
     setFormData(prev => ({ ...prev, ...updates }));
@@ -41,17 +41,12 @@ export const useOnboarding = () => {
   }, [currentStep]);
 
   const skipStep = useCallback(async (stepName) => {
-    // If no step name provided, just go to next step (backward compatibility)
-    if (!stepName) {
-      nextStep();
-      return;
-    }
-
+    if (!stepName) { nextStep(); return; }
     try {
       setLoading(true);
       await profileService.addSkippedStep(currentUser.id, stepName);
       setSkippedSteps(prev => [...prev, stepName]);
-      showToast('Step skipped. You can complete it later from Profile Settings.', 'info');
+      showToast('Step skipped. You can complete it later.', 'info');
       nextStep();
     } catch (error) {
       console.error('Error skipping step:', error);
@@ -61,7 +56,6 @@ export const useOnboarding = () => {
     }
   }, [currentUser, nextStep, showToast]);
 
-  // Load skipped steps on mount
   useEffect(() => {
     const loadSkippedSteps = async () => {
       if (currentUser?.id) {
@@ -76,39 +70,68 @@ export const useOnboarding = () => {
     loadSkippedSteps();
   }, [currentUser]);
 
-  const saveProgress = useCallback(async (stepData) => {
-    if (!currentUser?.id) {
-      console.error('No current user found - auth may not be ready yet');
-      
-      // Wait a bit and retry once
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      if (!currentUser?.id) {
-        console.error('Still no current user after retry');
-        showToast('Authentication error. Please try logging in again.', 'error');
-        return false;
-      }
-    }
-    
+  const saveProfile = useCallback(async (data) => {
+    if (!currentUser?.id) return false;
     try {
       setLoading(true);
-      
-      // Save profile updates
-      if (stepData.fullName) {
-        await profileService.updateProfile(currentUser.id, {
-          full_name: stepData.fullName
-        });
+      const updates = {};
+      if (data.fullName) updates.full_name = data.fullName;
+      if (Object.keys(updates).length > 0) {
+        await profileService.updateProfile(currentUser.id, updates);
       }
-      
-      // Upload avatar if provided
-      if (stepData.avatarFile) {
-        await profileService.uploadAvatar(currentUser.id, stepData.avatarFile);
-      }
-      
       return true;
     } catch (error) {
-      console.error('Error saving progress:', error);
-      showToast('Failed to save progress', 'error');
+      console.error('Error saving profile:', error);
+      showToast('Failed to save profile', 'error');
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUser, showToast]);
+
+  const startTrial = useCallback(async (productId) => {
+    if (!currentUser?.id || !productId) return false;
+    try {
+      setLoading(true);
+      // Check if entitlement already exists
+      const { data: existing } = await supabase
+        .from('user_entitlements')
+        .select('id, status')
+        .eq('user_id', currentUser.id)
+        .eq('product_id', productId)
+        .maybeSingle();
+
+      if (existing && (existing.status === 'trial' || existing.status === 'active')) {
+        return true; // Already has access
+      }
+
+      // Entitlements are auto-created by the handle_new_user trigger,
+      // so trial should already exist. Just verify.
+      return true;
+    } catch (error) {
+      console.error('Error starting trial:', error);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUser]);
+
+  const addProperty = useCallback(async (propertyData) => {
+    if (!currentUser?.id) return false;
+    try {
+      setLoading(true);
+      const { error } = await supabase.from('properties').insert({
+        user_id: currentUser.id,
+        property_name: propertyData.propertyName,
+        address: propertyData.propertyAddress,
+        code: propertyData.propertyCode || `PROP-${Date.now()}`,
+      });
+      if (error) throw error;
+      showToast('Property added!', 'success');
+      return true;
+    } catch (error) {
+      console.error('Error adding property:', error);
+      showToast('Failed to add property', 'error');
       return false;
     } finally {
       setLoading(false);
@@ -117,11 +140,10 @@ export const useOnboarding = () => {
 
   const completeOnboarding = useCallback(async () => {
     if (!currentUser?.id) return false;
-    
     try {
       setLoading(true);
       await profileService.markOnboardingComplete(currentUser.id);
-      showToast('Welcome! Your account is all set up.', 'success');
+      showToast('Welcome to HostlyAI! 🎉', 'success');
       return true;
     } catch (error) {
       console.error('Error completing onboarding:', error);
@@ -145,7 +167,9 @@ export const useOnboarding = () => {
     nextStep,
     prevStep,
     skipStep,
-    saveProgress,
+    saveProfile,
+    startTrial,
+    addProperty,
     completeOnboarding
   };
 };
