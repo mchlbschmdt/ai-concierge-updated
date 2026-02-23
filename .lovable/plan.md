@@ -1,55 +1,31 @@
 
 
-# Build SnapPro Photo Optimizer and Library
+# Fix: SnapPro Showing "Unlock" Despite Having Access
 
-The `/snappro` page is currently a "Coming Soon" placeholder. This plan replaces it with the full SnapPro product.
+## Problem
 
----
+The `ProductGate` component wraps SnapPro pages in `App.jsx` (the router level), but the `EntitlementProvider` that supplies entitlement data lives inside `Layout.jsx` (rendered inside the page component). Since `ProductGate` runs before `Layout` mounts, it always gets the fallback "no access" response and shows the lock screen.
 
-## Step 1: Database Migration
+```
+App.jsx
+  -> ProductGate (needs EntitlementProvider... but it's not here)
+    -> SnapPro page
+      -> Layout (EntitlementProvider is here -- too late!)
+```
 
-Create the `snappro_images` table and `snappro-photos` storage bucket:
+## Solution
 
-| Column | Type | Purpose |
-|---|---|---|
-| id | uuid (PK) | Image ID |
-| user_id | uuid | Owner |
-| original_url | text | Original uploaded image URL |
-| optimized_url | text | Processed image URL |
-| file_name | text | Original file name |
-| file_size | integer | Size in bytes |
-| settings | jsonb | Enhancement settings used |
-| status | text | pending / processing / completed / failed |
-| created_at | timestamptz | Upload time |
+Move the `EntitlementProvider` up from `Layout.jsx` into `App.jsx`, alongside the other providers (AuthProvider, UpgradeModalProvider, etc.). This ensures all `ProductGate` components and `useProductAccess` hooks have access to entitlement data.
 
-RLS policies ensure users can only access their own images. The storage bucket allows uploads up to 20MB (JPG/PNG/WebP).
+## Changes
 
-## Step 2: Photo Optimizer Page (`/snappro`)
+### 1. `src/App.jsx`
+- Import `EntitlementProvider` from `@/context/EntitlementContext`
+- Wrap it around the `<Routes>` block, inside `AuthProvider` (since it depends on auth) and inside `UpgradeModalProvider`
 
-Replace the placeholder with:
-- Hero section with usage counter for trial users ("3 of 10 free edits used")
-- Drag-and-drop upload zone (JPG/PNG/WebP, max 20MB) with file preview
-- Enhancement settings: Auto Enhance, HDR, White Balance, Brightness, Virtual Twilight toggles/sliders
-- Process button that calls `incrementUsage()` before uploading; blocks if trial exhausted
-- Recent uploads section showing last 5 processed images
+### 2. `src/components/Layout.jsx`
+- Remove the `EntitlementProvider` wrapper from the Layout return (since it now lives higher up)
+- Remove the `EntitlementProvider` import
 
-## Step 3: Photo Library Page (`/snappro/library`)
-
-- Responsive image grid with thumbnails
-- Each card: thumbnail, file name, date, status badge
-- Actions: Download, Delete (removes from storage + DB), Preview (lightbox)
-- Empty state directing users to the Optimizer
-
-## Step 4: Routing Updates (`App.jsx`)
-
-- Wrap `/snappro` and `/snappro/library` routes with `<ProductGate productId="snappro">`
-
-## Files Changed
-
-| File | Action |
-|---|---|
-| New migration SQL | Create snappro_images table + RLS + storage bucket |
-| `src/pages/SnapPro.jsx` | Full rewrite -- optimizer UI |
-| `src/pages/SnapProLibrary.jsx` | New file -- photo library grid |
-| `src/App.jsx` | Add ProductGate wrapping to snappro routes |
+This is a small, surgical fix -- just moving a provider up one level in the component tree. No logic changes needed.
 
