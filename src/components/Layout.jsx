@@ -13,7 +13,6 @@ import Sidebar from "./Sidebar";
 import Footer from "./Footer";
 import AnnouncementBanner from "./AnnouncementBanner";
 import NotificationDropdown from "./NotificationDropdown";
-import { EntitlementProvider } from '@/context/EntitlementContext';
 import { supabase } from '@/integrations/supabase/client';
 
 export default function Layout({ children }) {
@@ -40,7 +39,6 @@ export default function Layout({ children }) {
   };
 
   return (
-    <EntitlementProvider>
       <div className="min-h-screen bg-background">
         {/* Header */}
         <header className="fixed top-0 left-0 right-0 h-16 bg-primary border-b border-primary/80 px-4 md:px-8 flex items-center justify-between shadow-sm z-50">
@@ -161,7 +159,6 @@ export default function Layout({ children }) {
           onClose={() => setIsCommandPaletteOpen(false)} 
         />
       </div>
-    </EntitlementProvider>
   );
 }
 
