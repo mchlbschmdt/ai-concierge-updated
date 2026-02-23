@@ -52,6 +52,7 @@ import AcademyVideo from "./pages/AcademyVideo";
 import AcademyProgress from "./pages/AcademyProgress";
 import ProductGate from "./components/ProductGate";
 import UpgradeModal from "./components/UpgradeModal";
+import { EntitlementProvider } from "./context/EntitlementContext";
 import MyProducts from "./pages/MyProducts";
 import Billing from "./pages/Billing";
 import Support from "./pages/Support";
@@ -68,6 +69,7 @@ const App = () => (
             <GmailAuthProvider>
               <ToastProvider>
                 <UpgradeModalProvider>
+                <EntitlementProvider>
                 <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
@@ -201,6 +203,7 @@ const App = () => (
               <Route path="*" element={<NotFound />} />
                 </Routes>
                 <UpgradeModal />
+                </EntitlementProvider>
                 </UpgradeModalProvider>
                 <PwaUpdatePrompt />
                 <PwaInstallPrompt />
