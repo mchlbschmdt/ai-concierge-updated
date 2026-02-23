@@ -46,6 +46,7 @@ import ProductGate from "./components/ProductGate";
 import MyProducts from "./pages/MyProducts";
 import Billing from "./pages/Billing";
 import Support from "./pages/Support";
+import Pricing from "./pages/Pricing";
 
 const queryClient = new QueryClient();
 
@@ -61,6 +62,7 @@ const App = () => (
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/pricing" element={<Pricing />} />
               <Route path="/auth/callback" element={<GoogleAuthCallback />} />
               <Route path="/onboarding" element={
                 <ProtectedRoute><Onboarding /></ProtectedRoute>
