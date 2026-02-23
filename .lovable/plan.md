@@ -1,101 +1,102 @@
 
-
-# Dashboard Rebuild (Home Screen)
+# My Products Page (Subscription Manager)
 
 ## Summary
 
-Rewrite `src/pages/Dashboard.jsx` to be a dynamic, product-aware home screen with time-aware greeting, product status cards with colored left borders, conditional stats/quick actions, a product spotlight upsell section, a recent activity feed, and a full empty state for new users.
+Rewrite `src/pages/MyProducts.jsx` into a full subscription management page with three sections: current subscriptions with detailed status cards, available products grid for upsell, and a bundle savings banner. Uses existing `useEntitlementContext` and `useProperties` hooks.
 
 ## What Changes
 
-### Single File: `src/pages/Dashboard.jsx` -- Full Rewrite
-
-The entire dashboard is rebuilt. No new files needed -- it uses existing hooks (`useEntitlementContext`, `useAuth`, `useProperties`) and components (`Layout`, `StatusBadge`).
+### Single File: `src/pages/MyProducts.jsx` -- Full Rewrite
 
 ---
 
-### Section 1: Page Header
+### Page Header
 
-- Time-aware greeting: "Good morning/afternoon/evening, [Name]" (uses `currentUser.user_metadata.full_name` or email prefix, plus current hour)
-- Subtext: "Here's your HostlyAI Platform overview"
-- Right side: notification badge ("X new notifications" from announcements query) + formatted current date
+- Title: "My Products"
+- Subtitle: "Manage your subscriptions and access"
+- Right side: "Browse all products" link (scrolls to Section 2 or is decorative since this IS the products page)
 
-### Section 2: My Active Products (Top of page)
+### Section 1: Current Subscriptions
 
-Horizontal scrollable row of 4 product cards (excludes `full_suite` since it grants access to the others). Each card:
+Shows every product the user has an entitlement for (any status: active, trial, expired, admin_granted). Each is an expanded row card with:
 
-| Status | Card Style |
+**Layout per card:**
+- Left column: Large emoji icon (text-4xl) + product name + tagline
+- Center column: Status-specific content:
+
+| Status | Display |
 |---|---|
-| Active (`active` / `admin_granted`) | White bg, green left border (4px `border-l-4 border-success`), green dot, "Go to [Product]" link |
-| Trial | White bg, amber left border, clock icon, "X uses remaining / X days remaining", "Upgrade" text |
-| Locked | Gray bg (`bg-slate-50`), gray padlock, desaturated text, "Unlock from $X/mo" amber button |
-| Expired | White bg, red left border, warning icon, "Reactivate" red text |
+| `active` | Green "Active" badge, "Renews monthly - $X/mo", "Manage" button |
+| `trial` (usage) | Amber badge, "X of Y free uses remaining", progress bar (% used), "Upgrade Now" amber CTA |
+| `trial` (days) | Amber badge, "Trial ends [date] - X days left", progress bar (days elapsed / total), "Upgrade Now" amber CTA |
+| `expired` | Red badge, "Expired" + reason text, "Reactivate" red CTA |
+| `admin_granted` | Blue badge, "Access granted by admin", optional expiry date if `access_ends_at` is set |
+| `cancelled` | Gray badge, "Cancelled", "Reactivate" CTA |
 
-Each card shows: large emoji icon (text-3xl), product name, status badge, and contextual CTA.
+- Right column: 3-4 feature bullet points (hardcoded per product)
+- Bottom row: "Manage Billing" link (placeholder -- links to `/billing`) and "Cancel" button (shows a confirmation `window.confirm` dialog, does not actually cancel yet since Stripe is not integrated)
 
-### Section 3: Quick Stats (Conditional)
+**Special AI Concierge card:**
+- Below the status section, shows property count: "X properties active"
+- "Add Property" link to `/add-property`
+- If properties loaded, shows a compact list of property names (max 5, with "+N more" overflow)
 
-Only renders stat cards for products the user has access to. Uses existing `useProperties` hook for property/guest counts. Other stats are placeholder values for now (messages, SMS status, etc.):
+**If user has zero entitlements:** This section shows a friendly message: "You don't have any subscriptions yet. Check out our products below!"
 
-- **AI Concierge**: Properties count (linked), Messages this week, Guests total, SMS status
-- **SnapPro**: Photos processed, Photos this month, Edits remaining (all placeholder "---")
-- **Analytics**: Avg response rate, Revenue, Satisfaction score (all placeholder "---")
-- If no products active: skip this section entirely (empty state handles it)
+### Section 2: Available Products
 
-### Section 4: Quick Actions (Conditional)
+Grid of products the user does NOT have (or has expired/cancelled). Each card:
+- Product icon, name, price
+- 3 key features as checkmark bullet points (hardcoded per product)
+- "Start Free Trial" or "Get X Free Uses" CTA button (amber, links to `/billing` as placeholder)
+- If no available products (user has everything): section hidden
 
-Grid of action buttons, only showing for active products:
+### Section 3: Bundle Offer Banner
 
-- **Concierge**: Add Property, View Messages, Test AI
-- **SnapPro**: Optimize a Photo, View Photo Library
-- **Analytics**: View Insights, Download Report
-- **Academy**: Continue Learning, Browse Videos
-- Each is a `Link` card with icon, title, description, and hover arrow
-
-### Section 5: Product Spotlight (Upsell)
-
-"You might also like" section -- only shows if user doesn't have ALL products. Displays 1-2 locked/expired product cards with value prop text and "Start Free Trial" CTA linking to `/products`.
-
-### Section 6: Recent Activity Feed
-
-Timeline of recent events. Currently uses placeholder/mock data (same pattern as existing) but organized by product icon:
-
-- AI Concierge events: message icon, guest check-in
-- General events: SMS automation
-- Each row: product emoji, description, relative timestamp, "View" link
-
-### Empty State (No Active Products)
-
-If user has zero active/trial entitlements:
-- Large centered section with wave emoji
-- "Welcome to HostlyAI Platform!"
-- "Choose your first product to get started"
-- Grid of all 5 product cards with "Start Free Trial" CTA linking to `/products`
+Only shown if user has 2+ individual active/trial products but NOT `full_suite`. Displays:
+- Amber/gold gradient background (`bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-200`)
+- Lightbulb emoji + "Save with the Full Suite"
+- Calculates: sum of individual product monthly prices the user pays vs $59.99 bundle
+- Shows savings: "You could save $X/mo"
+- "Switch to Full Suite" CTA button linking to `/billing`
 
 ## Data Sources
 
-| Data | Source | Notes |
-|---|---|---|
-| User name | `useAuth().currentUser.user_metadata` or `.email` | Already available |
-| Products list | `useEntitlementContext().products` | Already loaded |
-| Access status | `useEntitlementContext().hasAccess(id)` | Returns status + trialInfo |
-| Properties count | `useProperties().properties.length` | Existing hook |
-| Guests count | Supabase query in component | Simple count query |
-| Announcement count | Supabase query (same as Layout header) | For notification badge |
-| Messages/SMS/Analytics stats | Placeholder values | Real data deferred |
+| Data | Source |
+|---|---|
+| Products catalog | `useEntitlementContext().products` |
+| User entitlements | `useEntitlementContext().entitlements` |
+| Access check | `useEntitlementContext().hasAccess(id)` |
+| Properties list | `useProperties().properties` (for AI Concierge card) |
+| Feature lists | Hardcoded `PRODUCT_FEATURES` constant |
 
-## Technical Notes
+## Technical Details
 
-- No new hooks or services needed
-- Uses `useProperties` for property count (already cached)
-- Guests count: inline `useEffect` with `supabase.from('guests').select('*', { count: 'exact', head: true })`
-- Time greeting: simple `new Date().getHours()` check (< 12 = morning, < 17 = afternoon, else evening)
-- Product cards use `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4` for responsive layout
-- Activity feed is mock data for now (real activity tracking is a future feature)
+### Feature lists constant
+
+```text
+PRODUCT_FEATURES = {
+  ai_concierge: ["AI-powered SMS guest concierge", "Email management", "Knowledge base editor", "FAQ auto-responses"],
+  snappro: ["AI photo enhancement", "Batch processing", "Listing-ready exports"],
+  analytics: ["Property performance dashboard", "Smart insights", "Response quality tracking"],
+  academy: ["Expert video training", "Step-by-step guides", "New content monthly"],
+  full_suite: ["All 4 products included", "Priority support", "Bundle savings", "Early access to new features"],
+}
+```
+
+### Trial progress bar
+
+Simple div-based bar: outer `bg-muted rounded-full h-2`, inner with percentage width and `bg-amber-500 rounded-full h-2`. Calculation:
+- Usage-based: `(usageCount / usageLimit) * 100`
+- Days-based: uses `trial_started_at` and `trial_ends_at` to compute elapsed percentage
+
+### Bundle savings calculation
+
+Sums `price_monthly` from the `products` table for each product the user has active access to (excluding full_suite). Compares against the full_suite price. Only shows banner if savings > 0.
 
 ## Files Changed
 
 | File | Action |
 |---|---|
-| `src/pages/Dashboard.jsx` | Full rewrite |
-
+| `src/pages/MyProducts.jsx` | Full rewrite |
