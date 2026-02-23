@@ -14,6 +14,81 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_actions: {
+        Row: {
+          action_type: string
+          admin_id: string
+          created_at: string | null
+          details: Json | null
+          id: string
+          product_id: string | null
+          target_user_id: string | null
+        }
+        Insert: {
+          action_type: string
+          admin_id: string
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          product_id?: string | null
+          target_user_id?: string | null
+        }
+        Update: {
+          action_type?: string
+          admin_id?: string
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          product_id?: string | null
+          target_user_id?: string | null
+        }
+        Relationships: []
+      }
+      announcements: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          cta_text: string | null
+          cta_url: string | null
+          ends_at: string | null
+          id: string
+          is_active: boolean | null
+          message: string | null
+          starts_at: string | null
+          target: string | null
+          title: string | null
+          type: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          cta_text?: string | null
+          cta_url?: string | null
+          ends_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          message?: string | null
+          starts_at?: string | null
+          target?: string | null
+          title?: string | null
+          type?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          cta_text?: string | null
+          cta_url?: string | null
+          ends_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          message?: string | null
+          starts_at?: string | null
+          target?: string | null
+          title?: string | null
+          type?: string | null
+        }
+        Relationships: []
+      }
       conversation_messages: {
         Row: {
           content: string
@@ -252,6 +327,51 @@ export type Database = {
           message?: string
           type?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      products: {
+        Row: {
+          description: string | null
+          icon: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          price_annual: number | null
+          price_monthly: number | null
+          sort_order: number | null
+          stripe_price_id_annual: string | null
+          stripe_price_id_monthly: string | null
+          trial_limit: number | null
+          trial_type: string | null
+        }
+        Insert: {
+          description?: string | null
+          icon?: string | null
+          id: string
+          is_active?: boolean | null
+          name: string
+          price_annual?: number | null
+          price_monthly?: number | null
+          sort_order?: number | null
+          stripe_price_id_annual?: string | null
+          stripe_price_id_monthly?: string | null
+          trial_limit?: number | null
+          trial_type?: string | null
+        }
+        Update: {
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          price_annual?: number | null
+          price_monthly?: number | null
+          sort_order?: number | null
+          stripe_price_id_annual?: string | null
+          stripe_price_id_monthly?: string | null
+          trial_limit?: number | null
+          trial_type?: string | null
         }
         Relationships: []
       }
@@ -838,6 +958,71 @@ export type Database = {
             columns: ["conversation_id"]
             isOneToOne: false
             referencedRelation: "travel_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_entitlements: {
+        Row: {
+          access_ends_at: string | null
+          access_starts_at: string | null
+          created_at: string | null
+          grant_note: string | null
+          granted_by: string | null
+          id: string
+          product_id: string
+          source: string | null
+          status: string
+          stripe_subscription_id: string | null
+          trial_ends_at: string | null
+          trial_started_at: string | null
+          trial_usage_count: number | null
+          trial_usage_limit: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          access_ends_at?: string | null
+          access_starts_at?: string | null
+          created_at?: string | null
+          grant_note?: string | null
+          granted_by?: string | null
+          id?: string
+          product_id: string
+          source?: string | null
+          status?: string
+          stripe_subscription_id?: string | null
+          trial_ends_at?: string | null
+          trial_started_at?: string | null
+          trial_usage_count?: number | null
+          trial_usage_limit?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          access_ends_at?: string | null
+          access_starts_at?: string | null
+          created_at?: string | null
+          grant_note?: string | null
+          granted_by?: string | null
+          id?: string
+          product_id?: string
+          source?: string | null
+          status?: string
+          stripe_subscription_id?: string | null
+          trial_ends_at?: string | null
+          trial_started_at?: string | null
+          trial_usage_count?: number | null
+          trial_usage_limit?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_entitlements_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
             referencedColumns: ["id"]
           },
         ]

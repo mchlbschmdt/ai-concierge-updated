@@ -38,6 +38,11 @@ import SystemDiagnostics from "./pages/SystemDiagnostics";
 import InstallApp from "./pages/InstallApp";
 import PwaUpdatePrompt from "./components/PwaUpdatePrompt";
 import PwaInstallPrompt from "./components/PwaInstallPrompt";
+import AdminEntitlements from "./pages/AdminEntitlements";
+import AdminAnnouncements from "./pages/AdminAnnouncements";
+import SnapPro from "./pages/SnapPro";
+import HostAcademy from "./pages/HostAcademy";
+import ProductGate from "./components/ProductGate";
 
 const queryClient = new QueryClient();
 
@@ -55,135 +60,103 @@ const App = () => (
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/auth/callback" element={<GoogleAuthCallback />} />
               <Route path="/onboarding" element={
-                <ProtectedRoute>
-                  <Onboarding />
-                </ProtectedRoute>
+                <ProtectedRoute><Onboarding /></ProtectedRoute>
               } />
               <Route path="/profile-settings" element={
-                <ProtectedRoute>
-                  <ProfileSettings />
-                </ProtectedRoute>
+                <ProtectedRoute><ProfileSettings /></ProtectedRoute>
               } />
               <Route path="/" element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
+                <ProtectedRoute><Dashboard /></ProtectedRoute>
               } />
               <Route path="/properties" element={
-                <ProtectedRoute>
-                  <Properties />
-                </ProtectedRoute>
+                <ProtectedRoute><Properties /></ProtectedRoute>
               } />
               <Route path="/add-property" element={
-                <ProtectedRoute>
-                  <AddProperty />
-                </ProtectedRoute>
+                <ProtectedRoute><AddProperty /></ProtectedRoute>
               } />
               <Route path="/property/:id" element={
-                <ProtectedRoute>
-                  <PropertyManager />
-                </ProtectedRoute>
+                <ProtectedRoute><PropertyManager /></ProtectedRoute>
               } />
               <Route path="/guests" element={
-                <ProtectedRoute>
-                  <GuestManager />
-                </ProtectedRoute>
+                <ProtectedRoute><GuestManager /></ProtectedRoute>
               } />
+
+              {/* AI Concierge - gated */}
               <Route path="/messages" element={
-                <ProtectedRoute>
-                  <MessagesDashboard />
-                </ProtectedRoute>
-              } />
-              <Route path="/insights" element={
-                <ProtectedRoute>
-                  <SmartInsights />
-                </ProtectedRoute>
+                <ProtectedRoute><ProductGate productId="ai_concierge"><MessagesDashboard /></ProductGate></ProtectedRoute>
               } />
               <Route path="/email-management" element={
-                <ProtectedRoute>
-                  <EmailManagement />
-                </ProtectedRoute>
+                <ProtectedRoute><ProductGate productId="ai_concierge"><EmailManagement /></ProductGate></ProtectedRoute>
               } />
               <Route path="/test-responses" element={
-                <ProtectedRoute>
-                  <UserSmsTest />
-                </ProtectedRoute>
-              } />
-              <Route path="/sms-testing" element={
-                <ProtectedRoute requireSuperAdmin>
-                  <SmsTestingDashboard />
-                </ProtectedRoute>
-              } />
-              <Route path="/sms-concierge-test" element={
-                <ProtectedRoute requireSuperAdmin>
-                  <SmsConciergeTest />
-                </ProtectedRoute>
-              } />
-              <Route path="/analytics" element={
-                <ProtectedRoute>
-                  <PropertyAnalytics />
-                </ProtectedRoute>
-              } />
-              <Route path="/faq-editor" element={
-                <ProtectedRoute>
-                  <FaqEditor />
-                </ProtectedRoute>
+                <ProtectedRoute><ProductGate productId="ai_concierge"><UserSmsTest /></ProductGate></ProtectedRoute>
               } />
               <Route path="/knowledge-base" element={
-                <ProtectedRoute>
-                  <KnowledgeBaseEditor />
-                </ProtectedRoute>
+                <ProtectedRoute><ProductGate productId="ai_concierge"><KnowledgeBaseEditor /></ProductGate></ProtectedRoute>
+              } />
+              <Route path="/faq-editor" element={
+                <ProtectedRoute><ProductGate productId="ai_concierge"><FaqEditor /></ProductGate></ProtectedRoute>
               } />
               <Route path="/travel-admin" element={
-                <ProtectedRoute>
-                  <TravelGuideAdmin />
-                </ProtectedRoute>
+                <ProtectedRoute><ProductGate productId="ai_concierge"><TravelGuideAdmin /></ProductGate></ProtectedRoute>
+              } />
+
+              {/* Analytics - gated */}
+              <Route path="/analytics" element={
+                <ProtectedRoute><ProductGate productId="analytics"><PropertyAnalytics /></ProductGate></ProtectedRoute>
+              } />
+              <Route path="/insights" element={
+                <ProtectedRoute><ProductGate productId="analytics"><SmartInsights /></ProductGate></ProtectedRoute>
               } />
               <Route path="/quality-analytics" element={
-                <ProtectedRoute>
-                  <RecommendationQualityAnalytics />
-                </ProtectedRoute>
+                <ProtectedRoute><ProductGate productId="analytics"><RecommendationQualityAnalytics /></ProductGate></ProtectedRoute>
+              } />
+
+              {/* New product pages */}
+              <Route path="/snappro" element={
+                <ProtectedRoute><SnapPro /></ProtectedRoute>
+              } />
+              <Route path="/academy" element={
+                <ProtectedRoute><HostAcademy /></ProtectedRoute>
+              } />
+
+              <Route path="/sms-testing" element={
+                <ProtectedRoute requireSuperAdmin><SmsTestingDashboard /></ProtectedRoute>
+              } />
+              <Route path="/sms-concierge-test" element={
+                <ProtectedRoute requireSuperAdmin><SmsConciergeTest /></ProtectedRoute>
               } />
               <Route path="/sms-conversations" element={
-                <ProtectedRoute>
-                  <SmsConversationsAdmin />
-                </ProtectedRoute>
+                <ProtectedRoute><SmsConversationsAdmin /></ProtectedRoute>
               } />
               
               {/* Admin Routes */}
               <Route path="/admin" element={
-                <ProtectedRoute requireSuperAdmin>
-                  <AdminDashboard />
-                </ProtectedRoute>
+                <ProtectedRoute requireSuperAdmin><AdminDashboard /></ProtectedRoute>
               } />
               <Route path="/admin/users" element={
-                <ProtectedRoute requireSuperAdmin>
-                  <UserManagement />
-                </ProtectedRoute>
+                <ProtectedRoute requireSuperAdmin><UserManagement /></ProtectedRoute>
               } />
               <Route path="/admin/properties" element={
-                <ProtectedRoute requireSuperAdmin>
-                  <AdminPropertiesView />
-                </ProtectedRoute>
+                <ProtectedRoute requireSuperAdmin><AdminPropertiesView /></ProtectedRoute>
               } />
               <Route path="/admin/system-diagnostics" element={
-                <ProtectedRoute requireSuperAdmin>
-                  <SystemDiagnostics />
-                </ProtectedRoute>
+                <ProtectedRoute requireSuperAdmin><SystemDiagnostics /></ProtectedRoute>
+              } />
+              <Route path="/admin/entitlements" element={
+                <ProtectedRoute requireSuperAdmin><AdminEntitlements /></ProtectedRoute>
+              } />
+              <Route path="/admin/announcements" element={
+                <ProtectedRoute requireSuperAdmin><AdminAnnouncements /></ProtectedRoute>
               } />
               
-              {/* PWA Install Page */}
               <Route path="/install" element={
-                <ProtectedRoute>
-                  <InstallApp />
-                </ProtectedRoute>
+                <ProtectedRoute><InstallApp /></ProtectedRoute>
               } />
               
-              {/* Backward compatibility redirects */}
               <Route path="/dashboard" element={<Navigate to="/" replace />} />
               <Route path="/dashboard/*" element={<Navigate to="/" replace />} />
               
-              {/* 404 Catch-all - must be last */}
               <Route path="*" element={<NotFound />} />
                 </Routes>
                 <PwaUpdatePrompt />
