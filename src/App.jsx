@@ -46,6 +46,9 @@ import PwaInstallPrompt from "./components/PwaInstallPrompt";
 
 import SnapPro from "./pages/SnapPro";
 import HostAcademy from "./pages/HostAcademy";
+import AcademyLibrary from "./pages/AcademyLibrary";
+import AcademyVideo from "./pages/AcademyVideo";
+import AcademyProgress from "./pages/AcademyProgress";
 import ProductGate from "./components/ProductGate";
 import UpgradeModal from "./components/UpgradeModal";
 import MyProducts from "./pages/MyProducts";
@@ -144,11 +147,15 @@ const App = () => (
               <Route path="/snappro/library" element={
                 <ProtectedRoute><ProductGate productId="snappro"><SnapPro tab="library" /></ProductGate></ProtectedRoute>
               } />
+              {/* Host Academy - gated */}
               <Route path="/academy" element={
-                <ProtectedRoute><HostAcademy /></ProtectedRoute>
+                <ProtectedRoute><ProductGate productId="academy"><AcademyLibrary /></ProductGate></ProtectedRoute>
+              } />
+              <Route path="/academy/video/:id" element={
+                <ProtectedRoute><ProductGate productId="academy"><AcademyVideo /></ProductGate></ProtectedRoute>
               } />
               <Route path="/academy/progress" element={
-                <ProtectedRoute><ProductGate productId="academy"><HostAcademy tab="progress" /></ProductGate></ProtectedRoute>
+                <ProtectedRoute><ProductGate productId="academy"><AcademyProgress /></ProductGate></ProtectedRoute>
               } />
 
               {/* Platform pages */}

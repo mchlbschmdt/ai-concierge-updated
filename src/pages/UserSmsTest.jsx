@@ -211,6 +211,7 @@ export default function UserSmsTest() {
 
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-heading mb-2">Test AI Responses</h1>
+        </div>
 
         {/* Rating Stats Bar */}
         {ratingStats.total > 0 && (
