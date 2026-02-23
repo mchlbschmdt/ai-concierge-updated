@@ -54,13 +54,10 @@ const PRODUCT_NAV = [
 ];
 
 const ADMIN_ITEMS = [
-  { icon: Shield, label: 'Admin Dashboard', path: '/admin' },
-  { icon: UserCog, label: 'User Management', path: '/admin/users' },
+  { icon: Shield, label: 'Admin Panel', path: '/admin' },
   { icon: Building2, label: 'All Properties', path: '/admin/properties' },
   { icon: MessagesSquare, label: 'SMS Conversations', path: '/sms-conversations' },
   { icon: TestTube, label: 'System Diagnostics', path: '/admin/system-diagnostics' },
-  { icon: Shield, label: 'Entitlements', path: '/admin/entitlements' },
-  { icon: MessageSquare, label: 'Announcements', path: '/admin/announcements' },
 ];
 
 const Sidebar = () => {
