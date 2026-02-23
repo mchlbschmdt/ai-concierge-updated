@@ -43,6 +43,9 @@ import AdminAnnouncements from "./pages/AdminAnnouncements";
 import SnapPro from "./pages/SnapPro";
 import HostAcademy from "./pages/HostAcademy";
 import ProductGate from "./components/ProductGate";
+import MyProducts from "./pages/MyProducts";
+import Billing from "./pages/Billing";
+import Support from "./pages/Support";
 
 const queryClient = new QueryClient();
 
@@ -116,8 +119,25 @@ const App = () => (
               <Route path="/snappro" element={
                 <ProtectedRoute><SnapPro /></ProtectedRoute>
               } />
+              <Route path="/snappro/library" element={
+                <ProtectedRoute><ProductGate productId="snappro"><SnapPro tab="library" /></ProductGate></ProtectedRoute>
+              } />
               <Route path="/academy" element={
                 <ProtectedRoute><HostAcademy /></ProtectedRoute>
+              } />
+              <Route path="/academy/progress" element={
+                <ProtectedRoute><ProductGate productId="academy"><HostAcademy tab="progress" /></ProductGate></ProtectedRoute>
+              } />
+
+              {/* Platform pages */}
+              <Route path="/products" element={
+                <ProtectedRoute><MyProducts /></ProtectedRoute>
+              } />
+              <Route path="/billing" element={
+                <ProtectedRoute><Billing /></ProtectedRoute>
+              } />
+              <Route path="/support" element={
+                <ProtectedRoute><Support /></ProtectedRoute>
               } />
 
               <Route path="/sms-testing" element={
