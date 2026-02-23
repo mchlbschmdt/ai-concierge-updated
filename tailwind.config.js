@@ -46,6 +46,11 @@ export default {
         nav: "#1b3898",
         cta: "#1b3898",
         
+        // Sidebar
+        sidebar: "#1E2A4A",
+        'sidebar-foreground': "#94A3B8",
+        'sidebar-active': "#FFFFFF",
+        
         // Neutral Scale
         neutral: {
           50: "#f9fafb",
