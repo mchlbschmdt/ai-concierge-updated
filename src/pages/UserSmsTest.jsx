@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
 import Layout from "../components/Layout";
 import { supabase } from "../integrations/supabase/client";
-import { MessageSquare, Loader2, RotateCcw, ThumbsUp, ThumbsDown, Check } from "lucide-react";
+import { MessageSquare, Loader2, RotateCcw, ThumbsUp, ThumbsDown, Check, Zap } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
+import { useProductAccess } from "@/hooks/useProductAccess";
 
 const TEST_PHONE = "+15555555555";
 
@@ -18,6 +19,7 @@ export default function UserSmsTest() {
   const [ratedMessages, setRatedMessages] = useState(new Set());
   const [ratingStats, setRatingStats] = useState({ total: 0, positive: 0 });
   const { showToast } = useToast();
+  const { status, usageCount, trialUsesRemaining, incrementUsage } = useProductAccess("ai_concierge");
 
   const testScenarios = [
     { label: "WiFi Password", message: "What's the wifi password?" },
@@ -143,6 +145,12 @@ export default function UserSmsTest() {
       return;
     }
 
+    // Check trial usage before sending
+    if (status === "trial") {
+      const result = await incrementUsage();
+      if (!result.allowed) return; // Upgrade modal shown automatically
+    }
+
     setTesting(true);
     setResponse(null);
 
@@ -183,12 +191,26 @@ export default function UserSmsTest() {
   return (
     <Layout>
       <div className="p-6 max-w-4xl mx-auto">
+        {/* Trial usage counter */}
+        {status === "trial" && trialUsesRemaining !== null && (
+          <div className="mb-6 bg-warning/10 border border-warning/30 rounded-lg p-3 flex items-center gap-3">
+            <Zap className="h-5 w-5 text-warning flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-foreground">
+                Test response {usageCount} of {usageCount + trialUsesRemaining} free
+              </p>
+              <div className="mt-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-warning rounded-full transition-all"
+                  style={{ width: `${Math.min(100, (usageCount / (usageCount + trialUsesRemaining)) * 100)}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-heading mb-2">Test AI Responses</h1>
-          <p className="text-muted-foreground">
-            Test how your AI concierge responds to common guest questions
-          </p>
-        </div>
 
         {/* Rating Stats Bar */}
         {ratingStats.total > 0 && (

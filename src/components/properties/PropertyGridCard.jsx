@@ -1,20 +1,57 @@
-import React, { useState } from "react";
+
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Edit2, X, Check } from "lucide-react";
+import { Edit2, X, Check, MessageSquare, Wifi } from "lucide-react";
 import { useInlineEdit } from "@/hooks/useInlineEdit";
 import { OptimisticUpdateIndicator } from "@/components/ui/OptimisticUpdateIndicator";
 import { InlineSuccessBadge } from "@/components/ui/InlineSuccessBadge";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/context/ToastContext";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function PropertyGridCard({ property, onUpdate }) {
   const { showToast } = useToast();
   const [showSuccess, setShowSuccess] = useState(false);
+  const [responsesThisMonth, setResponsesThisMonth] = useState(null);
 
   const nameEdit = useInlineEdit(property.property_name, async (newValue) => {
     await onUpdate(property.id, { property_name: newValue });
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 2000);
   });
+
+  useEffect(() => {
+    const fetchResponseCount = async () => {
+      try {
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        
+        // Get conversations for this property code
+        const { data: convos } = await supabase
+          .from("sms_conversations")
+          .select("id")
+          .eq("property_id", property.code);
+
+        if (!convos || convos.length === 0) {
+          setResponsesThisMonth(0);
+          return;
+        }
+
+        const convoIds = convos.map(c => c.id);
+        const { count } = await supabase
+          .from("sms_conversation_messages")
+          .select("*", { count: "exact", head: true })
+          .in("sms_conversation_id", convoIds)
+          .eq("role", "assistant")
+          .gte("timestamp", startOfMonth);
+
+        setResponsesThisMonth(count || 0);
+      } catch {
+        setResponsesThisMonth(0);
+      }
+    };
+    if (property.code) fetchResponseCount();
+  }, [property.code]);
 
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden hover:shadow-md transition-shadow">
@@ -61,7 +98,21 @@ export default function PropertyGridCard({ property, onUpdate }) {
           Code: <span className="font-medium text-foreground">{property.code || "N/A"}</span>
         </p>
         
-        <p className="text-sm text-foreground/80 mb-4">{property.address || "No Address"}</p>
+        <p className="text-sm text-foreground/80 mb-2">{property.address || "No Address"}</p>
+
+        {/* SMS status & response count */}
+        <div className="flex items-center gap-2 mb-4">
+          <Badge variant="secondary" className="text-[10px] gap-1">
+            <Wifi className="h-3 w-3" />
+            SMS Ready
+          </Badge>
+          {responsesThisMonth !== null && (
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              <MessageSquare className="h-3 w-3" />
+              {responsesThisMonth} responses this month
+            </span>
+          )}
+        </div>
         
         <div className="flex items-center justify-between pt-3 border-t border-border">
           <span className="text-xs bg-muted text-muted-foreground px-2.5 py-1 rounded-full font-medium">

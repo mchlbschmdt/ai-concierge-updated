@@ -89,25 +89,35 @@ const App = () => (
                 <ProtectedRoute><GuestManager /></ProtectedRoute>
               } />
 
-              {/* AI Concierge - gated */}
-              <Route path="/messages" element={
+              {/* AI Concierge - gated under /concierge */}
+              <Route path="/concierge/properties" element={
+                <ProtectedRoute><ProductGate productId="ai_concierge"><Properties /></ProductGate></ProtectedRoute>
+              } />
+              <Route path="/concierge/messages" element={
                 <ProtectedRoute><ProductGate productId="ai_concierge"><MessagesDashboard /></ProductGate></ProtectedRoute>
+              } />
+              <Route path="/concierge/test" element={
+                <ProtectedRoute><ProductGate productId="ai_concierge"><UserSmsTest /></ProductGate></ProtectedRoute>
+              } />
+              <Route path="/concierge/knowledge-base" element={
+                <ProtectedRoute><ProductGate productId="ai_concierge"><KnowledgeBaseEditor /></ProductGate></ProtectedRoute>
+              } />
+              <Route path="/concierge/faq" element={
+                <ProtectedRoute><ProductGate productId="ai_concierge"><FaqEditor /></ProductGate></ProtectedRoute>
+              } />
+              <Route path="/concierge/travel-guide" element={
+                <ProtectedRoute><ProductGate productId="ai_concierge"><TravelGuideAdmin /></ProductGate></ProtectedRoute>
               } />
               <Route path="/email-management" element={
                 <ProtectedRoute><ProductGate productId="ai_concierge"><EmailManagement /></ProductGate></ProtectedRoute>
               } />
-              <Route path="/test-responses" element={
-                <ProtectedRoute><ProductGate productId="ai_concierge"><UserSmsTest /></ProductGate></ProtectedRoute>
-              } />
-              <Route path="/knowledge-base" element={
-                <ProtectedRoute><ProductGate productId="ai_concierge"><KnowledgeBaseEditor /></ProductGate></ProtectedRoute>
-              } />
-              <Route path="/faq-editor" element={
-                <ProtectedRoute><ProductGate productId="ai_concierge"><FaqEditor /></ProductGate></ProtectedRoute>
-              } />
-              <Route path="/travel-admin" element={
-                <ProtectedRoute><ProductGate productId="ai_concierge"><TravelGuideAdmin /></ProductGate></ProtectedRoute>
-              } />
+
+              {/* Backward compatibility redirects */}
+              <Route path="/messages" element={<Navigate to="/concierge/messages" replace />} />
+              <Route path="/test-responses" element={<Navigate to="/concierge/test" replace />} />
+              <Route path="/knowledge-base" element={<Navigate to="/concierge/knowledge-base" replace />} />
+              <Route path="/faq-editor" element={<Navigate to="/concierge/faq" replace />} />
+              <Route path="/travel-admin" element={<Navigate to="/concierge/travel-guide" replace />} />
 
               {/* Analytics - gated */}
               <Route path="/analytics" element={
