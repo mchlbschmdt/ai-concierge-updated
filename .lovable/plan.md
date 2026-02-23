@@ -1,102 +1,154 @@
 
-# My Products Page (Subscription Manager)
+
+# Product Catalog / Pricing Page
 
 ## Summary
 
-Rewrite `src/pages/MyProducts.jsx` into a full subscription management page with three sections: current subscriptions with detailed status cards, available products grid for upsell, and a bundle savings banner. Uses existing `useEntitlementContext` and `useProperties` hooks.
+Create a new pricing page at `/pricing` (public, no auth required) and a reusable `PricingModal` component for in-app upsell. Features a monthly/annual toggle, 5 product cards in a responsive grid, a standout Full Suite card with "BEST VALUE" badge, and an FAQ accordion section.
 
 ## What Changes
 
-### Single File: `src/pages/MyProducts.jsx` -- Full Rewrite
+### 1. New File: `src/pages/Pricing.jsx`
 
----
+The main pricing page, accessible without login.
 
-### Page Header
+**Page structure:**
 
-- Title: "My Products"
-- Subtitle: "Manage your subscriptions and access"
-- Right side: "Browse all products" link (scrolls to Section 2 or is decorative since this IS the products page)
+- **Header**: "Simple, transparent pricing" title + "Choose the plan that works for you" subtitle
+- **Billing toggle**: Monthly / Annual switch. Annual shows "Save ~17%" badge. Uses local `useState('monthly')`.
+- **Product grid**: `grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3` with 5 cards. Full Suite card spans or is visually distinct.
+- **FAQ accordion**: 6 questions with expand/collapse (local state, no library needed).
 
-### Section 1: Current Subscriptions
+**Each product card:**
+- Colored circle (48px) with product emoji icon
+- Product name + one-line description (from `products` table)
+- Price: large bold number, switches between `price_monthly` and `price_annual / 12` based on toggle. Shows "/month" or "/year" label.
+- Trial badge: amber pill -- "10 free responses" (usage-based) or "7-day free trial" (days-based), derived from `trial_type` and `trial_limit`
+- Feature list: 5-8 items with green checkmarks (hardcoded per product, expanded from `PRODUCT_FEATURES`)
+- CTA: "Start Free Trial" blue button linking to `/register` (for unauthenticated) or `/billing` (for authenticated)
+- "Learn more" text link below
 
-Shows every product the user has an entitlement for (any status: active, trial, expired, admin_granted). Each is an expanded row card with:
+**Full Suite card -- standout treatment:**
+- "BEST VALUE" badge: amber background, rotated `rotate-12` and positioned `absolute top-3 -right-2`
+- Card border: `ring-2 ring-primary` blue gradient border effect
+- Extra line: "Save $X.XX/mo vs buying separately" calculated from sum of individual monthly prices minus bundle price
+- Sub-items: lists all 4 included products with green checks and their individual prices struck through
 
-**Layout per card:**
-- Left column: Large emoji icon (text-4xl) + product name + tagline
-- Center column: Status-specific content:
+**For authenticated users (in-app):**
+- If user has entitlement for a product, card shows "Already Active" with green check, CTA grayed out
+- Uses `useEntitlementContext` (with safe fallback for unauthenticated visitors)
 
-| Status | Display |
-|---|---|
-| `active` | Green "Active" badge, "Renews monthly - $X/mo", "Manage" button |
-| `trial` (usage) | Amber badge, "X of Y free uses remaining", progress bar (% used), "Upgrade Now" amber CTA |
-| `trial` (days) | Amber badge, "Trial ends [date] - X days left", progress bar (days elapsed / total), "Upgrade Now" amber CTA |
-| `expired` | Red badge, "Expired" + reason text, "Reactivate" red CTA |
-| `admin_granted` | Blue badge, "Access granted by admin", optional expiry date if `access_ends_at` is set |
-| `cancelled` | Gray badge, "Cancelled", "Reactivate" CTA |
+### 2. New File: `src/components/PricingModal.jsx`
 
-- Right column: 3-4 feature bullet points (hardcoded per product)
-- Bottom row: "Manage Billing" link (placeholder -- links to `/billing`) and "Cancel" button (shows a confirmation `window.confirm` dialog, does not actually cancel yet since Stripe is not integrated)
+A modal wrapper that renders the same pricing content for in-app upsell contexts.
 
-**Special AI Concierge card:**
-- Below the status section, shows property count: "X properties active"
-- "Add Property" link to `/add-property`
-- If properties loaded, shows a compact list of property names (max 5, with "+N more" overflow)
+- Takes `isOpen`, `onClose`, optional `highlightProduct` prop
+- Fixed overlay with centered scrollable container
+- Renders the same card grid (extracted as a shared `PricingCards` component or inline)
+- If `highlightProduct` is set, that card gets a pulsing border highlight
 
-**If user has zero entitlements:** This section shows a friendly message: "You don't have any subscriptions yet. Check out our products below!"
+### 3. Feature Lists (expanded from MyProducts)
 
-### Section 2: Available Products
+```
+PRICING_FEATURES = {
+  ai_concierge: [
+    "AI-powered SMS guest concierge",
+    "Automated check-in/out messages",
+    "Email management & drafts",
+    "Knowledge base editor",
+    "FAQ auto-responses",
+    "Travel guide recommendations",
+    "Multi-property support",
+    "Conversation analytics"
+  ],
+  snappro: [
+    "AI photo enhancement",
+    "Auto white-balance & lighting",
+    "Batch processing",
+    "Listing-ready exports",
+    "Before/after comparisons"
+  ],
+  analytics: [
+    "Property performance dashboard",
+    "Smart insights & trends",
+    "Response quality tracking",
+    "Guest satisfaction metrics",
+    "Weekly email reports"
+  ],
+  academy: [
+    "Expert video training library",
+    "Step-by-step hosting guides",
+    "New content added monthly",
+    "Progress tracking"
+  ],
+  full_suite: [
+    "AI Concierge (all features)",
+    "SnapPro Photos (all features)",
+    "Analytics Suite (all features)",
+    "Host Academy (all features)",
+    "Priority support",
+    "Early access to new features",
+    "Bundle savings vs individual"
+  ]
+}
+```
 
-Grid of products the user does NOT have (or has expired/cancelled). Each card:
-- Product icon, name, price
-- 3 key features as checkmark bullet points (hardcoded per product)
-- "Start Free Trial" or "Get X Free Uses" CTA button (amber, links to `/billing` as placeholder)
-- If no available products (user has everything): section hidden
+### 4. FAQ Section
 
-### Section 3: Bundle Offer Banner
+Accordion with local state (`expandedIndex`). Each item is a button that toggles a `div` with answer text. Uses ChevronDown icon that rotates on expand.
 
-Only shown if user has 2+ individual active/trial products but NOT `full_suite`. Displays:
-- Amber/gold gradient background (`bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-200`)
-- Lightbulb emoji + "Save with the Full Suite"
-- Calculates: sum of individual product monthly prices the user pays vs $59.99 bundle
-- Shows savings: "You could save $X/mo"
-- "Switch to Full Suite" CTA button linking to `/billing`
+Questions:
+1. Can I cancel anytime? -- Yes, cancel anytime from your billing page.
+2. Does AI Concierge charge per property? -- Yes, $29.99/property/month.
+3. What happens when my trial ends? -- You'll be prompted to upgrade. No auto-charge.
+4. Can I switch plans? -- Yes, changes are pro-rated automatically.
+5. Do you offer refunds? -- Yes, 7-day money-back guarantee on all plans.
+6. Is there a contract? -- No, all plans are month-to-month or annual with no lock-in.
+
+### 5. Route Addition in `src/App.jsx`
+
+Add `/pricing` as a **public route** (no `ProtectedRoute` wrapper):
+```
+<Route path="/pricing" element={<Pricing />} />
+```
+
+### 6. Layout Consideration
+
+The pricing page uses a minimal layout (no sidebar) for public visitors. It checks if user is authenticated:
+- **Authenticated**: renders inside `<Layout>` with sidebar
+- **Unauthenticated**: renders with a simple header (logo + "Sign In" link) and no sidebar
+
+This is handled with a conditional check on `currentUser` from `useAuth`.
 
 ## Data Sources
 
 | Data | Source |
 |---|---|
-| Products catalog | `useEntitlementContext().products` |
-| User entitlements | `useEntitlementContext().entitlements` |
-| Access check | `useEntitlementContext().hasAccess(id)` |
-| Properties list | `useProperties().properties` (for AI Concierge card) |
-| Feature lists | Hardcoded `PRODUCT_FEATURES` constant |
+| Products list | `useProducts()` hook (public query, works without auth) |
+| User access status | `useEntitlementContext()` (safe fallback when no auth) |
+| Features | Hardcoded `PRICING_FEATURES` constant |
+| Prices | `product.price_monthly` and `product.price_annual` from DB |
+| Trial info | `product.trial_type` and `product.trial_limit` from DB |
+| Savings calculation | Sum of individual `price_monthly` minus `full_suite.price_monthly` |
 
-## Technical Details
+## Annual Price Display
 
-### Feature lists constant
-
-```text
-PRODUCT_FEATURES = {
-  ai_concierge: ["AI-powered SMS guest concierge", "Email management", "Knowledge base editor", "FAQ auto-responses"],
-  snappro: ["AI photo enhancement", "Batch processing", "Listing-ready exports"],
-  analytics: ["Property performance dashboard", "Smart insights", "Response quality tracking"],
-  academy: ["Expert video training", "Step-by-step guides", "New content monthly"],
-  full_suite: ["All 4 products included", "Priority support", "Bundle savings", "Early access to new features"],
-}
-```
-
-### Trial progress bar
-
-Simple div-based bar: outer `bg-muted rounded-full h-2`, inner with percentage width and `bg-amber-500 rounded-full h-2`. Calculation:
-- Usage-based: `(usageCount / usageLimit) * 100`
-- Days-based: uses `trial_started_at` and `trial_ends_at` to compute elapsed percentage
-
-### Bundle savings calculation
-
-Sums `price_monthly` from the `products` table for each product the user has active access to (excluding full_suite). Compares against the full_suite price. Only shows banner if savings > 0.
+When toggle is "Annual":
+- Show `price_annual` as the total
+- Show per-month equivalent: `(price_annual / 12).toFixed(2)`
+- Show savings badge: calculate `((price_monthly * 12 - price_annual) / (price_monthly * 12) * 100).toFixed(0)` percent saved
 
 ## Files Changed
 
 | File | Action |
 |---|---|
-| `src/pages/MyProducts.jsx` | Full rewrite |
+| `src/pages/Pricing.jsx` | New -- full pricing page |
+| `src/components/PricingModal.jsx` | New -- modal wrapper for in-app upsell |
+| `src/App.jsx` | Add `/pricing` public route |
+
+## Implementation Order
+
+1. `src/pages/Pricing.jsx` -- main page with all sections
+2. `src/components/PricingModal.jsx` -- modal wrapper reusing pricing cards
+3. `src/App.jsx` -- add route
+
