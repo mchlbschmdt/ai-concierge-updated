@@ -939,6 +939,42 @@ export type Database = {
           },
         ]
       }
+      snappro_images: {
+        Row: {
+          created_at: string
+          file_name: string
+          file_size: number | null
+          id: string
+          optimized_url: string | null
+          original_url: string | null
+          settings: Json | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          file_name: string
+          file_size?: number | null
+          id?: string
+          optimized_url?: string | null
+          original_url?: string | null
+          settings?: Json | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          file_name?: string
+          file_size?: number | null
+          id?: string
+          optimized_url?: string | null
+          original_url?: string | null
+          settings?: Json | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       tasks: {
         Row: {
           created_at: string
