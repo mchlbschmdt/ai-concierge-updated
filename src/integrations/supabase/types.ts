@@ -14,6 +14,95 @@ export type Database = {
   }
   public: {
     Tables: {
+      academy_progress: {
+        Row: {
+          completed: boolean | null
+          completed_at: string | null
+          created_at: string
+          id: string
+          last_watched_at: string | null
+          user_id: string
+          video_id: string
+          watched_seconds: number | null
+        }
+        Insert: {
+          completed?: boolean | null
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          last_watched_at?: string | null
+          user_id: string
+          video_id: string
+          watched_seconds?: number | null
+        }
+        Update: {
+          completed?: boolean | null
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          last_watched_at?: string | null
+          user_id?: string
+          video_id?: string
+          watched_seconds?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "academy_progress_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "academy_videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      academy_videos: {
+        Row: {
+          category: string
+          created_at: string
+          description: string | null
+          duration_seconds: number | null
+          id: string
+          instructor_name: string | null
+          is_free: boolean | null
+          sort_order: number | null
+          thumbnail_url: string | null
+          title: string
+          updated_at: string
+          video_type: string
+          video_url: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          duration_seconds?: number | null
+          id?: string
+          instructor_name?: string | null
+          is_free?: boolean | null
+          sort_order?: number | null
+          thumbnail_url?: string | null
+          title: string
+          updated_at?: string
+          video_type?: string
+          video_url: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          duration_seconds?: number | null
+          id?: string
+          instructor_name?: string | null
+          is_free?: boolean | null
+          sort_order?: number | null
+          thumbnail_url?: string | null
+          title?: string
+          updated_at?: string
+          video_type?: string
+          video_url?: string
+        }
+        Relationships: []
+      }
       admin_actions: {
         Row: {
           action_type: string
