@@ -297,7 +297,7 @@ export default function Dashboard() {
               )}
               {has.analytics && (
                 <>
-                  <ActionCard icon={Lightbulb} title="View Insights" description="Smart performance insights" to="/smart-insights" />
+                  <ActionCard icon={Lightbulb} title="View Insights" description="Smart performance insights" to="/analytics/insights" />
                   <ActionCard icon={Download} title="Download Report" description="Export analytics data" to="/analytics" />
                 </>
               )}
