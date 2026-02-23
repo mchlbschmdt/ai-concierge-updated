@@ -45,6 +45,7 @@ import PwaInstallPrompt from "./components/PwaInstallPrompt";
 
 
 import SnapPro from "./pages/SnapPro";
+import SnapProLibrary from "./pages/SnapProLibrary";
 import HostAcademy from "./pages/HostAcademy";
 import AcademyLibrary from "./pages/AcademyLibrary";
 import AcademyVideo from "./pages/AcademyVideo";
@@ -142,10 +143,10 @@ const App = () => (
 
               {/* New product pages */}
               <Route path="/snappro" element={
-                <ProtectedRoute><SnapPro /></ProtectedRoute>
+                <ProtectedRoute><ProductGate productId="snappro"><SnapPro /></ProductGate></ProtectedRoute>
               } />
               <Route path="/snappro/library" element={
-                <ProtectedRoute><ProductGate productId="snappro"><SnapPro tab="library" /></ProductGate></ProtectedRoute>
+                <ProtectedRoute><ProductGate productId="snappro"><SnapProLibrary /></ProductGate></ProtectedRoute>
               } />
               {/* Host Academy - gated */}
               <Route path="/academy" element={
