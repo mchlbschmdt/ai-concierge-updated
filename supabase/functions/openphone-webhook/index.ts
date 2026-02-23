@@ -311,8 +311,35 @@ serve(async (req) => {
       const body = await req.text()
       console.log('Received webhook body length:', body.length);
 
-      // Skip signature verification for now to focus on phone number validation
-      console.log('⚠️ Skipping signature verification to debug phone number validation');
+      // Verify webhook signature if secret is configured
+      const webhookSecret = Deno.env.get('OPENPHONE_WEBHOOK_SECRET');
+      const signature = req.headers.get('openphone-signature');
+      
+      if (webhookSecret && signature) {
+        const isValid = await verifyWebhookSignature(body, signature, webhookSecret, req);
+        if (!isValid) {
+          console.error('❌ Webhook signature verification failed');
+          return new Response(
+            JSON.stringify({ error: 'Invalid webhook signature' }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 401
+            }
+          );
+        }
+        console.log('✅ Webhook signature verified successfully');
+      } else if (webhookSecret && !signature) {
+        console.error('❌ Missing openphone-signature header');
+        return new Response(
+          JSON.stringify({ error: 'Missing signature header' }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 401
+          }
+        );
+      } else {
+        console.warn('⚠️ OPENPHONE_WEBHOOK_SECRET not configured - skipping signature verification');
+      }
       
       let payload;
       try {
