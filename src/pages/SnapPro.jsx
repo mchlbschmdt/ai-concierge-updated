@@ -73,9 +73,11 @@ export default function SnapPro() {
   const handleProcess = async () => {
     if (!file || !currentUser?.id) return;
 
-    // Check trial
-    const result = await incrementUsage();
-    if (!result.allowed) return;
+    // Only check trial limits for trial users
+    if (status === 'trial') {
+      const result = await incrementUsage();
+      if (!result.allowed) return;
+    }
 
     setProcessing(true);
     try {
