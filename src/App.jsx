@@ -6,6 +6,7 @@ import { AuthProvider } from "./context/AuthContext";
 import { GmailAuthProvider } from "./context/GmailAuthContext";
 import { ToastProvider } from "./context/ToastContext";
 import { SidebarProvider } from "./context/SidebarContext";
+import { UpgradeModalProvider } from "./context/UpgradeModalContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./Login";
 import Dashboard from "./pages/Dashboard";
@@ -43,6 +44,7 @@ import PwaInstallPrompt from "./components/PwaInstallPrompt";
 import SnapPro from "./pages/SnapPro";
 import HostAcademy from "./pages/HostAcademy";
 import ProductGate from "./components/ProductGate";
+import UpgradeModal from "./components/UpgradeModal";
 import MyProducts from "./pages/MyProducts";
 import Billing from "./pages/Billing";
 import Support from "./pages/Support";
@@ -58,6 +60,7 @@ const App = () => (
           <SidebarProvider>
             <GmailAuthProvider>
               <ToastProvider>
+                <UpgradeModalProvider>
                 <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
@@ -172,6 +175,8 @@ const App = () => (
               
               <Route path="*" element={<NotFound />} />
                 </Routes>
+                <UpgradeModal />
+                </UpgradeModalProvider>
                 <PwaUpdatePrompt />
                 <PwaInstallPrompt />
               </ToastProvider>

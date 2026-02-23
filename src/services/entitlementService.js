@@ -73,29 +73,39 @@ export const entitlementService = {
   },
 
   async incrementUsage(userId, productId) {
-    const { data, error } = await supabase
+    // Read current usage
+    const { data: current, error: readErr } = await supabase
       .from('user_entitlements')
-      .update({ trial_usage_count: supabase.rpc ? undefined : undefined })
+      .select('trial_usage_count, trial_usage_limit')
       .eq('user_id', userId)
       .eq('product_id', productId)
-      .select()
+      .eq('status', 'trial')
       .single();
 
-    // Use RPC or raw SQL for atomic increment — fallback to read+write
-    const { data: current } = await supabase
-      .from('user_entitlements')
-      .select('trial_usage_count')
-      .eq('user_id', userId)
-      .eq('product_id', productId)
-      .single();
-
-    if (current) {
-      await supabase
-        .from('user_entitlements')
-        .update({ trial_usage_count: (current.trial_usage_count || 0) + 1, updated_at: new Date().toISOString() })
-        .eq('user_id', userId)
-        .eq('product_id', productId);
+    if (readErr || !current) {
+      return { allowed: false, count: 0, limit: 0, error: 'No trial entitlement found' };
     }
+
+    const count = current.trial_usage_count || 0;
+    const limit = current.trial_usage_limit;
+
+    // If there's a limit and we've reached it, deny
+    if (limit != null && count >= limit) {
+      return { allowed: false, count, limit };
+    }
+
+    // Increment
+    const { error: updateErr } = await supabase
+      .from('user_entitlements')
+      .update({ trial_usage_count: count + 1, updated_at: new Date().toISOString() })
+      .eq('user_id', userId)
+      .eq('product_id', productId);
+
+    if (updateErr) {
+      return { allowed: false, count, limit, error: updateErr.message };
+    }
+
+    return { allowed: true, count: count + 1, limit };
   },
 
   async grantAccess(adminId, userId, productId, options = {}) {
