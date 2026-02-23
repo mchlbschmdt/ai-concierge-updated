@@ -14,12 +14,15 @@ import Properties from "./pages/Properties";
 import AddProperty from "./pages/AddProperty";
 import PropertyManager from "./pages/PropertyManager";
 import GuestManager from "./pages/GuestManager";
-import MessagesDashboard from "./pages/MessagesDashboard";
+import MessagesDashboard from "./MessagesDashboard";
 import SmartInsights from "./pages/SmartInsights";
 import EmailManagement from "./pages/EmailManagement";
 import SmsTestingDashboard from "./pages/SmsTestingDashboard";
 import SmsConciergeTest from "./pages/SmsConciergeTest";
 import PropertyAnalytics from "./pages/PropertyAnalytics";
+import AnalyticsOverview from "./pages/AnalyticsOverview";
+import AnalyticsInsights from "./pages/AnalyticsInsights";
+import AnalyticsQuality from "./pages/AnalyticsQuality";
 import FaqEditor from "./pages/FaqEditor";
 import KnowledgeBaseEditor from "./pages/KnowledgeBaseEditor";
 import ResetPassword from "./pages/ResetPassword";
@@ -119,16 +122,20 @@ const App = () => (
               <Route path="/faq-editor" element={<Navigate to="/concierge/faq" replace />} />
               <Route path="/travel-admin" element={<Navigate to="/concierge/travel-guide" replace />} />
 
-              {/* Analytics - gated */}
+              {/* Analytics - gated under /analytics */}
               <Route path="/analytics" element={
-                <ProtectedRoute><ProductGate productId="analytics"><PropertyAnalytics /></ProductGate></ProtectedRoute>
+                <ProtectedRoute><ProductGate productId="analytics"><AnalyticsOverview /></ProductGate></ProtectedRoute>
               } />
-              <Route path="/insights" element={
-                <ProtectedRoute><ProductGate productId="analytics"><SmartInsights /></ProductGate></ProtectedRoute>
+              <Route path="/analytics/insights" element={
+                <ProtectedRoute><ProductGate productId="analytics"><AnalyticsInsights /></ProductGate></ProtectedRoute>
               } />
-              <Route path="/quality-analytics" element={
-                <ProtectedRoute><ProductGate productId="analytics"><RecommendationQualityAnalytics /></ProductGate></ProtectedRoute>
+              <Route path="/analytics/quality" element={
+                <ProtectedRoute><ProductGate productId="analytics"><AnalyticsQuality /></ProductGate></ProtectedRoute>
               } />
+
+              {/* Backward compatibility redirects for analytics */}
+              <Route path="/insights" element={<Navigate to="/analytics/insights" replace />} />
+              <Route path="/quality-analytics" element={<Navigate to="/analytics/quality" replace />} />
 
               {/* New product pages */}
               <Route path="/snappro" element={

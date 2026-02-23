@@ -38,9 +38,9 @@ const PRODUCT_NAV = [
     productId: 'analytics',
     label: 'Analytics',
     items: [
-      { icon: BarChart3, label: 'Analytics', path: '/analytics' },
-      { icon: Sparkles, label: 'Smart Insights', path: '/insights' },
-      { icon: TrendingUp, label: 'Quality Analytics', path: '/quality-analytics' },
+      { icon: BarChart3, label: 'Overview', path: '/analytics' },
+      { icon: Sparkles, label: 'Smart Insights', path: '/analytics/insights' },
+      { icon: TrendingUp, label: 'Quality Analytics', path: '/analytics/quality' },
     ],
   },
   {
