@@ -30,16 +30,16 @@ import SmsConversationsAdmin from "./pages/SmsConversationsAdmin";
 import NotFound from "./pages/NotFound";
 import Onboarding from "./pages/Onboarding";
 import ProfileSettings from "./pages/ProfileSettings";
-import UserManagement from "./pages/UserManagement";
-import AdminDashboard from "./pages/AdminDashboard";
+
+import AdminPanel from "./pages/AdminPanel";
 import AdminPropertiesView from "./pages/AdminPropertiesView";
 import UserSmsTest from "./pages/UserSmsTest";
 import SystemDiagnostics from "./pages/SystemDiagnostics";
 import InstallApp from "./pages/InstallApp";
 import PwaUpdatePrompt from "./components/PwaUpdatePrompt";
 import PwaInstallPrompt from "./components/PwaInstallPrompt";
-import AdminEntitlements from "./pages/AdminEntitlements";
-import AdminAnnouncements from "./pages/AdminAnnouncements";
+
+
 import SnapPro from "./pages/SnapPro";
 import HostAcademy from "./pages/HostAcademy";
 import ProductGate from "./components/ProductGate";
@@ -154,10 +154,7 @@ const App = () => (
               
               {/* Admin Routes */}
               <Route path="/admin" element={
-                <ProtectedRoute requireSuperAdmin><AdminDashboard /></ProtectedRoute>
-              } />
-              <Route path="/admin/users" element={
-                <ProtectedRoute requireSuperAdmin><UserManagement /></ProtectedRoute>
+                <ProtectedRoute requireSuperAdmin><AdminPanel /></ProtectedRoute>
               } />
               <Route path="/admin/properties" element={
                 <ProtectedRoute requireSuperAdmin><AdminPropertiesView /></ProtectedRoute>
@@ -165,13 +162,7 @@ const App = () => (
               <Route path="/admin/system-diagnostics" element={
                 <ProtectedRoute requireSuperAdmin><SystemDiagnostics /></ProtectedRoute>
               } />
-              <Route path="/admin/entitlements" element={
-                <ProtectedRoute requireSuperAdmin><AdminEntitlements /></ProtectedRoute>
-              } />
-              <Route path="/admin/announcements" element={
-                <ProtectedRoute requireSuperAdmin><AdminAnnouncements /></ProtectedRoute>
-              } />
-              
+
               <Route path="/install" element={
                 <ProtectedRoute><InstallApp /></ProtectedRoute>
               } />
