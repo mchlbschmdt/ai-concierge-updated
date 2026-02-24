@@ -1,192 +1,77 @@
 
+# Fix: Platform Dimensions Not Applied to Processed Image
 
-# SnapPro Advanced Photo Editor -- Implementation Plan
+## Problem
 
-This is a major feature expansion spanning new UI components, an AI-powered edge function, database schema changes, and client-side canvas compositing. The work is broken into 4 sections matching the request.
+When a platform is selected (e.g., Airbnb Hero at 1920x1280), the processed image output still uses the original uploaded image dimensions. The `processImageCanvas` function (line 129-131) always sets the canvas to the source image's native width/height and never reads the platform's configured output dimensions.
 
----
+## Root Cause
 
-## Overview of Changes
+1. `processImageCanvas` receives only `processingSettings` (enhancement toggles/sliders) -- it has no access to `platformConfig` (which contains `outputWidth`, `outputHeight`, `aspectRatio`)
+2. The canvas is created at `img.width` x `img.height` with no resizing step
+3. `handleProcess` (line 246) calls `processImageCanvas(originalUrl, settings)` without passing `platformConfig`
 
-| Area | Files | Description |
-|---|---|---|
-| Database | 1 migration | Add `parent_image_id`, `version_number`, `version_label`, `iteration_prompt` columns to `snappro_images` |
-| Edge Function | 1 new function (`snappro-inspire`) | GPT-4o vision call for "Inspire Me" creative suggestions |
-| Components | ~8 new files | Platform selector, creative direction engine, iteration panel, overlay builder |
-| Main Page | `SnapPro.jsx` rewrite | Integrate all new sections into the existing settings flow |
-| Config | `config.toml` | Register the new edge function |
+## Solution
 
----
+### File: `src/pages/SnapPro.jsx`
 
-## Section 1: Platform Selector
+**1. Update `processImageCanvas` signature** to accept an optional dimensions object:
 
-**New file: `src/components/snappro/PlatformSelector.jsx`**
-
-- 9 platform cards in a 3-col grid (2-col mobile) with single-select behavior
-- Selected state: blue border, tint, checkmark badge
-- Each platform triggers a smooth accordion sub-panel (CSS max-height transition, 300ms ease)
-
-**New file: `src/components/snappro/PlatformSubPanels.jsx`**
-
-- Contains all 9 sub-panel components (Airbnb, VRBO, Instagram, Paid Ads, Email, Print, Website, Video Thumbnail, Custom)
-- Each sub-panel renders its specific radio buttons, checkboxes, chips, and inputs
-- Platform selection auto-updates a `platformConfig` state object containing: output dimensions, aspect ratio, DPI, format, and auto-applied enhancement toggles
-- The "Auto-apply best practices" checkboxes in Airbnb/VRBO panels will programmatically toggle the existing enhancement settings
-
-**Output info box** added below existing settings: shows "Output: WxHpx (ratio) -- DPIdpi -- format" with platform-specific requirement badges.
-
-**State shape:**
 ```javascript
-platformConfig: {
-  platform: 'airbnb' | 'vrbo' | 'instagram' | ... ,
-  photoType: string,
-  outputWidth: number,
-  outputHeight: number,
-  aspectRatio: string,
-  dpi: number,
-  format: 'jpeg' | 'webp' | 'png' | 'tiff' | 'pdf',
-  subOptions: { ... platform-specific ... },
-  overlays: { logo, text, watermark configs }
-}
+const processImageCanvas = async (sourceUrl, processingSettings, outputDims) => {
 ```
 
----
+**2. After drawing the source image, resize the canvas** if platform dimensions are specified:
 
-## Section 2: Creative Direction Engine
+```javascript
+img.onload = () => {
+  // Start with a temp canvas at original size for processing
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = img.width;
+  tempCanvas.height = img.height;
+  const tempCtx = tempCanvas.getContext('2d');
+  tempCtx.drawImage(img, 0, 0);
 
-**New file: `src/components/snappro/CreativeDirection.jsx`**
+  // ... apply all pixel effects on tempCanvas ...
 
-Three tabs using the existing Radix tabs component:
+  // Final output canvas at target dimensions
+  const outW = outputDims?.width || img.width;
+  const outH = outputDims?.height || img.height;
+  const finalCanvas = document.createElement('canvas');
+  finalCanvas.width = outW;
+  finalCanvas.height = outH;
+  const finalCtx = finalCanvas.getContext('2d');
+  finalCtx.drawImage(tempCanvas, 0, 0, outW, outH);
 
-### Guided Mode (default)
-- Vibe dropdown (9 options) and Time of Day dropdown (7 options)
-- Chip grid organized into 4 groups (Lighting, Sky/Outdoors, Style, Remove/Fix) -- max 4 selections
-- Selected chips shown as removable tags
-- Live "assembled prompt" preview in a gray box that concatenates selections into natural language
-
-### Custom Mode
-- Large textarea (max 600 chars) with character counter
-- Quick-add phrase chips that insert at cursor position
-- "What to AVOID" textarea (becomes negative prompt)
-- Reference Style radio buttons
-
-### Inspire Me
-- On tab click: uploads original image to storage if not already uploaded, then calls the `snappro-inspire` edge function
-- Loading state with spinner
-- Displays 4 suggestion cards with emoji, name, description, "Recommended" badge, and "Apply This Direction" button
-- "Apply" switches to Guided mode and pre-fills settings
-- "Generate 4 more ideas" link for refresh
-
-**New edge function: `supabase/functions/snappro-inspire/index.ts`**
-
-- Receives the image URL and calls Lovable AI gateway (google/gemini-3-flash-preview since it supports vision) with the system prompt from the spec
-- Returns 4 creative direction suggestions as JSON
-- Uses `LOVABLE_API_KEY` (already available)
-- Handles 429/402 rate limit errors
-
-**Config update: `supabase/config.toml`**
-```toml
-[functions.snappro-inspire]
-verify_jwt = false
+  finalCanvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.92);
+};
 ```
 
----
+This approach processes the image at its native resolution (preserving quality) and then scales the final output to the target dimensions.
 
-## Section 3: Post-Completion Iteration Panel
+**3. Update `handleProcess`** to pass platform dimensions:
 
-**New file: `src/components/snappro/IterationPanel.jsx`**
-
-Appears after processing completes, below the before/after view. Contains 4 tabs:
-
-### Quick Tweaks
-- 5 sliders (Brightness, Warmth, Saturation, Contrast, Sharpness) with range inputs
-- Conditional Sky Blend / Sky Warmth sliders
-- "Reset to Default" and "Apply Tweaks" button
-- Re-processes using original image + updated settings
-
-### Change Style
-- 8 style preset cards in 4-col grid with "Active" / "Try It" states
-- Sky swap row with 5 options
-- Re-processes with preset settings on click
-
-### Add Overlays (client-side Canvas compositing)
-
-**New file: `src/components/snappro/OverlayBuilder.jsx`**
-
-- Logo section: upload/position/size/opacity controls
-- Text overlay: 2 line inputs, font/weight/size/color/shadow/background band controls
-- Watermark: text/opacity/position controls
-- Live canvas preview thumbnail (~200px)
-- "Apply Overlays and Download" button -- composites on canvas, exports as JPEG blob
-- "Save to Library" button -- uploads composited blob to storage and inserts new `snappro_images` row with `parent_image_id`
-
-### Ask AI
-- Chat thread UI (component state, not persisted)
-- Text input with quick-request chips
-- Calls Lovable AI gateway via the existing `snappro-inspire` edge function (with a different mode/endpoint) to interpret natural language into settings JSON
-- Auto-applies returned settings and re-processes
-- Handles "undo", "compare", "keep this one" special commands
-
-**Version History strip** (outside tabs): thumbnail row of all versions (v1, v2, v3...) with labels, blue dot for current, download icon on hover.
-
----
-
-## Section 4: Database Changes
-
-**Migration SQL:**
-
-```sql
-ALTER TABLE public.snappro_images
-  ADD COLUMN IF NOT EXISTS parent_image_id uuid REFERENCES public.snappro_images(id) ON DELETE SET NULL,
-  ADD COLUMN IF NOT EXISTS version_number integer DEFAULT 1,
-  ADD COLUMN IF NOT EXISTS version_label text,
-  ADD COLUMN IF NOT EXISTS iteration_prompt text;
+```javascript
+const outputDims = platformConfig.outputWidth && platformConfig.outputHeight
+  ? { width: platformConfig.outputWidth, height: platformConfig.outputHeight }
+  : null;
+const processedBlob = await processImageCanvas(originalUrl, settings, outputDims);
 ```
 
-No new RLS policies needed -- existing per-user policies cover these columns.
+**4. Update `handleReprocess`** similarly to pass dimensions through.
 
----
+## Files Changed
 
-## Integration into SnapPro.jsx
-
-The main `SnapPro.jsx` page will be restructured to:
-
-1. Upload zone (unchanged)
-2. **Platform Selector** (new -- Section 1)
-3. Enhancement Settings (existing toggles preserved)
-4. **Creative Direction** (new -- Section 2)
-5. Process Photo button (existing)
-6. Before/After slider + **Iteration Panel** (new -- Section 3, shown after processing)
-7. **Version History** strip (new -- shown when multiple versions exist)
-8. Recent Uploads (existing)
-
-The existing `DEFAULT_SETTINGS` object will be extended to include `platform`, `creativeDirection`, and `overlays` keys. The `handleProcess` function will pass all settings to the processing flow. Re-processing from the iteration panel will always reference the original upload URL.
-
----
-
-## File Summary
-
-| File | Action |
+| File | Change |
 |---|---|
-| `supabase/migrations/[timestamp].sql` | New -- add columns to `snappro_images` |
-| `supabase/functions/snappro-inspire/index.ts` | New -- AI vision suggestions and chat interpretation |
-| `supabase/config.toml` | Edit -- register `snappro-inspire` |
-| `src/components/snappro/PlatformSelector.jsx` | New |
-| `src/components/snappro/PlatformSubPanels.jsx` | New |
-| `src/components/snappro/CreativeDirection.jsx` | New |
-| `src/components/snappro/IterationPanel.jsx` | New |
-| `src/components/snappro/OverlayBuilder.jsx` | New |
-| `src/components/snappro/VersionHistory.jsx` | New |
-| `src/components/snappro/StylePresets.jsx` | New |
-| `src/components/snappro/AskAiChat.jsx` | New |
-| `src/pages/SnapPro.jsx` | Major edit -- integrate all new sections |
+| `src/pages/SnapPro.jsx` | Add `outputDims` parameter to `processImageCanvas`, resize canvas to target dimensions after processing, pass `platformConfig` dimensions from `handleProcess` and `handleReprocess` |
 
----
+## Additional Fixes (from previous approved plan, bundled here)
 
-## Notes
+These three issues from the prior conversation will also be fixed in this same edit:
 
-- The "Inspire Me" and "Ask AI" features use the Lovable AI gateway (google/gemini-3-flash-preview) via a single edge function with mode routing. The `LOVABLE_API_KEY` is already configured.
-- The actual photo enhancement (color correction, HDR, etc.) currently uses a client-side Canvas processor. The platform/creative direction settings will be stored in the settings JSONB but the Canvas processing logic from the previous plan remains the processing engine. The AI chat just translates natural language to settings adjustments.
-- Overlay compositing is intentionally client-side Canvas (logos, text, bands) as specified.
-- All re-processing uses the original uploaded file to avoid quality degradation.
+**A. Creative Direction tabs not responding** (`CreativeDirection.jsx`): Convert to controlled `Tabs` with `activeTab` state; use native `<button>` for "Apply This Direction"; switch to guided tab on apply.
 
+**B. Sky swap not working** (`SnapPro.jsx`): Add sky color-grade processing block to `processImageCanvas` that applies tinted gradients to the top 35% of the image based on `processingSettings.skySwap` value.
+
+**C. Creative Direction selections not affecting output** (`SnapPro.jsx`): Add `buildProcessingSettings(settings, direction)` helper that maps vibe, time of day, and chip selections to numeric adjustments for brightness/warmth/saturation/contrast. Call this helper before `processImageCanvas` in both `handleProcess` and `handleReprocess`.
