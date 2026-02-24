@@ -378,10 +378,10 @@ serve(async (req) => {
           const form = new FormData();
           form.append('image', new Blob([imgBytes], { type: 'image/jpeg' }), 'image.jpg');
           form.append('prompt', skyPromptText);
-          form.append('search_prompt', 'sky, clouds, atmosphere, air above horizon');
-          form.append('negative_prompt', 'blurry, fake, cartoon, nuclear, neon, oversaturated sky, watermark, text, artifacts');
+          form.append('search_prompt', 'sky, clouds');
+          form.append('negative_prompt', 'blurry, fake, cartoon, nuclear, neon, oversaturated sky, watermark, text, artifacts, changed buildings, altered architecture, modified structures');
           form.append('output_format', 'jpeg');
-          form.append('grow_mask', '3');
+          form.append('grow_mask', '1');
           const result = await callStability('edit/search-and-replace', form, STABILITY_API_KEY);
           if (result) {
             const uploaded = await uploadToStorage(result, userId, 'sky_replaced');
