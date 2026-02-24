@@ -1,6 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Sparkles, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -21,6 +20,7 @@ const QUICK_PHRASES = ['luxury resort feel', 'remove the', 'add warm light', '5-
 const REF_STYLES = ['None selected', 'Match Airbnb Luxe listings', 'Match Forbes Travel Guide photography', 'Match HGTV Magazine covers', 'Match Architectural Digest'];
 
 export default function CreativeDirection({ direction, onDirectionChange, imageUrl, onApplyInspiration }) {
+  const [activeTab, setActiveTab] = useState('guided');
   const [inspireResults, setInspireResults] = useState(null);
   const [inspireLoading, setInspireLoading] = useState(false);
   const customRef = useRef(null);
@@ -68,15 +68,22 @@ export default function CreativeDirection({ direction, onDirectionChange, imageU
     }
   }, [imageUrl]);
 
+  const handleTabChange = (value) => {
+    setActiveTab(value);
+    if (value === 'inspire' && !inspireResults && !inspireLoading) {
+      fetchInspiration();
+    }
+  };
+
   return (
     <div className="bg-card border border-border rounded-xl p-6 space-y-4 animate-scale-in">
       <h2 className="text-base font-semibold text-foreground">🎨 Creative Direction</h2>
 
-      <Tabs defaultValue="guided" className="w-full">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="w-full">
           <TabsTrigger value="guided" className="flex-1 text-xs">✨ Guided</TabsTrigger>
           <TabsTrigger value="custom" className="flex-1 text-xs">✍️ Custom</TabsTrigger>
-          <TabsTrigger value="inspire" className="flex-1 text-xs" onClick={() => { if (!inspireResults && !inspireLoading) fetchInspiration(); }}>🎲 Inspire Me</TabsTrigger>
+          <TabsTrigger value="inspire" className="flex-1 text-xs">🎲 Inspire Me</TabsTrigger>
         </TabsList>
 
         {/* Guided Mode */}
@@ -183,7 +190,7 @@ export default function CreativeDirection({ direction, onDirectionChange, imageU
         </TabsContent>
 
         {/* Inspire Me */}
-        <TabsContent value="inspire" className="space-y-4 mt-4">
+        <TabsContent value="inspire" className="space-y-4 mt-4" forceMount={activeTab === 'inspire' ? undefined : undefined}>
           {inspireLoading && (
             <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
               <Loader2 className="w-5 h-5 animate-spin text-primary" />
@@ -204,9 +211,16 @@ export default function CreativeDirection({ direction, onDirectionChange, imageU
                       <h3 className="text-sm font-semibold text-foreground">{idea.name}</h3>
                     </div>
                     <p className="text-xs text-muted-foreground">{idea.description}</p>
-                    <Button size="sm" variant="outline" onClick={() => onApplyInspiration(idea)} className="text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onApplyInspiration(idea);
+                        setActiveTab('guided');
+                      }}
+                      className="px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                    >
                       Apply This Direction
-                    </Button>
+                    </button>
                   </div>
                 ))}
               </div>
@@ -218,9 +232,9 @@ export default function CreativeDirection({ direction, onDirectionChange, imageU
 
           {!inspireLoading && !inspireResults && (
             <div className="text-center py-6">
-              <Button variant="outline" onClick={fetchInspiration}>
-                <Sparkles className="w-4 h-4 mr-2" /> Analyze Photo & Get Ideas
-              </Button>
+              <button type="button" onClick={fetchInspiration} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md border border-border text-foreground hover:bg-muted/50 transition-colors">
+                <Sparkles className="w-4 h-4" /> Analyze Photo & Get Ideas
+              </button>
             </div>
           )}
         </TabsContent>

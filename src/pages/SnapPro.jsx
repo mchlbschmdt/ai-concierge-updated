@@ -44,6 +44,67 @@ const DEFAULT_DIRECTION = {
   referenceStyle: '',
 };
 
+// Maps creative direction selections to numeric processing adjustments
+function buildProcessingSettings(baseSettings, directionObj) {
+  const s = { ...baseSettings };
+
+  const vibeMap = {
+    'Luxury & High-End': { warmth: 15, saturation: 10, contrast: 5 },
+    'Cozy & Inviting': { warmth: 20, brightness: 5 },
+    'Modern & Minimalist': { contrast: 10, saturation: -10 },
+    'Rustic & Charming': { warmth: 18, saturation: 5, brightness: -5 },
+    'Tropical & Resort': { warmth: 10, saturation: 20, brightness: 8 },
+    'Urban & Sophisticated': { contrast: 12, warmth: -5, saturation: 5 },
+    'Bright & Airy': { brightness: 20, warmth: 5, saturation: -5 },
+    'Dark & Moody': { brightness: -20, contrast: 15, saturation: -5 },
+    'Professional & Clean': { contrast: 8, saturation: 5 },
+  };
+
+  const timeMap = {
+    'Golden Hour Sunset': { warmth: 25, brightness: 10 },
+    'Soft Morning Light': { warmth: 10, brightness: 8 },
+    'Midday Bright': { brightness: 15, contrast: 5 },
+    'Blue Hour Dusk': { warmth: -15, brightness: -10, saturation: 10 },
+    'Night Ambiance': { brightness: -25, warmth: 10, contrast: 10 },
+    'Overcast Natural': { saturation: -8, brightness: 5 },
+  };
+
+  const chipMap = {
+    'Make it brighter': { brightness: 15 },
+    'Fix dark corners': { brightness: 8 },
+    'Add warm glow': { warmth: 20 },
+    'Even out exposure': { contrast: -5, brightness: 5 },
+    'Crisp and sharp': { contrast: 10 },
+    'Cinematic color grade': { contrast: 12, saturation: 8, warmth: 5 },
+    'Magazine quality': { contrast: 8, saturation: 10 },
+    '5-star hotel feel': { warmth: 12, saturation: 8, brightness: 5 },
+    'Vibrant': { saturation: 20 },
+    'Dramatic sunset sky': { warmth: 20 },
+    'Lush greenery': { saturation: 15 },
+  };
+
+  const addAdjustments = (map) => {
+    if (!map) return;
+    Object.entries(map).forEach(([k, v]) => {
+      s[k] = (s[k] || 0) + v;
+    });
+  };
+
+  if (directionObj.vibe && vibeMap[directionObj.vibe]) {
+    addAdjustments(vibeMap[directionObj.vibe]);
+  }
+  if (directionObj.timeOfDay && directionObj.timeOfDay !== 'No preference' && timeMap[directionObj.timeOfDay]) {
+    addAdjustments(timeMap[directionObj.timeOfDay]);
+  }
+  if (directionObj.selectedChips?.length) {
+    directionObj.selectedChips.forEach(chip => {
+      if (chipMap[chip]) addAdjustments(chipMap[chip]);
+    });
+  }
+
+  return s;
+}
+
 export default function SnapPro() {
   const { currentUser } = useAuth();
   const { trialUsesRemaining, usageCount, incrementUsage, status } = useProductAccess('snappro');
@@ -59,7 +120,7 @@ export default function SnapPro() {
   // New state
   const [platformConfig, setPlatformConfig] = useState(DEFAULT_PLATFORM_CONFIG);
   const [direction, setDirection] = useState(DEFAULT_DIRECTION);
-  const [processedResult, setProcessedResult] = useState(null); // { originalUrl, optimizedUrl, id }
+  const [processedResult, setProcessedResult] = useState(null);
   const [versions, setVersions] = useState([]);
   const [currentVersionId, setCurrentVersionId] = useState(null);
   const [isReprocessing, setIsReprocessing] = useState(false);
@@ -108,7 +169,6 @@ export default function SnapPro() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // Upload original file to storage, return publicUrl
   const uploadOriginal = async () => {
     if (uploadedOriginalUrl) return uploadedOriginalUrl;
     const ext = file.name.split('.').pop();
@@ -120,28 +180,30 @@ export default function SnapPro() {
     return publicUrl;
   };
 
-  // Process using client-side canvas
-  const processImageCanvas = async (sourceUrl, processingSettings) => {
+  // Process using client-side canvas — accepts optional outputDims { width, height }
+  const processImageCanvas = async (sourceUrl, processingSettings, outputDims) => {
     return new Promise((resolve, reject) => {
       const img = new window.Image();
       img.crossOrigin = 'anonymous';
       img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
+        // Process at native resolution on a temp canvas
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = img.width;
+        tempCanvas.height = img.height;
+        const ctx = tempCanvas.getContext('2d');
         ctx.drawImage(img, 0, 0);
 
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
         const data = imageData.data;
+        const clamp = (v) => Math.max(0, Math.min(255, v));
 
         // Brightness
         const br = (processingSettings.brightness || 0) * 2;
         if (br !== 0) {
           for (let i = 0; i < data.length; i += 4) {
-            data[i] = Math.max(0, Math.min(255, data[i] + br));
-            data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + br));
-            data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + br));
+            data[i] = clamp(data[i] + br);
+            data[i + 1] = clamp(data[i + 1] + br);
+            data[i + 2] = clamp(data[i + 2] + br);
           }
         }
 
@@ -149,8 +211,8 @@ export default function SnapPro() {
         const warmth = (processingSettings.warmth || 0) * 1.5;
         if (warmth !== 0) {
           for (let i = 0; i < data.length; i += 4) {
-            data[i] = Math.max(0, Math.min(255, data[i] + warmth));
-            data[i + 2] = Math.max(0, Math.min(255, data[i + 2] - warmth));
+            data[i] = clamp(data[i] + warmth);
+            data[i + 2] = clamp(data[i + 2] - warmth);
           }
         }
 
@@ -159,9 +221,9 @@ export default function SnapPro() {
         if (contrastVal !== 0) {
           const factor = (259 * (contrastVal + 255)) / (255 * (259 - contrastVal));
           for (let i = 0; i < data.length; i += 4) {
-            data[i] = Math.max(0, Math.min(255, factor * (data[i] - 128) + 128));
-            data[i + 1] = Math.max(0, Math.min(255, factor * (data[i + 1] - 128) + 128));
-            data[i + 2] = Math.max(0, Math.min(255, factor * (data[i + 2] - 128) + 128));
+            data[i] = clamp(factor * (data[i] - 128) + 128);
+            data[i + 1] = clamp(factor * (data[i + 1] - 128) + 128);
+            data[i + 2] = clamp(factor * (data[i + 2] - 128) + 128);
           }
         }
 
@@ -170,9 +232,9 @@ export default function SnapPro() {
         if (sat !== 0) {
           for (let i = 0; i < data.length; i += 4) {
             const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-            data[i] = Math.max(0, Math.min(255, gray + (data[i] - gray) * (1 + sat)));
-            data[i + 1] = Math.max(0, Math.min(255, gray + (data[i + 1] - gray) * (1 + sat)));
-            data[i + 2] = Math.max(0, Math.min(255, gray + (data[i + 2] - gray) * (1 + sat)));
+            data[i] = clamp(gray + (data[i] - gray) * (1 + sat));
+            data[i + 1] = clamp(gray + (data[i + 1] - gray) * (1 + sat));
+            data[i + 2] = clamp(gray + (data[i + 2] - gray) * (1 + sat));
           }
         }
 
@@ -187,9 +249,9 @@ export default function SnapPro() {
           if (max - min > 0 && (min > 10 || max < 245)) {
             const range = max - min;
             for (let i = 0; i < data.length; i += 4) {
-              data[i] = Math.max(0, Math.min(255, ((data[i] - min) / range) * 255));
-              data[i + 1] = Math.max(0, Math.min(255, ((data[i + 1] - min) / range) * 255));
-              data[i + 2] = Math.max(0, Math.min(255, ((data[i + 2] - min) / range) * 255));
+              data[i] = clamp(((data[i] - min) / range) * 255);
+              data[i + 1] = clamp(((data[i + 1] - min) / range) * 255);
+              data[i + 2] = clamp(((data[i + 2] - min) / range) * 255);
             }
           }
         }
@@ -206,10 +268,10 @@ export default function SnapPro() {
 
         // Virtual Twilight
         if (processingSettings.virtualTwilight) {
-          const thirdH = canvas.height / 3;
-          for (let y = 0; y < canvas.height; y++) {
-            for (let x = 0; x < canvas.width; x++) {
-              const idx = (y * canvas.width + x) * 4;
+          const thirdH = tempCanvas.height / 3;
+          for (let y = 0; y < tempCanvas.height; y++) {
+            for (let x = 0; x < tempCanvas.width; x++) {
+              const idx = (y * tempCanvas.width + x) * 4;
               if (y < thirdH) {
                 const t = 1 - (y / thirdH);
                 data[idx] = Math.max(0, data[idx] - t * 40);
@@ -224,8 +286,44 @@ export default function SnapPro() {
           }
         }
 
+        // Sky Swap (color-grade effect on top 35%)
+        if (processingSettings.skySwap) {
+          const skyColors = {
+            sunset: { r: 40, g: 15, b: -20 },
+            sunrise: { r: 25, g: 10, b: 15 },
+            blue: { r: -15, g: -5, b: 25 },
+            dramatic: { r: -10, g: -10, b: 0 },
+          };
+          const sky = skyColors[processingSettings.skySwap];
+          if (sky) {
+            const skyH = tempCanvas.height * 0.35;
+            for (let y = 0; y < skyH; y++) {
+              const blend = 1 - (y / skyH);
+              for (let x = 0; x < tempCanvas.width; x++) {
+                const idx = (y * tempCanvas.width + x) * 4;
+                data[idx] = clamp(data[idx] + sky.r * blend);
+                data[idx + 1] = clamp(data[idx + 1] + sky.g * blend);
+                data[idx + 2] = clamp(data[idx + 2] + sky.b * blend);
+              }
+            }
+          }
+        }
+
         ctx.putImageData(imageData, 0, 0);
-        canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.92);
+
+        // Scale to target dimensions if specified
+        const outW = outputDims?.width || tempCanvas.width;
+        const outH = outputDims?.height || tempCanvas.height;
+        if (outW !== tempCanvas.width || outH !== tempCanvas.height) {
+          const finalCanvas = document.createElement('canvas');
+          finalCanvas.width = outW;
+          finalCanvas.height = outH;
+          const finalCtx = finalCanvas.getContext('2d');
+          finalCtx.drawImage(tempCanvas, 0, 0, outW, outH);
+          finalCanvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.92);
+        } else {
+          tempCanvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.92);
+        }
       };
       img.onerror = reject;
       img.src = sourceUrl;
@@ -243,7 +341,16 @@ export default function SnapPro() {
     setProcessing(true);
     try {
       const originalUrl = await uploadOriginal();
-      const processedBlob = await processImageCanvas(originalUrl, settings);
+
+      // Merge creative direction into processing settings
+      const mergedSettings = buildProcessingSettings(settings, direction);
+
+      // Build output dimensions from platform config
+      const outputDims = platformConfig.outputWidth && platformConfig.outputHeight
+        ? { width: platformConfig.outputWidth, height: platformConfig.outputHeight }
+        : null;
+
+      const processedBlob = await processImageCanvas(originalUrl, mergedSettings, outputDims);
 
       const optPath = `${currentUser.id}/${Date.now()}_optimized.jpg`;
       const { error: upErr } = await supabase.storage.from('snappro-photos').upload(optPath, processedBlob, { contentType: 'image/jpeg' });
@@ -258,7 +365,7 @@ export default function SnapPro() {
           optimized_url: optimizedUrl,
           file_name: file.name,
           file_size: file.size,
-          settings: { ...settings, platform: platformConfig, direction },
+          settings: { ...mergedSettings, platform: platformConfig, direction },
           status: 'completed',
           version_number: 1,
           version_label: 'Original',
@@ -285,7 +392,12 @@ export default function SnapPro() {
     if (!processedResult || !currentUser?.id) return;
     setIsReprocessing(true);
     try {
-      const processedBlob = await processImageCanvas(processedResult.originalUrl, newSettings);
+      // Build output dimensions from platform config
+      const outputDims = platformConfig.outputWidth && platformConfig.outputHeight
+        ? { width: platformConfig.outputWidth, height: platformConfig.outputHeight }
+        : null;
+
+      const processedBlob = await processImageCanvas(processedResult.originalUrl, newSettings, outputDims);
       const optPath = `${currentUser.id}/${Date.now()}_v${versions.length + 1}.jpg`;
       const { error: upErr } = await supabase.storage.from('snappro-photos').upload(optPath, processedBlob, { contentType: 'image/jpeg' });
       if (upErr) throw upErr;
