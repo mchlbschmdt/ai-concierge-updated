@@ -1,77 +1,64 @@
 
-# Fix: Platform Dimensions Not Applied to Processed Image
 
-## Problem
+# Replace Client-Side Canvas Processing with Cloudinary Edge Function
 
-When a platform is selected (e.g., Airbnb Hero at 1920x1280), the processed image output still uses the original uploaded image dimensions. The `processImageCanvas` function (line 129-131) always sets the canvas to the source image's native width/height and never reads the platform's configured output dimensions.
+## Overview
 
-## Root Cause
+Replace the client-side canvas pixel manipulation in SnapPro with a new `process-image` Supabase Edge Function that uses Cloudinary for professional-quality image processing. This gives real HDR, auto-enhance, sharpening, resizing, and color grading instead of the current "burnt orange filter" approach.
 
-1. `processImageCanvas` receives only `processingSettings` (enhancement toggles/sliders) -- it has no access to `platformConfig` (which contains `outputWidth`, `outputHeight`, `aspectRatio`)
-2. The canvas is created at `img.width` x `img.height` with no resizing step
-3. `handleProcess` (line 246) calls `processImageCanvas(originalUrl, settings)` without passing `platformConfig`
+## Prerequisites: Cloudinary Secrets
 
-## Solution
+Three new Supabase secrets are required. They do NOT exist yet:
+- `CLOUDINARY_CLOUD_NAME`
+- `CLOUDINARY_API_KEY`
+- `CLOUDINARY_API_SECRET`
 
-### File: `src/pages/SnapPro.jsx`
+These must be added before the edge function will work. The user needs a free Cloudinary account at cloudinary.com to get these values.
 
-**1. Update `processImageCanvas` signature** to accept an optional dimensions object:
+## Changes
 
-```javascript
-const processImageCanvas = async (sourceUrl, processingSettings, outputDims) => {
+### 1. New Edge Function: `supabase/functions/process-image/index.ts`
+
+Create the Cloudinary-powered processing function as specified. It:
+- Receives image URL + settings from the client
+- Maps enhancement toggles and adjustment sliders to Cloudinary transformations
+- Handles dimension/aspect ratio resizing via Cloudinary's `c_fill,g_auto`
+- Uploads to Cloudinary with signed authentication
+- Returns the processed image URL
+
+Also add to `supabase/config.toml`:
+```toml
+[functions.process-image]
+verify_jwt = false
 ```
 
-**2. After drawing the source image, resize the canvas** if platform dimensions are specified:
+### 2. Update `src/pages/SnapPro.jsx` -- Replace `handleProcess`
 
-```javascript
-img.onload = () => {
-  // Start with a temp canvas at original size for processing
-  const tempCanvas = document.createElement('canvas');
-  tempCanvas.width = img.width;
-  tempCanvas.height = img.height;
-  const tempCtx = tempCanvas.getContext('2d');
-  tempCtx.drawImage(img, 0, 0);
+Replace the `handleProcess` function (lines 333-388) to:
+- Upload original to Supabase Storage (reuses existing `uploadOriginal`)
+- Save a DB record with status `processing`
+- Call `supabase.functions.invoke("process-image", ...)` with all settings
+- Fall back to client-side canvas if the edge function fails (e.g., missing secrets)
+- Update the DB record with the processed URL
 
-  // ... apply all pixel effects on tempCanvas ...
+Key mapping of existing variables to edge function payload:
+- `settings` (autoEnhance, hdr, whiteBalance, virtualTwilight, brightness) -- passed directly
+- `direction` (vibe, timeOfDay, selectedChips, customPrompt) -- passed as creative direction context
+- `platformConfig` (outputWidth, outputHeight, aspectRatio) -- mapped to Cloudinary dimension transforms
 
-  // Final output canvas at target dimensions
-  const outW = outputDims?.width || img.width;
-  const outH = outputDims?.height || img.height;
-  const finalCanvas = document.createElement('canvas');
-  finalCanvas.width = outW;
-  finalCanvas.height = outH;
-  const finalCtx = finalCanvas.getContext('2d');
-  finalCtx.drawImage(tempCanvas, 0, 0, outW, outH);
+### 3. No `imageProcessor.js` import exists
 
-  finalCanvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.92);
-};
-```
+Search confirmed there is no `imageProcessor` import in the codebase. The client-side processing is done inline via `processImageCanvas`. This function will be kept as a **fallback** -- if the edge function returns `fallback: true` (e.g., missing Cloudinary secrets), the client-side canvas path runs instead.
 
-This approach processes the image at its native resolution (preserving quality) and then scales the final output to the target dimensions.
+### 4. Update `handleReprocess` similarly
 
-**3. Update `handleProcess`** to pass platform dimensions:
+Wire the iteration/reprocess flow through the same edge function, with canvas fallback.
 
-```javascript
-const outputDims = platformConfig.outputWidth && platformConfig.outputHeight
-  ? { width: platformConfig.outputWidth, height: platformConfig.outputHeight }
-  : null;
-const processedBlob = await processImageCanvas(originalUrl, settings, outputDims);
-```
+## Technical Notes
 
-**4. Update `handleReprocess`** similarly to pass dimensions through.
+- The `processImageCanvas` function (lines 184-331) is NOT deleted -- it becomes the fallback path
+- The `buildProcessingSettings` helper (lines 48-106) is still used to merge creative direction into settings for the fallback path
+- Platform aspect ratios are mapped in the edge function: `3:2` -> `w_1920,h_1280,c_fill,g_auto`, etc.
+- The edge function uses SHA-1 signing for authenticated Cloudinary uploads
+- Quality levels: print_ready=95, high_quality=85, web_optimized=75
 
-## Files Changed
-
-| File | Change |
-|---|---|
-| `src/pages/SnapPro.jsx` | Add `outputDims` parameter to `processImageCanvas`, resize canvas to target dimensions after processing, pass `platformConfig` dimensions from `handleProcess` and `handleReprocess` |
-
-## Additional Fixes (from previous approved plan, bundled here)
-
-These three issues from the prior conversation will also be fixed in this same edit:
-
-**A. Creative Direction tabs not responding** (`CreativeDirection.jsx`): Convert to controlled `Tabs` with `activeTab` state; use native `<button>` for "Apply This Direction"; switch to guided tab on apply.
-
-**B. Sky swap not working** (`SnapPro.jsx`): Add sky color-grade processing block to `processImageCanvas` that applies tinted gradients to the top 35% of the image based on `processingSettings.skySwap` value.
-
-**C. Creative Direction selections not affecting output** (`SnapPro.jsx`): Add `buildProcessingSettings(settings, direction)` helper that maps vibe, time of day, and chip selections to numeric adjustments for brightness/warmth/saturation/contrast. Call this helper before `processImageCanvas` in both `handleProcess` and `handleReprocess`.
