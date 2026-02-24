@@ -11,34 +11,92 @@ const supabaseAdmin = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 );
 
-function buildSkyPrompt(settings: any): string {
-  const enhancements = settings.enhancements || {};
-  
-  if (enhancements.sunsetSky || (settings.customPrompt?.toLowerCase().includes('sunset'))) {
-    return 'Same scene with photorealistic dramatic golden sunset sky, warm orange and pink clouds, professional real estate photography, golden hour lighting, photorealistic, high quality, 8k';
-  }
-  if (enhancements.sunriseSky || (settings.customPrompt?.toLowerCase().includes('sunrise'))) {
-    return 'Same scene with photorealistic soft sunrise sky, gentle pink and lavender clouds, soft morning light, professional real estate photography, high quality, 8k';
-  }
-  if (enhancements.dramaticClouds) {
-    return 'Same scene with photorealistic dramatic sky with beautiful cumulus clouds, dynamic cloud formations, bright sunny day, professional real estate photography, high quality, 8k';
-  }
-  if (enhancements.perfectBlueSky) {
-    return 'Same scene with photorealistic perfect clear blue sky, bright sunny day, no clouds, vibrant blue, professional real estate photography, high quality, 8k';
-  }
-  if (settings.virtualTwilight || settings.customPrompt?.toLowerCase().includes('twilight')) {
-    return 'Same scene at twilight with photorealistic deep blue and purple sky, warm artificial lighting glowing from windows and pools, professional real estate virtual twilight photography, high quality, 8k';
-  }
-  return 'Same scene with photorealistic beautiful dramatic sky, professional real estate photography, high quality, 8k';
+// ═══════════════════════════════════════════════════════
+// STABILITY AI HELPERS
+// ═══════════════════════════════════════════════════════
+
+async function fetchImageBytes(url: string): Promise<Uint8Array> {
+  const res = await fetch(url);
+  return new Uint8Array(await res.arrayBuffer());
 }
 
-function buildStabilityPrompt(settings: any): string {
-  const parts: string[] = [];
-  
-  if (settings.customPrompt) {
-    parts.push(settings.customPrompt.trim());
+async function uploadToStorage(
+  bytes: Uint8Array,
+  userId: string,
+  label: string,
+  contentType = 'image/jpeg'
+): Promise<string | null> {
+  const ext = contentType === 'image/png' ? 'png' : 'jpg';
+  const path = `${userId}/${Date.now()}_${label}.${ext}`;
+  const { error } = await supabaseAdmin.storage
+    .from('snappro-photos')
+    .upload(path, bytes, { contentType, upsert: false });
+  if (error) {
+    console.warn(`Upload failed for ${label}:`, error);
+    return null;
   }
-  
+  const { data: { publicUrl } } = supabaseAdmin.storage
+    .from('snappro-photos')
+    .getPublicUrl(path);
+  return publicUrl;
+}
+
+async function callStability(
+  endpoint: string,
+  formData: FormData,
+  apiKey: string
+): Promise<Uint8Array | null> {
+  const res = await fetch(`https://api.stability.ai/v2beta/stable-image/${endpoint}`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Accept': 'image/*',
+    },
+    body: formData,
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    console.warn(`Stability ${endpoint} failed ${res.status}:`, err);
+    return null;
+  }
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+function isSkyPrompt(prompt: string): boolean {
+  const lower = prompt.toLowerCase();
+  return ['sky', 'sunset', 'sunrise', 'twilight', 'clouds', 'dusk', 'dawn', 'cotton candy'].some(k => lower.includes(k));
+}
+
+function buildSkyPromptFromStyle(style: string, settings: any, customPrompt: string): string {
+  const prompt = customPrompt?.toLowerCase() || '';
+  const enhancements = settings?.enhancements || {};
+
+  const styleMap: Record<string, string> = {
+    'sunset':          'Dramatic warm golden sunset sky, deep orange and amber clouds, rich warm light casting across the scene, photorealistic, professional real estate photography, 8k',
+    'sunrise':         'Soft sunrise sky, gentle pink orange lavender clouds, peaceful morning light, photorealistic, professional real estate photography, 8k',
+    'cotton_candy':    'Dreamy cotton candy sky with soft pastel pink, lavender, and soft purple clouds, magical golden hour, photorealistic, professional photography, 8k',
+    'blue_sky':        'Perfect clear vibrant blue sky, a few light wispy clouds on the horizon, bright sunny day, photorealistic, professional real estate photography, 8k',
+    'dramatic_clouds': 'Dramatic sky with large majestic cumulus clouds, dynamic light breaking through, deep rich blues, photorealistic, professional photography, 8k',
+    'twilight':        'Virtual twilight sky, deep indigo and navy blue gradient, warm amber glow near the horizon, professional real estate virtual dusk photography, 8k',
+    'stormy':          'Dramatic moody stormy sky, dark clouds with light breaking through, cinematic atmosphere, photorealistic, professional photography, 8k',
+    'overcast':        'Soft even overcast sky, diffused light, no harsh shadows, clean professional look, photorealistic, real estate photography, 8k',
+  };
+
+  if (style && styleMap[style]) return styleMap[style];
+  if (prompt.includes('cotton candy')) return styleMap['cotton_candy'];
+  if (prompt.includes('sunset') || enhancements.sunsetSky) return styleMap['sunset'];
+  if (prompt.includes('sunrise') || enhancements.sunriseSky) return styleMap['sunrise'];
+  if (prompt.includes('twilight') || enhancements.virtualTwilight) return styleMap['twilight'];
+  if (prompt.includes('dramatic cloud') || enhancements.dramaticClouds) return styleMap['dramatic_clouds'];
+  if (prompt.includes('blue sky') || enhancements.perfectBlueSky) return styleMap['blue_sky'];
+  if (prompt.includes('storm')) return styleMap['stormy'];
+  return styleMap['sunset'];
+}
+
+function buildGeneralPrompt(settings: any, customPrompt: string): string {
+  const parts: string[] = [];
+  if (customPrompt) parts.push(customPrompt.trim());
+
   const vibePrompts: Record<string, string> = {
     'Luxury & High-End': 'luxury high-end professional photography, premium quality',
     'Tropical & Resort': 'tropical resort atmosphere, lush vibrant colors, paradise feel',
@@ -46,22 +104,17 @@ function buildStabilityPrompt(settings: any): string {
     'Dark & Moody': 'dramatic moody photography, rich shadows, atmospheric',
     'Cinematic': 'cinematic photography, film-like quality, professional color grade',
   };
-  if (settings.vibe && vibePrompts[settings.vibe]) {
-    parts.push(vibePrompts[settings.vibe]);
-  }
-  
+  if (settings.vibe && vibePrompts[settings.vibe]) parts.push(vibePrompts[settings.vibe]);
+
   const timePrompts: Record<string, string> = {
     'Golden Hour Sunset': 'golden hour lighting, warm sunset tones',
     'Blue Hour Dusk': 'blue hour twilight, cool tones, dusk atmosphere',
     'Soft Morning Light': 'soft morning light, gentle sunrise tones',
     'Night Ambiance': 'night photography, warm artificial lighting',
   };
-  if (settings.timeOfDay && timePrompts[settings.timeOfDay]) {
-    parts.push(timePrompts[settings.timeOfDay]);
-  }
-  
+  if (settings.timeOfDay && timePrompts[settings.timeOfDay]) parts.push(timePrompts[settings.timeOfDay]);
+
   parts.push('photorealistic, professional photography, high quality, 8k, sharp, detailed');
-  
   return parts.join(', ');
 }
 
@@ -206,149 +259,258 @@ serve(async (req) => {
     const uploadResult = await uploadResponse.json();
     const processedUrl = uploadResult.secure_url;
 
-    // ========== Stability AI Generative Editing Stage ==========
-    const needsSkyReplacement = 
-      enhancements.sunsetSky ||
-      enhancements.sunriseSky ||
-      enhancements.dramaticClouds ||
-      enhancements.perfectBlueSky ||
-      settings?.virtualTwilight ||
-      (settings?.customPrompt && (
-        settings.customPrompt.toLowerCase().includes('sky') ||
-        settings.customPrompt.toLowerCase().includes('sunset') ||
-        settings.customPrompt.toLowerCase().includes('sunrise') ||
-        settings.customPrompt.toLowerCase().includes('twilight') ||
-        settings.customPrompt.toLowerCase().includes('clouds')
-      ));
+    // ═══════════════════════════════════════════════════════
+    // STABILITY AI PIPELINE — runs after Cloudinary
+    // Processes in order: cleanup → sky → creative → expand → style → upscale
+    // Each step feeds its output into the next step
+    // ═══════════════════════════════════════════════════════
 
-    const needsGenerativeEdit = settings?.customPrompt && settings.customPrompt.trim().length > 0;
+    const STABILITY_API_KEY = Deno.env.get('STABILITY_API_KEY');
+    let currentUrl = processedUrl;
+    const stabilityStepsApplied: string[] = [];
 
-    let finalUrl = processedUrl;
+    if (STABILITY_API_KEY) {
+      const aiTools = settings?.aiTools || {};
+      const customPrompt = settings?.customPrompt?.trim() || '';
 
-    const STABILITY_API_KEY = Deno.env.get("STABILITY_API_KEY");
-
-    if (STABILITY_API_KEY && (needsSkyReplacement || needsGenerativeEdit)) {
-      try {
-        // Fetch the Cloudinary-processed image as a blob
-        const imageResponse = await fetch(processedUrl);
-        const imageBlob = await imageResponse.blob();
-        const imageBuffer = await imageBlob.arrayBuffer();
-        const imageBytes = new Uint8Array(imageBuffer);
-
-        if (needsGenerativeEdit && settings.customPrompt) {
-          // Use Stability AI image-to-image with the custom prompt
-          const stabilityFormData = new FormData();
-          stabilityFormData.append('image', new Blob([imageBytes], { type: 'image/jpeg' }), 'image.jpg');
-          stabilityFormData.append('prompt', buildStabilityPrompt(settings));
-          stabilityFormData.append('negative_prompt', settings.negativePrompt || 'blurry, fake, cartoon, illustration, oversaturated, watermark, text, logo, artifacts, distorted, unrealistic, painting');
-          stabilityFormData.append('output_format', 'jpeg');
-          stabilityFormData.append('strength', '0.65');
-          stabilityFormData.append('seed', '0');
-
-          console.log("Calling Stability AI with custom prompt:", settings.customPrompt);
-
-          const stabilityResponse = await fetch(
-            'https://api.stability.ai/v2beta/stable-image/generate/sd3',
-            {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${STABILITY_API_KEY}`,
-                'Accept': 'image/*',
-              },
-              body: stabilityFormData,
+      // ── STEP 1: Background Removal ────────────────────────────────────────
+      if (aiTools.backgroundRemove?.enabled) {
+        try {
+          console.log('Stability: remove-background');
+          const imgBytes = await fetchImageBytes(currentUrl);
+          const form = new FormData();
+          form.append('image', new Blob([imgBytes], { type: 'image/jpeg' }), 'image.jpg');
+          form.append('output_format', 'png');
+          const result = await callStability('edit/remove-background', form, STABILITY_API_KEY);
+          if (result) {
+            const uploaded = await uploadToStorage(result, userId, 'bg_removed', 'image/png');
+            if (uploaded) {
+              currentUrl = uploaded;
+              stabilityStepsApplied.push('background_removed');
+              console.log('Background removed:', currentUrl);
             }
-          );
-
-          if (stabilityResponse.ok) {
-            const resultBlob = await stabilityResponse.blob();
-            const resultBuffer = await resultBlob.arrayBuffer();
-            
-            const stabilityPath = `${userId}/${Date.now()}_stability.jpg`;
-            const { error: stabUploadError } = await supabaseAdmin.storage
-              .from('snappro-photos')
-              .upload(stabilityPath, new Uint8Array(resultBuffer), { 
-                contentType: 'image/jpeg',
-                upsert: false 
-              });
-            
-            if (!stabUploadError) {
-              const { data: { publicUrl: stabPublicUrl } } = supabaseAdmin.storage
-                .from('snappro-photos')
-                .getPublicUrl(stabilityPath);
-              finalUrl = stabPublicUrl;
-              console.log("Stability AI generative edit applied successfully");
-            } else {
-              console.warn('Stability upload failed, using Cloudinary result:', stabUploadError);
-            }
-          } else {
-            const errText = await stabilityResponse.text();
-            console.warn('Stability AI error, using Cloudinary result:', stabilityResponse.status, errText);
           }
-        } else if (needsSkyReplacement) {
-          // Sky-only replacement
-          const skyPrompt = buildSkyPrompt(settings);
-          
-          const stabilityFormData = new FormData();
-          stabilityFormData.append('image', new Blob([imageBytes], { type: 'image/jpeg' }), 'image.jpg');
-          stabilityFormData.append('prompt', skyPrompt);
-          stabilityFormData.append('negative_prompt', 'blurry, fake, cartoon, illustration, watermark, artifacts, distorted');
-          stabilityFormData.append('output_format', 'jpeg');
-          stabilityFormData.append('strength', '0.45');
-          stabilityFormData.append('seed', '0');
-
-          console.log("Calling Stability AI for sky replacement");
-
-          const stabilityResponse = await fetch(
-            'https://api.stability.ai/v2beta/stable-image/generate/sd3',
-            {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${STABILITY_API_KEY}`,
-                'Accept': 'image/*',
-              },
-              body: stabilityFormData,
-            }
-          );
-
-          if (stabilityResponse.ok) {
-            const resultBlob = await stabilityResponse.blob();
-            const resultBuffer = await resultBlob.arrayBuffer();
-            
-            const stabilityPath = `${userId}/${Date.now()}_sky.jpg`;
-            const { error: stabUploadError } = await supabaseAdmin.storage
-              .from('snappro-photos')
-              .upload(stabilityPath, new Uint8Array(resultBuffer), { 
-                contentType: 'image/jpeg',
-                upsert: false 
-              });
-            
-            if (!stabUploadError) {
-              const { data: { publicUrl: stabPublicUrl } } = supabaseAdmin.storage
-                .from('snappro-photos')
-                .getPublicUrl(stabilityPath);
-              finalUrl = stabPublicUrl;
-              console.log("Stability AI sky replacement applied successfully");
-            }
-          } else {
-            console.warn('Stability sky replacement failed, using Cloudinary result');
-          }
-        }
-      } catch (stabilityError) {
-        console.warn('Stability AI processing failed, using Cloudinary result:', stabilityError);
+        } catch (e) { console.warn('Background removal failed:', e); }
       }
-    }
 
-    const processingSteps = transformations.filter(t => !t.startsWith("q_") && !t.startsWith("f_") && !t.startsWith("w_"));
+      // ── STEP 2: Object Erase ──────────────────────────────────────────────
+      if (aiTools.objectRemove?.enabled && aiTools.objectRemove?.description) {
+        try {
+          console.log('Stability: erase object:', aiTools.objectRemove.description);
+          const imgBytes = await fetchImageBytes(currentUrl);
+          const form = new FormData();
+          form.append('image', new Blob([imgBytes], { type: 'image/jpeg' }), 'image.jpg');
+          form.append('prompt', `${aiTools.objectRemove.description} removed, clean background matching surroundings, photorealistic, seamless`);
+          form.append('search_prompt', aiTools.objectRemove.description);
+          form.append('negative_prompt', 'visible seam, artifact, blur, distortion');
+          form.append('output_format', 'jpeg');
+          const result = await callStability('edit/search-and-replace', form, STABILITY_API_KEY);
+          if (result) {
+            const uploaded = await uploadToStorage(result, userId, 'object_erased');
+            if (uploaded) {
+              currentUrl = uploaded;
+              stabilityStepsApplied.push('object_erased');
+            }
+          }
+        } catch (e) { console.warn('Object erase failed:', e); }
+      }
+
+      // ── STEP 3: Object Replace ────────────────────────────────────────────
+      if (aiTools.objectReplace?.enabled && aiTools.objectReplace?.searchFor && aiTools.objectReplace?.replaceWith) {
+        try {
+          console.log('Stability: search-and-replace:', aiTools.objectReplace.searchFor, '->', aiTools.objectReplace.replaceWith);
+          const imgBytes = await fetchImageBytes(currentUrl);
+          const form = new FormData();
+          form.append('image', new Blob([imgBytes], { type: 'image/jpeg' }), 'image.jpg');
+          form.append('prompt', `${aiTools.objectReplace.replaceWith}, photorealistic, professional real estate photography, high quality, matching lighting`);
+          form.append('search_prompt', aiTools.objectReplace.searchFor);
+          form.append('negative_prompt', 'blurry, fake, cartoon, artifact, distorted');
+          form.append('output_format', 'jpeg');
+          const result = await callStability('edit/search-and-replace', form, STABILITY_API_KEY);
+          if (result) {
+            const uploaded = await uploadToStorage(result, userId, 'object_replaced');
+            if (uploaded) {
+              currentUrl = uploaded;
+              stabilityStepsApplied.push('object_replaced');
+            }
+          }
+        } catch (e) { console.warn('Object replace failed:', e); }
+      }
+
+      // ── STEP 4: Object Recolor ────────────────────────────────────────────
+      if (aiTools.objectRecolor?.enabled && aiTools.objectRecolor?.searchFor && aiTools.objectRecolor?.color) {
+        try {
+          console.log('Stability: search-and-recolor:', aiTools.objectRecolor.searchFor, '->', aiTools.objectRecolor.color);
+          const imgBytes = await fetchImageBytes(currentUrl);
+          const form = new FormData();
+          form.append('image', new Blob([imgBytes], { type: 'image/jpeg' }), 'image.jpg');
+          form.append('prompt', `${aiTools.objectRecolor.searchFor} recolored to ${aiTools.objectRecolor.color}, photorealistic, natural lighting, professional photography`);
+          form.append('select_prompt', aiTools.objectRecolor.searchFor);
+          form.append('negative_prompt', 'blurry, artifact, unnatural color, distorted');
+          form.append('output_format', 'jpeg');
+          const result = await callStability('edit/search-and-recolor', form, STABILITY_API_KEY);
+          if (result) {
+            const uploaded = await uploadToStorage(result, userId, 'object_recolored');
+            if (uploaded) {
+              currentUrl = uploaded;
+              stabilityStepsApplied.push('object_recolored');
+            }
+          }
+        } catch (e) { console.warn('Object recolor failed:', e); }
+      }
+
+      // ── STEP 5: Sky Replacement ───────────────────────────────────────────
+      const skyStyle = aiTools.skyReplacement?.style || '';
+      const needsSky = (aiTools.skyReplacement?.enabled) ||
+                       enhancements.sunsetSky || enhancements.sunriseSky ||
+                       enhancements.dramaticClouds || enhancements.perfectBlueSky ||
+                       enhancements.virtualTwilight || settings?.virtualTwilight ||
+                       (customPrompt && isSkyPrompt(customPrompt));
+
+      if (needsSky) {
+        try {
+          const skyPromptText = aiTools.skyReplacement?.customSkyDescription
+            ? `${aiTools.skyReplacement.customSkyDescription}, photorealistic sky, professional real estate photography, 8k`
+            : buildSkyPromptFromStyle(skyStyle || '', settings, customPrompt);
+
+          console.log('Stability: sky search-and-replace, prompt:', skyPromptText);
+          const imgBytes = await fetchImageBytes(currentUrl);
+          const form = new FormData();
+          form.append('image', new Blob([imgBytes], { type: 'image/jpeg' }), 'image.jpg');
+          form.append('prompt', skyPromptText);
+          form.append('search_prompt', 'sky, clouds, atmosphere, air above horizon');
+          form.append('negative_prompt', 'blurry, fake, cartoon, nuclear, neon, oversaturated sky, watermark, text, artifacts');
+          form.append('output_format', 'jpeg');
+          form.append('grow_mask', '3');
+          const result = await callStability('edit/search-and-replace', form, STABILITY_API_KEY);
+          if (result) {
+            const uploaded = await uploadToStorage(result, userId, 'sky_replaced');
+            if (uploaded) {
+              currentUrl = uploaded;
+              stabilityStepsApplied.push('sky_replaced');
+            }
+          }
+        } catch (e) { console.warn('Sky replacement failed:', e); }
+      }
+
+      // ── STEP 6: General Creative Edit (SD3.5 img2img) ────────────────────
+      const needsGeneralEdit = customPrompt && !isSkyPrompt(customPrompt) && customPrompt.length > 10;
+      if (needsGeneralEdit) {
+        try {
+          console.log('Stability: SD3.5 img2img creative edit');
+          const imgBytes = await fetchImageBytes(currentUrl);
+          const form = new FormData();
+          form.append('image', new Blob([imgBytes], { type: 'image/jpeg' }), 'image.jpg');
+          form.append('prompt', buildGeneralPrompt(settings, customPrompt));
+          form.append('negative_prompt', settings?.negativePrompt || 'blurry, cartoon, illustration, watermark, text, artifacts, distorted, unrealistic, painting');
+          form.append('output_format', 'jpeg');
+          form.append('strength', '0.28');
+          form.append('model', 'sd3.5-large-turbo');
+          const result = await callStability('generate/sd3', form, STABILITY_API_KEY);
+          if (result) {
+            const uploaded = await uploadToStorage(result, userId, 'creative_edit');
+            if (uploaded) {
+              currentUrl = uploaded;
+              stabilityStepsApplied.push('creative_edit');
+            }
+          }
+        } catch (e) { console.warn('Creative edit failed:', e); }
+      }
+
+      // ── STEP 7: Outpaint / Expand ─────────────────────────────────────────
+      if (aiTools.outpaint?.enabled) {
+        try {
+          const direction = aiTools.outpaint.direction || 'all';
+          const amount = aiTools.outpaint.amount || 200;
+          console.log('Stability: outpaint direction:', direction, 'amount:', amount);
+          const imgBytes = await fetchImageBytes(currentUrl);
+          const form = new FormData();
+          form.append('image', new Blob([imgBytes], { type: 'image/jpeg' }), 'image.jpg');
+          const left   = (direction === 'all' || direction === 'left'  || direction === 'left+right') ? amount : 0;
+          const right  = (direction === 'all' || direction === 'right' || direction === 'left+right') ? amount : 0;
+          const up     = (direction === 'all' || direction === 'top'   || direction === 'top+bottom') ? amount : 0;
+          const down   = (direction === 'all' || direction === 'bottom'|| direction === 'top+bottom') ? amount : 0;
+          if (left  > 0) form.append('left',   left.toString());
+          if (right > 0) form.append('right',  right.toString());
+          if (up    > 0) form.append('up',     up.toString());
+          if (down  > 0) form.append('down',   down.toString());
+          form.append('prompt', 'natural continuation of the real estate property photo, matching architectural style, seamless extension, photorealistic');
+          form.append('output_format', 'jpeg');
+          const result = await callStability('edit/outpaint', form, STABILITY_API_KEY);
+          if (result) {
+            const uploaded = await uploadToStorage(result, userId, 'outpainted');
+            if (uploaded) {
+              currentUrl = uploaded;
+              stabilityStepsApplied.push('outpainted');
+            }
+          }
+        } catch (e) { console.warn('Outpaint failed:', e); }
+      }
+
+      // ── STEP 8: Style Transfer ────────────────────────────────────────────
+      if (aiTools.styleTransfer?.enabled && aiTools.styleTransfer?.referenceImageUrl) {
+        try {
+          console.log('Stability: style transfer');
+          const imgBytes = await fetchImageBytes(currentUrl);
+          const refBytes = await fetchImageBytes(aiTools.styleTransfer.referenceImageUrl);
+          const strength = aiTools.styleTransfer.strength || 0.5;
+          const form = new FormData();
+          form.append('image', new Blob([imgBytes], { type: 'image/jpeg' }), 'image.jpg');
+          form.append('style_image', new Blob([refBytes], { type: 'image/jpeg' }), 'style.jpg');
+          form.append('fidelity', strength.toString());
+          form.append('output_format', 'jpeg');
+          const result = await callStability('control/style', form, STABILITY_API_KEY);
+          if (result) {
+            const uploaded = await uploadToStorage(result, userId, 'style_transferred');
+            if (uploaded) {
+              currentUrl = uploaded;
+              stabilityStepsApplied.push('style_transferred');
+            }
+          }
+        } catch (e) { console.warn('Style transfer failed:', e); }
+      }
+
+      // ── STEP 9: AI Upscale (ALWAYS LAST) ─────────────────────────────────
+      if (aiTools.upscale?.enabled) {
+        try {
+          const mode = aiTools.upscale.mode || 'conservative';
+          const endpoint = mode === 'fast' ? 'upscale/fast' :
+                           mode === 'creative' ? 'upscale/creative' : 'upscale/conservative';
+          console.log('Stability: upscale mode:', mode);
+          const imgBytes = await fetchImageBytes(currentUrl);
+          const form = new FormData();
+          form.append('image', new Blob([imgBytes], { type: 'image/jpeg' }), 'image.jpg');
+          form.append('output_format', 'jpeg');
+          if (mode === 'creative') {
+            form.append('prompt', 'professional real estate photography, sharp architectural details, natural textures, photorealistic, high quality');
+            form.append('negative_prompt', 'blurry, artifact, noise, distorted');
+            form.append('creativity', '0.35');
+          }
+          const result = await callStability(endpoint, form, STABILITY_API_KEY);
+          if (result) {
+            const uploaded = await uploadToStorage(result, userId, `upscaled_${mode}`);
+            if (uploaded) {
+              currentUrl = uploaded;
+              stabilityStepsApplied.push(`upscaled_${mode}`);
+            }
+          }
+        } catch (e) { console.warn('Upscale failed:', e); }
+      }
+    } // end if STABILITY_API_KEY
+
+    const finalUrl = currentUrl;
+
+    const cloudinarySteps = transformations.filter(t => !t.startsWith("q_") && !t.startsWith("f_") && !t.startsWith("w_"));
 
     return new Response(JSON.stringify({
       success: true,
       originalUrl: imageUrl,
       optimizedUrl: finalUrl,
       cloudinaryUrl: processedUrl,
-      stabilityAiApplied: finalUrl !== processedUrl,
+      stabilityAiApplied: stabilityStepsApplied.length > 0,
       processingSteps: [
-        ...processingSteps,
-        ...(finalUrl !== processedUrl ? ['stability_ai_generative'] : []),
+        ...cloudinarySteps,
+        ...stabilityStepsApplied,
       ],
       outputWidth: uploadResult.width,
       outputHeight: uploadResult.height,
