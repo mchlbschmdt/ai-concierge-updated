@@ -42,3 +42,6 @@ verify_jwt = false
 
 [functions.ai-concierge]
 verify_jwt = false
+
+[functions.snappro-inspire]
+verify_jwt = false
