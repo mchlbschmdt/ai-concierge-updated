@@ -125,6 +125,7 @@ export default function SnapPro() {
   const [currentVersionId, setCurrentVersionId] = useState(null);
   const [isReprocessing, setIsReprocessing] = useState(false);
   const [uploadedOriginalUrl, setUploadedOriginalUrl] = useState(null);
+  const [usingCanvasFallback, setUsingCanvasFallback] = useState(false);
 
   // Fetch recent images
   useEffect(() => {
@@ -364,7 +365,8 @@ export default function SnapPro() {
       const aspectRatio = platformConfig.aspectRatio && arMap[platformConfig.aspectRatio]
         ? platformConfig.aspectRatio : 'original';
 
-      // Call Cloudinary edge function
+      // Merge creative direction into numeric adjustments
+      const mergedSettings = buildProcessingSettings(settings, direction);
       const { data: processResult, error: fnError } = await supabase.functions.invoke('process-image', {
         body: {
           imageUrl: originalUrl,
@@ -374,19 +376,26 @@ export default function SnapPro() {
             outputPurpose: platformConfig.platform || 'listing',
             aspectRatio,
             outputSize: 'high_quality',
-            enhancements: {},
-            adjustments: {
-              brightness: settings.brightness || 0,
-              contrast: 0,
-              saturation: 0,
-              warmth: 0,
-              sharpness: 50,
+            enhancements: {
+              autoEnhance: settings.autoEnhance || false,
+              hdr: settings.hdr || false,
+              whiteBalance: settings.whiteBalance || false,
+              virtualTwilight: settings.virtualTwilight || false,
+              colorEnhancement: true,
+              sharpen: true,
+              noiseReduction: false,
             },
-            autoEnhance: settings.autoEnhance || false,
-            hdr: settings.hdr || false,
-            whiteBalance: settings.whiteBalance || false,
-            virtualTwilight: settings.virtualTwilight || false,
-            brightness: settings.brightness || 0,
+            adjustments: {
+              brightness: mergedSettings.brightness || 0,
+              contrast: mergedSettings.contrast || 0,
+              saturation: mergedSettings.saturation || 0,
+              warmth: mergedSettings.warmth || 0,
+              sharpness: mergedSettings.sharpness || 50,
+            },
+            customPrompt: direction.customPrompt || null,
+            vibe: direction.vibe || null,
+            timeOfDay: direction.timeOfDay || null,
+            selectedChips: direction.selectedChips || [],
           },
         },
       });
@@ -394,13 +403,22 @@ export default function SnapPro() {
       let optimizedUrl;
 
       if (fnError || processResult?.fallback) {
-        // Fallback to client-side canvas processing
-        console.warn('Edge function unavailable, using canvas fallback:', fnError?.message || processResult?.error);
-        const mergedSettings = buildProcessingSettings(settings, direction);
+        const errMsg = fnError?.message || processResult?.error || 'Unknown error';
+
+        // If it's a credentials error, show a clear message instead of degrading to canvas
+        if (errMsg.includes('Cloudinary') || errMsg.includes('credentials') || errMsg.includes('not configured')) {
+          throw new Error('Cloudinary API credentials are not configured. Please add CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET to your Supabase Edge Function secrets at supabase.com → your project → Settings → Edge Functions → Secrets. Get these from cloudinary.com (free account).');
+        }
+
+        // For other errors, still try canvas as last resort but warn clearly
+        console.warn('Edge function error, using canvas fallback:', errMsg);
+        toast.warning('Using basic processing — AI enhancement unavailable. Check Cloudinary credentials.');
+        setUsingCanvasFallback(true);
+        const canvasMerged = buildProcessingSettings(settings, direction);
         const outputDims = platformConfig.outputWidth && platformConfig.outputHeight
           ? { width: platformConfig.outputWidth, height: platformConfig.outputHeight }
           : null;
-        const processedBlob = await processImageCanvas(originalUrl, mergedSettings, outputDims);
+        const processedBlob = await processImageCanvas(originalUrl, canvasMerged, outputDims);
         const optPath = `${currentUser.id}/${Date.now()}_optimized.jpg`;
         const { error: upErr } = await supabase.storage.from('snappro-photos').upload(optPath, processedBlob, { contentType: 'image/jpeg' });
         if (upErr) throw upErr;
@@ -408,6 +426,7 @@ export default function SnapPro() {
         optimizedUrl = publicUrl;
       } else {
         optimizedUrl = processResult.optimizedUrl;
+        setUsingCanvasFallback(false);
         if (processResult.skyNoteForUser) {
           console.log(processResult.skyNoteForUser);
         }
@@ -441,7 +460,8 @@ export default function SnapPro() {
       const aspectRatio = platformConfig.aspectRatio && arMap[platformConfig.aspectRatio]
         ? platformConfig.aspectRatio : 'original';
 
-      // Try edge function first
+      // Merge creative direction into numeric adjustments
+      const mergedSettings = buildProcessingSettings(newSettings, direction);
       const { data: processResult, error: fnError } = await supabase.functions.invoke('process-image', {
         body: {
           imageUrl: processedResult.originalUrl,
@@ -451,18 +471,26 @@ export default function SnapPro() {
             outputPurpose: platformConfig.platform || 'listing',
             aspectRatio,
             outputSize: 'high_quality',
-            adjustments: {
-              brightness: newSettings.brightness || 0,
-              contrast: newSettings.contrast || 0,
-              saturation: newSettings.saturation || 0,
-              warmth: newSettings.warmth || 0,
-              sharpness: newSettings.sharpness || 50,
+            enhancements: {
+              autoEnhance: newSettings.autoEnhance || false,
+              hdr: newSettings.hdr || false,
+              whiteBalance: newSettings.whiteBalance || false,
+              virtualTwilight: newSettings.virtualTwilight || false,
+              colorEnhancement: true,
+              sharpen: true,
+              noiseReduction: false,
             },
-            autoEnhance: newSettings.autoEnhance || false,
-            hdr: newSettings.hdr || false,
-            whiteBalance: newSettings.whiteBalance || false,
-            virtualTwilight: newSettings.virtualTwilight || false,
-            brightness: newSettings.brightness || 0,
+            adjustments: {
+              brightness: mergedSettings.brightness || 0,
+              contrast: mergedSettings.contrast || 0,
+              saturation: mergedSettings.saturation || 0,
+              warmth: mergedSettings.warmth || 0,
+              sharpness: mergedSettings.sharpness || 50,
+            },
+            customPrompt: direction.customPrompt || null,
+            vibe: direction.vibe || null,
+            timeOfDay: direction.timeOfDay || null,
+            selectedChips: direction.selectedChips || [],
           },
         },
       });
@@ -470,11 +498,19 @@ export default function SnapPro() {
       let optimizedUrl;
 
       if (fnError || processResult?.fallback) {
-        console.warn('Edge function unavailable for reprocess, using canvas fallback');
+        const errMsg = fnError?.message || processResult?.error || 'Unknown error';
+
+        if (errMsg.includes('Cloudinary') || errMsg.includes('credentials') || errMsg.includes('not configured')) {
+          throw new Error('Cloudinary API credentials are not configured. Please add CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET to your Supabase Edge Function secrets.');
+        }
+
+        console.warn('Edge function error for reprocess, using canvas fallback:', errMsg);
+        toast.warning('Using basic processing — AI enhancement unavailable.');
+        setUsingCanvasFallback(true);
         const outputDims = platformConfig.outputWidth && platformConfig.outputHeight
           ? { width: platformConfig.outputWidth, height: platformConfig.outputHeight }
           : null;
-        const processedBlob = await processImageCanvas(processedResult.originalUrl, newSettings, outputDims);
+        const processedBlob = await processImageCanvas(processedResult.originalUrl, mergedSettings, outputDims);
         const optPath = `${currentUser.id}/${Date.now()}_v${versions.length + 1}.jpg`;
         const { error: upErr } = await supabase.storage.from('snappro-photos').upload(optPath, processedBlob, { contentType: 'image/jpeg' });
         if (upErr) throw upErr;
@@ -482,6 +518,7 @@ export default function SnapPro() {
         optimizedUrl = publicUrl;
       } else {
         optimizedUrl = processResult.optimizedUrl;
+        setUsingCanvasFallback(false);
       }
 
       const { data: inserted, error: dbError } = await supabase
@@ -543,9 +580,9 @@ export default function SnapPro() {
 
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto px-4 py-8 space-y-8 animate-fade-in">
+      <div className="max-w-6xl mx-auto px-4 py-8 animate-fade-in">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
               <Sparkles className="w-6 h-6 text-primary" />
@@ -566,132 +603,199 @@ export default function SnapPro() {
           )}
         </div>
 
-        {/* Upload Zone */}
-        <div
-          className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer ${
-            dragOver ? 'border-primary bg-primary/5' : file ? 'border-primary/40 bg-primary/5' : 'border-border hover:border-primary/40 hover:bg-muted/30'
-          }`}
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={onDrop}
-          onClick={() => !file && fileInputRef.current?.click()}
-        >
-          <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => e.target.files[0] && handleFile(e.target.files[0])} />
-          {preview ? (
-            <div className="space-y-4">
-              <div className="relative inline-block">
-                <img src={preview} alt="Preview" className="max-h-64 rounded-lg mx-auto shadow-md" />
-                <button onClick={(e) => { e.stopPropagation(); clearFile(); }} className="absolute -top-2 -right-2 w-6 h-6 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center text-xs hover:bg-destructive/90">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-              <p className="text-sm text-muted-foreground">{file.name} · {(file.size / 1024 / 1024).toFixed(1)}MB</p>
+        {/* Fallback warning banner */}
+        {usingCanvasFallback && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex items-start gap-3 text-sm mb-6">
+            <span className="text-amber-500 mt-0.5">⚠️</span>
+            <div>
+              <p className="font-medium text-amber-800">Basic processing mode — AI enhancement not active</p>
+              <p className="text-amber-700 mt-0.5">
+                Add your Cloudinary credentials to Supabase Edge Function secrets to enable real AI photo enhancement.
+                <a href="https://cloudinary.com" target="_blank" rel="noopener noreferrer" className="underline ml-1">Get free Cloudinary account →</a>
+              </p>
             </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
-                <Upload className="w-7 h-7 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-foreground">Drop your photo here or click to browse</p>
-                <p className="text-xs text-muted-foreground mt-1">JPG, PNG, WebP · Max 20MB</p>
-              </div>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* Settings panels (only shown when file is selected) */}
-        {file && (
-          <>
-            {/* Platform Selector */}
-            <PlatformSelector
-              platformConfig={platformConfig}
-              onPlatformChange={setPlatformConfig}
-              onSettingsAutoApply={handleSettingsAutoApply}
-            />
-
-            {/* Enhancement Settings */}
-            <div className="bg-card border border-border rounded-xl p-6 space-y-5 animate-scale-in">
-              <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
-                <Contrast className="w-4 h-4 text-primary" />
-                Enhancement Settings
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <ToggleSetting label="Auto Enhance" icon={<Sparkles className="w-4 h-4" />} checked={settings.autoEnhance} onChange={(v) => setSettings(s => ({ ...s, autoEnhance: v }))} />
-                <ToggleSetting label="HDR" icon={<Sun className="w-4 h-4" />} checked={settings.hdr} onChange={(v) => setSettings(s => ({ ...s, hdr: v }))} />
-                <ToggleSetting label="White Balance" icon={<Contrast className="w-4 h-4" />} checked={settings.whiteBalance} onChange={(v) => setSettings(s => ({ ...s, whiteBalance: v }))} />
-                <ToggleSetting label="Virtual Twilight" icon={<Image className="w-4 h-4" />} checked={settings.virtualTwilight} onChange={(v) => setSettings(s => ({ ...s, virtualTwilight: v }))} />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-foreground flex items-center justify-between">
-                  <span>Brightness</span>
-                  <span className="text-xs text-muted-foreground">{settings.brightness > 0 ? '+' : ''}{settings.brightness}</span>
-                </label>
-                <input type="range" min="-50" max="50" value={settings.brightness} onChange={(e) => setSettings(s => ({ ...s, brightness: Number(e.target.value) }))} className="w-full mt-2 accent-primary" />
+        {!file ? (
+          /* Upload zone — centered when no file */
+          <div className="max-w-2xl mx-auto">
+            <div
+              className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer ${
+                dragOver ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40 hover:bg-muted/30'
+              }`}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={onDrop}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => e.target.files[0] && handleFile(e.target.files[0])} />
+              <div className="space-y-3">
+                <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
+                  <Upload className="w-7 h-7 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-foreground">Drop your photo here or click to browse</p>
+                  <p className="text-xs text-muted-foreground mt-1">JPG, PNG, WebP · Max 20MB</p>
+                </div>
               </div>
             </div>
+          </div>
+        ) : (
+          /* Two-column layout when file is selected */
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+            {/* LEFT COLUMN — Image preview + results */}
+            <div className="space-y-4 lg:sticky lg:top-6">
+              {/* Upload zone / preview */}
+              <div
+                className="relative border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer border-primary/40 bg-primary/5"
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={onDrop}
+                onClick={() => !file && fileInputRef.current?.click()}
+              >
+                <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => e.target.files[0] && handleFile(e.target.files[0])} />
+                <div className="space-y-4">
+                  <div className="relative inline-block">
+                    <img src={preview} alt="Preview" className="max-h-64 rounded-lg mx-auto shadow-md" />
+                    <button onClick={(e) => { e.stopPropagation(); clearFile(); }} className="absolute -top-2 -right-2 w-6 h-6 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center text-xs hover:bg-destructive/90">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{file.name} · {(file.size / 1024 / 1024).toFixed(1)}MB</p>
+                </div>
+              </div>
 
-            {/* Creative Direction */}
-            <CreativeDirection
-              direction={direction}
-              onDirectionChange={setDirection}
-              imageUrl={uploadedOriginalUrl || preview}
-              onApplyInspiration={handleApplyInspiration}
-            />
+              {/* Before/After results */}
+              {processedResult && (
+                <>
+                  <div className="bg-card border border-border rounded-xl p-6 space-y-4 animate-scale-in">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-base font-semibold text-foreground">Before / After</h2>
+                      {displayOptimizedUrl && (
+                        <a
+                          href={displayOptimizedUrl}
+                          download={`snappro_${Date.now()}.jpg`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 bg-primary text-primary-foreground text-sm font-medium px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                          Download
+                        </a>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-2">Original</p>
+                        <img src={processedResult.originalUrl} alt="Original" className="w-full rounded-lg border border-border" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          Processed {currentVersion?.version_label ? `(${currentVersion.version_label})` : '(Enhanced)'}
+                          {processedResult.fileSizeMB && (
+                            <span className="ml-2 text-green-600 font-medium">✓ AI Enhanced</span>
+                          )}
+                        </p>
+                        <img src={displayOptimizedUrl} alt="Processed" className="w-full rounded-lg border border-border" />
+                      </div>
+                    </div>
+                    {displayOptimizedUrl && (
+                      <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
+                        <a href={displayOptimizedUrl} download={`snappro_web_${Date.now()}.jpg`} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">↓ Download for Web</a>
+                        <span className="text-xs text-muted-foreground">·</span>
+                        <a href={displayOptimizedUrl} download={`snappro_print_${Date.now()}.jpg`} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">↓ Download Full Size</a>
+                        <span className="text-xs text-muted-foreground">·</span>
+                        <button onClick={() => { navigator.clipboard.writeText(displayOptimizedUrl); toast.success('Link copied to clipboard'); }} className="text-xs text-primary hover:underline">Copy Link</button>
+                      </div>
+                    )}
+                  </div>
 
-            {/* Process Button */}
-            <Button onClick={handleProcess} disabled={processing} className="w-full" size="lg">
-              {processing ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processing…</>
-              ) : (
-                <><Sparkles className="w-4 h-4 mr-2" /> Process Photo</>
+                  {/* Version History */}
+                  <VersionHistory
+                    versions={versions}
+                    currentVersionId={currentVersionId}
+                    onSelectVersion={(v) => {
+                      setCurrentVersionId(v.id);
+                      setProcessedResult(prev => ({ ...prev, optimizedUrl: v.optimized_url }));
+                    }}
+                  />
+                </>
               )}
-            </Button>
-          </>
-        )}
-
-        {/* Before/After + Iteration (shown after processing) */}
-        {processedResult && (
-          <>
-            <div className="bg-card border border-border rounded-xl p-6 space-y-4 animate-scale-in">
-              <h2 className="text-base font-semibold text-foreground">Before / After</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-muted-foreground mb-2">Original</p>
-                  <img src={processedResult.originalUrl} alt="Original" className="w-full rounded-lg border border-border" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-2">Processed {currentVersion?.version_label ? `(${currentVersion.version_label})` : ''}</p>
-                  <img src={displayOptimizedUrl} alt="Processed" className="w-full rounded-lg border border-border" />
-                </div>
-              </div>
             </div>
 
-            {/* Version History */}
-            <VersionHistory
-              versions={versions}
-              currentVersionId={currentVersionId}
-              onSelectVersion={(v) => {
-                setCurrentVersionId(v.id);
-                setProcessedResult(prev => ({ ...prev, optimizedUrl: v.optimized_url }));
-              }}
-            />
+            {/* RIGHT COLUMN — Settings, scrollable */}
+            <div className="space-y-4">
+              {/* Platform Selector */}
+              <PlatformSelector
+                platformConfig={platformConfig}
+                onPlatformChange={setPlatformConfig}
+                onSettingsAutoApply={handleSettingsAutoApply}
+              />
 
-            {/* Iteration Panel */}
-            <IterationPanel
-              settings={settings}
-              onReprocess={handleReprocess}
-              processedImageUrl={displayOptimizedUrl}
-              originalImageUrl={processedResult.originalUrl}
-              currentUser={currentUser}
-              isReprocessing={isReprocessing}
-            />
-          </>
+              {/* Enhancement Settings */}
+              <div className="bg-card border border-border rounded-xl p-6 space-y-5 animate-scale-in">
+                <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
+                  <Contrast className="w-4 h-4 text-primary" />
+                  Enhancement Settings
+                </h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <ToggleSetting label="Auto Enhance" icon={<Sparkles className="w-4 h-4" />} checked={settings.autoEnhance} onChange={(v) => setSettings(s => ({ ...s, autoEnhance: v }))} />
+                  <ToggleSetting label="HDR" icon={<Sun className="w-4 h-4" />} checked={settings.hdr} onChange={(v) => setSettings(s => ({ ...s, hdr: v }))} />
+                  <ToggleSetting label="White Balance" icon={<Contrast className="w-4 h-4" />} checked={settings.whiteBalance} onChange={(v) => setSettings(s => ({ ...s, whiteBalance: v }))} />
+                  <ToggleSetting label="Virtual Twilight" icon={<Image className="w-4 h-4" />} checked={settings.virtualTwilight} onChange={(v) => setSettings(s => ({ ...s, virtualTwilight: v }))} />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-foreground flex items-center justify-between">
+                    <span>Brightness</span>
+                    <span className="text-xs text-muted-foreground">{settings.brightness > 0 ? '+' : ''}{settings.brightness}</span>
+                  </label>
+                  <input type="range" min="-50" max="50" value={settings.brightness} onChange={(e) => setSettings(s => ({ ...s, brightness: Number(e.target.value) }))} className="w-full mt-2 accent-primary" />
+                </div>
+              </div>
+
+              {/* Creative Direction */}
+              <CreativeDirection
+                direction={direction}
+                onDirectionChange={setDirection}
+                imageUrl={uploadedOriginalUrl || preview}
+                onApplyInspiration={handleApplyInspiration}
+              />
+
+              {/* Process Button */}
+              <div className="sticky bottom-4 z-10">
+                <Button onClick={handleProcess} disabled={processing} className="w-full shadow-lg" size="lg">
+                  {processing ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processing…</>
+                  ) : (
+                    <><Sparkles className="w-4 h-4 mr-2" /> Process Photo</>
+                  )}
+                </Button>
+                {status === 'trial' && trialUsesRemaining != null && (
+                  <p className="text-xs text-center text-muted-foreground mt-2">
+                    {trialUsesRemaining} free edits remaining
+                  </p>
+                )}
+              </div>
+
+              {/* Iteration Panel */}
+              {processedResult && (
+                <IterationPanel
+                  settings={settings}
+                  onReprocess={handleReprocess}
+                  processedImageUrl={displayOptimizedUrl}
+                  originalImageUrl={processedResult.originalUrl}
+                  currentUser={currentUser}
+                  isReprocessing={isReprocessing}
+                />
+              )}
+            </div>
+          </div>
         )}
 
-        {/* Recent Uploads */}
+        {/* Recent Uploads — full width */}
         {recentImages.length > 0 && (
-          <div className="space-y-4">
+          <div className="space-y-4 mt-6">
             <h2 className="text-base font-semibold text-foreground">Recent Uploads</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
               {recentImages.map((img) => (
