@@ -945,35 +945,55 @@ export type Database = {
           file_name: string
           file_size: number | null
           id: string
+          iteration_prompt: string | null
           optimized_url: string | null
           original_url: string | null
+          parent_image_id: string | null
           settings: Json | null
           status: string
           user_id: string
+          version_label: string | null
+          version_number: number | null
         }
         Insert: {
           created_at?: string
           file_name: string
           file_size?: number | null
           id?: string
+          iteration_prompt?: string | null
           optimized_url?: string | null
           original_url?: string | null
+          parent_image_id?: string | null
           settings?: Json | null
           status?: string
           user_id: string
+          version_label?: string | null
+          version_number?: number | null
         }
         Update: {
           created_at?: string
           file_name?: string
           file_size?: number | null
           id?: string
+          iteration_prompt?: string | null
           optimized_url?: string | null
           original_url?: string | null
+          parent_image_id?: string | null
           settings?: Json | null
           status?: string
           user_id?: string
+          version_label?: string | null
+          version_number?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "snappro_images_parent_image_id_fkey"
+            columns: ["parent_image_id"]
+            isOneToOne: false
+            referencedRelation: "snappro_images"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tasks: {
         Row: {
