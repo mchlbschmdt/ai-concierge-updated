@@ -10,6 +10,7 @@ import PlatformSelector from '@/components/snappro/PlatformSelector';
 import CreativeDirection from '@/components/snappro/CreativeDirection';
 import IterationPanel from '@/components/snappro/IterationPanel';
 import VersionHistory from '@/components/snappro/VersionHistory';
+import AiToolsPanel from '@/components/snappro/AiToolsPanel';
 
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_SIZE = 20 * 1024 * 1024;
@@ -126,6 +127,16 @@ export default function SnapPro() {
   const [isReprocessing, setIsReprocessing] = useState(false);
   const [uploadedOriginalUrl, setUploadedOriginalUrl] = useState(null);
   const [usingCanvasFallback, setUsingCanvasFallback] = useState(false);
+  const [aiTools, setAiTools] = useState({
+    skyReplacement: { enabled: false, style: 'sunset' },
+    objectRemove: { enabled: false, description: '' },
+    objectReplace: { enabled: false, searchFor: '', replaceWith: '' },
+    objectRecolor: { enabled: false, searchFor: '', color: '' },
+    backgroundRemove: { enabled: false },
+    outpaint: { enabled: false, direction: 'all', amount: 200 },
+    upscale: { enabled: false, mode: 'conservative' },
+    styleTransfer: { enabled: false, referenceImageFile: null, referenceImageUrl: null, strength: 0.5 },
+  });
 
   // Fetch recent images
   useEffect(() => {
@@ -393,9 +404,11 @@ export default function SnapPro() {
               sharpness: mergedSettings.sharpness || 50,
             },
             customPrompt: direction.customPrompt || null,
+            negativePrompt: direction.negativePrompt || null,
             vibe: direction.vibe || null,
             timeOfDay: direction.timeOfDay || null,
             selectedChips: direction.selectedChips || [],
+            aiTools: aiTools,
           },
         },
       });
@@ -439,7 +452,7 @@ export default function SnapPro() {
         .eq('id', inserted.id);
 
       const updatedRecord = { ...inserted, optimized_url: optimizedUrl, status: 'completed' };
-      setProcessedResult({ originalUrl, optimizedUrl, id: inserted.id, stabilityAiApplied: processResult?.stabilityAiApplied || false, fileSizeMB: processResult?.fileSizeMB });
+      setProcessedResult({ originalUrl, optimizedUrl, id: inserted.id, stabilityAiApplied: processResult?.stabilityAiApplied || false, fileSizeMB: processResult?.fileSizeMB, processingSteps: processResult?.processingSteps || [] });
       setVersions([updatedRecord]);
       setCurrentVersionId(inserted.id);
       toast.success('Photo processed successfully!');
@@ -488,9 +501,11 @@ export default function SnapPro() {
               sharpness: mergedSettings.sharpness || 50,
             },
             customPrompt: direction.customPrompt || null,
+            negativePrompt: direction.negativePrompt || null,
             vibe: direction.vibe || null,
             timeOfDay: direction.timeOfDay || null,
             selectedChips: direction.selectedChips || [],
+            aiTools: aiTools,
           },
         },
       });
@@ -712,6 +727,35 @@ export default function SnapPro() {
                         <button onClick={() => { navigator.clipboard.writeText(displayOptimizedUrl); toast.success('Link copied to clipboard'); }} className="text-xs text-primary hover:underline">Copy Link</button>
                       </div>
                     )}
+                    {processedResult?.processingSteps?.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-3 border-t border-border">
+                        {processedResult.processingSteps.map((step) => {
+                          const stepLabels = {
+                            outdoor_enhance: '🌿 Outdoor AI',
+                            indoor_enhance: '💡 Indoor AI',
+                            professional_sharpen: '🔍 Sharpened',
+                            vibrance_lift: '🎨 Color Enhanced',
+                            hdr_tonemap: '☀️ HDR',
+                            background_removed: '✂️ Background Removed',
+                            object_erased: '🧹 Object Erased',
+                            object_replaced: '🔄 Object Replaced',
+                            object_recolored: '🎨 Recolored',
+                            sky_replaced: '🌅 Sky Replaced',
+                            creative_edit: '✨ AI Creative Edit',
+                            outpainted: '🖼 Expanded',
+                            style_transferred: '🎭 Style Applied',
+                            upscaled_conservative: '⬆️ 4x Upscaled',
+                            upscaled_creative: '⬆️ 4x AI Upscaled',
+                            upscaled_fast: '⬆️ Upscaled',
+                          };
+                          return (
+                            <span key={step} className="inline-flex items-center text-[11px] bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800 rounded-full px-2.5 py-1 font-medium">
+                              {stepLabels[step] || step}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   {/* Version History */}
@@ -756,6 +800,9 @@ export default function SnapPro() {
                   <input type="range" min="-50" max="50" value={settings.brightness} onChange={(e) => setSettings(s => ({ ...s, brightness: Number(e.target.value) }))} className="w-full mt-2 accent-primary" />
                 </div>
               </div>
+
+              {/* AI Tools Panel */}
+              <AiToolsPanel aiTools={aiTools} setAiTools={setAiTools} currentUser={currentUser} />
 
               {/* Creative Direction */}
               <CreativeDirection
