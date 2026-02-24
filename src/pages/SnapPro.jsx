@@ -342,41 +342,86 @@ export default function SnapPro() {
     try {
       const originalUrl = await uploadOriginal();
 
-      // Merge creative direction into processing settings
-      const mergedSettings = buildProcessingSettings(settings, direction);
-
-      // Build output dimensions from platform config
-      const outputDims = platformConfig.outputWidth && platformConfig.outputHeight
-        ? { width: platformConfig.outputWidth, height: platformConfig.outputHeight }
-        : null;
-
-      const processedBlob = await processImageCanvas(originalUrl, mergedSettings, outputDims);
-
-      const optPath = `${currentUser.id}/${Date.now()}_optimized.jpg`;
-      const { error: upErr } = await supabase.storage.from('snappro-photos').upload(optPath, processedBlob, { contentType: 'image/jpeg' });
-      if (upErr) throw upErr;
-      const { data: { publicUrl: optimizedUrl } } = supabase.storage.from('snappro-photos').getPublicUrl(optPath);
-
+      // Save DB record with processing status
       const { data: inserted, error: dbError } = await supabase
         .from('snappro_images')
         .insert({
           user_id: currentUser.id,
           original_url: originalUrl,
-          optimized_url: optimizedUrl,
           file_name: file.name,
           file_size: file.size,
-          settings: { ...mergedSettings, platform: platformConfig, direction },
-          status: 'completed',
+          settings: { ...settings, platform: platformConfig, direction },
+          status: 'processing',
           version_number: 1,
           version_label: 'Original',
         })
         .select()
         .single();
-
       if (dbError) throw dbError;
 
+      // Determine aspect ratio from platform config
+      const arMap = { '3:2': '3:2', '16:9': '16:9', '1:1': '1:1', '4:3': '4:3', '9:16': '9:16' };
+      const aspectRatio = platformConfig.aspectRatio && arMap[platformConfig.aspectRatio]
+        ? platformConfig.aspectRatio : 'original';
+
+      // Call Cloudinary edge function
+      const { data: processResult, error: fnError } = await supabase.functions.invoke('process-image', {
+        body: {
+          imageUrl: originalUrl,
+          userId: currentUser.id,
+          imageId: inserted.id,
+          settings: {
+            outputPurpose: platformConfig.platform || 'listing',
+            aspectRatio,
+            outputSize: 'high_quality',
+            enhancements: {},
+            adjustments: {
+              brightness: settings.brightness || 0,
+              contrast: 0,
+              saturation: 0,
+              warmth: 0,
+              sharpness: 50,
+            },
+            autoEnhance: settings.autoEnhance || false,
+            hdr: settings.hdr || false,
+            whiteBalance: settings.whiteBalance || false,
+            virtualTwilight: settings.virtualTwilight || false,
+            brightness: settings.brightness || 0,
+          },
+        },
+      });
+
+      let optimizedUrl;
+
+      if (fnError || processResult?.fallback) {
+        // Fallback to client-side canvas processing
+        console.warn('Edge function unavailable, using canvas fallback:', fnError?.message || processResult?.error);
+        const mergedSettings = buildProcessingSettings(settings, direction);
+        const outputDims = platformConfig.outputWidth && platformConfig.outputHeight
+          ? { width: platformConfig.outputWidth, height: platformConfig.outputHeight }
+          : null;
+        const processedBlob = await processImageCanvas(originalUrl, mergedSettings, outputDims);
+        const optPath = `${currentUser.id}/${Date.now()}_optimized.jpg`;
+        const { error: upErr } = await supabase.storage.from('snappro-photos').upload(optPath, processedBlob, { contentType: 'image/jpeg' });
+        if (upErr) throw upErr;
+        const { data: { publicUrl } } = supabase.storage.from('snappro-photos').getPublicUrl(optPath);
+        optimizedUrl = publicUrl;
+      } else {
+        optimizedUrl = processResult.optimizedUrl;
+        if (processResult.skyNoteForUser) {
+          console.log(processResult.skyNoteForUser);
+        }
+      }
+
+      // Update DB record
+      await supabase
+        .from('snappro_images')
+        .update({ optimized_url: optimizedUrl, status: 'completed' })
+        .eq('id', inserted.id);
+
+      const updatedRecord = { ...inserted, optimized_url: optimizedUrl, status: 'completed' };
       setProcessedResult({ originalUrl, optimizedUrl, id: inserted.id });
-      setVersions([inserted]);
+      setVersions([updatedRecord]);
       setCurrentVersionId(inserted.id);
       toast.success('Photo processed successfully!');
     } catch (err) {
@@ -392,16 +437,52 @@ export default function SnapPro() {
     if (!processedResult || !currentUser?.id) return;
     setIsReprocessing(true);
     try {
-      // Build output dimensions from platform config
-      const outputDims = platformConfig.outputWidth && platformConfig.outputHeight
-        ? { width: platformConfig.outputWidth, height: platformConfig.outputHeight }
-        : null;
+      const arMap = { '3:2': '3:2', '16:9': '16:9', '1:1': '1:1', '4:3': '4:3', '9:16': '9:16' };
+      const aspectRatio = platformConfig.aspectRatio && arMap[platformConfig.aspectRatio]
+        ? platformConfig.aspectRatio : 'original';
 
-      const processedBlob = await processImageCanvas(processedResult.originalUrl, newSettings, outputDims);
-      const optPath = `${currentUser.id}/${Date.now()}_v${versions.length + 1}.jpg`;
-      const { error: upErr } = await supabase.storage.from('snappro-photos').upload(optPath, processedBlob, { contentType: 'image/jpeg' });
-      if (upErr) throw upErr;
-      const { data: { publicUrl: optimizedUrl } } = supabase.storage.from('snappro-photos').getPublicUrl(optPath);
+      // Try edge function first
+      const { data: processResult, error: fnError } = await supabase.functions.invoke('process-image', {
+        body: {
+          imageUrl: processedResult.originalUrl,
+          userId: currentUser.id,
+          imageId: `${Date.now()}_v${versions.length + 1}`,
+          settings: {
+            outputPurpose: platformConfig.platform || 'listing',
+            aspectRatio,
+            outputSize: 'high_quality',
+            adjustments: {
+              brightness: newSettings.brightness || 0,
+              contrast: newSettings.contrast || 0,
+              saturation: newSettings.saturation || 0,
+              warmth: newSettings.warmth || 0,
+              sharpness: newSettings.sharpness || 50,
+            },
+            autoEnhance: newSettings.autoEnhance || false,
+            hdr: newSettings.hdr || false,
+            whiteBalance: newSettings.whiteBalance || false,
+            virtualTwilight: newSettings.virtualTwilight || false,
+            brightness: newSettings.brightness || 0,
+          },
+        },
+      });
+
+      let optimizedUrl;
+
+      if (fnError || processResult?.fallback) {
+        console.warn('Edge function unavailable for reprocess, using canvas fallback');
+        const outputDims = platformConfig.outputWidth && platformConfig.outputHeight
+          ? { width: platformConfig.outputWidth, height: platformConfig.outputHeight }
+          : null;
+        const processedBlob = await processImageCanvas(processedResult.originalUrl, newSettings, outputDims);
+        const optPath = `${currentUser.id}/${Date.now()}_v${versions.length + 1}.jpg`;
+        const { error: upErr } = await supabase.storage.from('snappro-photos').upload(optPath, processedBlob, { contentType: 'image/jpeg' });
+        if (upErr) throw upErr;
+        const { data: { publicUrl } } = supabase.storage.from('snappro-photos').getPublicUrl(optPath);
+        optimizedUrl = publicUrl;
+      } else {
+        optimizedUrl = processResult.optimizedUrl;
+      }
 
       const { data: inserted, error: dbError } = await supabase
         .from('snappro_images')
