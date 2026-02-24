@@ -439,7 +439,7 @@ export default function SnapPro() {
         .eq('id', inserted.id);
 
       const updatedRecord = { ...inserted, optimized_url: optimizedUrl, status: 'completed' };
-      setProcessedResult({ originalUrl, optimizedUrl, id: inserted.id });
+      setProcessedResult({ originalUrl, optimizedUrl, id: inserted.id, stabilityAiApplied: processResult?.stabilityAiApplied || false, fileSizeMB: processResult?.fileSizeMB });
       setVersions([updatedRecord]);
       setCurrentVersionId(inserted.id);
       toast.success('Photo processed successfully!');
@@ -693,7 +693,10 @@ export default function SnapPro() {
                       <div>
                         <p className="text-xs text-muted-foreground mb-2">
                           Processed {currentVersion?.version_label ? `(${currentVersion.version_label})` : '(Enhanced)'}
-                          {processedResult.fileSizeMB && (
+                          {processedResult.stabilityAiApplied && (
+                            <span className="ml-2 text-purple-600 font-medium">✨ AI Generated</span>
+                          )}
+                          {processedResult && !processedResult.stabilityAiApplied && (
                             <span className="ml-2 text-green-600 font-medium">✓ AI Enhanced</span>
                           )}
                         </p>

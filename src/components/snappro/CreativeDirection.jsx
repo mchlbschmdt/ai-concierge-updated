@@ -152,6 +152,15 @@ export default function CreativeDirection({ direction, onDirectionChange, imageU
             <span className="absolute bottom-2 right-3 text-[10px] text-muted-foreground">{(direction.customPrompt || '').length}/600</span>
           </div>
 
+          <div className="bg-muted/50 border border-border rounded-lg p-3 space-y-1">
+            <p className="text-xs text-foreground">
+              <span className="font-medium">What AI can do with your prompt:</span> Sky replacement, lighting changes, color grading, style transformations, atmosphere changes.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Very difficult even for AI: Adding specific objects (cars, people, furniture) or removing large elements — these require advanced inpainting and may not produce perfect results.
+            </p>
+          </div>
+
           <div className="flex flex-wrap gap-1.5">
             {QUICK_PHRASES.map((p) => (
               <button key={p} type="button" onClick={() => insertPhrase(p)} className="px-2.5 py-1 text-[11px] rounded-full border border-border bg-muted/30 text-foreground hover:border-primary/40 transition-colors">
