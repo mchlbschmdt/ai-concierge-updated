@@ -1,64 +1,41 @@
 
+# SnapPro.jsx Targeted Changes
 
-# Replace Client-Side Canvas Processing with Cloudinary Edge Function
+## Change 1: Fix handleProcess and handleReprocess to pass ALL settings
 
-## Overview
+Replace the edge function call in `handleProcess` (lines 367-392) to use `buildProcessingSettings` for merged adjustments and pass full enhancements, vibe, timeOfDay, selectedChips, and customPrompt.
 
-Replace the client-side canvas pixel manipulation in SnapPro with a new `process-image` Supabase Edge Function that uses Cloudinary for professional-quality image processing. This gives real HDR, auto-enhance, sharpening, resizing, and color grading instead of the current "burnt orange filter" approach.
+Apply the same pattern to `handleReprocess` (lines 444-468) -- add `buildProcessingSettings` call and pass full enhancements/adjustments.
 
-## Prerequisites: Cloudinary Secrets
+## Change 2: Download button in Before/After section
 
-Three new Supabase secrets are required. They do NOT exist yet:
-- `CLOUDINARY_CLOUD_NAME`
-- `CLOUDINARY_API_KEY`
-- `CLOUDINARY_API_SECRET`
+Replace the Before/After block (lines 656-668) with the enhanced version that includes:
+- Download button in the header row
+- "AI Enhanced" badge on processed image label
+- Download for Web / Download Full Size / Copy Link footer row
 
-These must be added before the edge function will work. The user needs a free Cloudinary account at cloudinary.com to get these values.
+## Change 3: Wider layout + two-column grid when file is selected
 
-## Changes
+- Line 546: Change `max-w-4xl` to `max-w-6xl` and remove `space-y-8`
+- Restructure the JSX so:
+  - Header stays full-width with `mb-6`
+  - Upload zone is centered `max-w-2xl mx-auto` when no file
+  - When file is selected, a `grid grid-cols-1 lg:grid-cols-2 gap-6` splits: left column (upload preview + results + version history, sticky) and right column (PlatformSelector, Enhancement Settings, CreativeDirection, Process Button, IterationPanel)
+  - Recent Uploads stays full-width below with `mt-6`
 
-### 1. New Edge Function: `supabase/functions/process-image/index.ts`
+## Change 4: Stop silent canvas fallback for credential errors
 
-Create the Cloudinary-powered processing function as specified. It:
-- Receives image URL + settings from the client
-- Maps enhancement toggles and adjustment sliders to Cloudinary transformations
-- Handles dimension/aspect ratio resizing via Cloudinary's `c_fill,g_auto`
-- Uploads to Cloudinary with signed authentication
-- Returns the processed image URL
+Replace the fallback block in `handleProcess` (lines 396-414) to:
+- Throw a clear error if message contains "Cloudinary" or "credentials" or "not configured"
+- For other errors, show `toast.warning` and proceed with canvas fallback
+- Track fallback state via new `usingCanvasFallback` useState
 
-Also add to `supabase/config.toml`:
-```toml
-[functions.process-image]
-verify_jwt = false
-```
+Apply same logic to `handleReprocess` fallback (lines 472-485).
 
-### 2. Update `src/pages/SnapPro.jsx` -- Replace `handleProcess`
+## Additional: Fallback warning banner
 
-Replace the `handleProcess` function (lines 333-388) to:
-- Upload original to Supabase Storage (reuses existing `uploadOriginal`)
-- Save a DB record with status `processing`
-- Call `supabase.functions.invoke("process-image", ...)` with all settings
-- Fall back to client-side canvas if the edge function fails (e.g., missing secrets)
-- Update the DB record with the processed URL
+Add `usingCanvasFallback` state variable. Show amber warning banner below header when true, with link to cloudinary.com. Set to `true` when canvas fallback runs, `false` when Cloudinary succeeds.
 
-Key mapping of existing variables to edge function payload:
-- `settings` (autoEnhance, hdr, whiteBalance, virtualTwilight, brightness) -- passed directly
-- `direction` (vibe, timeOfDay, selectedChips, customPrompt) -- passed as creative direction context
-- `platformConfig` (outputWidth, outputHeight, aspectRatio) -- mapped to Cloudinary dimension transforms
+## Files changed
 
-### 3. No `imageProcessor.js` import exists
-
-Search confirmed there is no `imageProcessor` import in the codebase. The client-side processing is done inline via `processImageCanvas`. This function will be kept as a **fallback** -- if the edge function returns `fallback: true` (e.g., missing Cloudinary secrets), the client-side canvas path runs instead.
-
-### 4. Update `handleReprocess` similarly
-
-Wire the iteration/reprocess flow through the same edge function, with canvas fallback.
-
-## Technical Notes
-
-- The `processImageCanvas` function (lines 184-331) is NOT deleted -- it becomes the fallback path
-- The `buildProcessingSettings` helper (lines 48-106) is still used to merge creative direction into settings for the fallback path
-- Platform aspect ratios are mapped in the edge function: `3:2` -> `w_1920,h_1280,c_fill,g_auto`, etc.
-- The edge function uses SHA-1 signing for authenticated Cloudinary uploads
-- Quality levels: print_ready=95, high_quality=85, web_optimized=75
-
+- `src/pages/SnapPro.jsx` only -- no other files touched
