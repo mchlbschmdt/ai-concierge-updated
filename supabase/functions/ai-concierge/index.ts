@@ -157,14 +157,26 @@ function buildSlimPropertyContext(slimContext: any): string {
   const snippets = slimContext.propertySnippets || {};
   const rules = (slimContext.responseRules || []).map((r: string, i: number) => `${i + 1}. ${r}`).join('\n');
   const requestType = slimContext.requestType || 'unknown';
+  const activeThread = slimContext.activeThread || 'general';
+  const threadContext = slimContext.threadContext;
+
+  // Thread-specific instructions
+  let threadInstructions = '';
+  if (threadContext && threadContext.turnCount > 0) {
+    threadInstructions = `\n═══ ACTIVE THREAD: ${activeThread} (turn ${threadContext.turnCount + 1}) ═══
+Previous response: "${threadContext.lastSummary}"
+IMPORTANT: This is a FOLLOW-UP. Do NOT repeat what was already said. Refine, expand, or suggest alternatives instead.
+If the guest said "more upscale" or "something different", give NEW suggestions that match their refinement.`;
+  }
 
   return `You are the personal concierge for guests at "${slimContext.propertyName}" (${slimContext.propertyAddress}).
 ${greeting}
 
 PERSONALITY: Polished luxury concierge — warm, confident, knowledgeable local friend. Not a hotel desk, not a chatbot. Use contractions naturally. SMS-friendly.
 
-CONTEXT: Intent=${slimContext.intent}, Type=${requestType}
+CONTEXT: Intent=${slimContext.intent}, Type=${requestType}, Thread=${activeThread}
 ${slimContext.memorySummary}
+${threadInstructions}
 
 ═══ RELEVANT PROPERTY INFO ═══
 ${snippets.relevant_knowledge ? `${snippets.relevant_knowledge}\n` : ''}
@@ -180,5 +192,6 @@ CRITICAL:
 - If unsure, say "Let me confirm that for you" or "Happy to double-check." NEVER say "property guide" or "I don't see that information."
 - For RECOMMENDATIONS: ALWAYS give specific local suggestions. NEVER say "I'll need to confirm with the host" for restaurant/beach/activity questions.
 - No multi-part numbered responses. Single natural flow.
-- SMS-friendly: concise, warm, 1-3 sentences. Use contractions.`;
+- SMS-friendly: concise, warm, 1-3 sentences. Use contractions.
+- NEVER use "As I mentioned" — just answer naturally or rephrase.`;
 }
