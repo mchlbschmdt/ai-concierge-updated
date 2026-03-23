@@ -579,7 +579,7 @@ export class ConfirmedMessageOrchestrator {
   }
 
   /**
-   * Track response in memory + escalation state.
+   * Track response in memory + escalation state + thread update.
    */
   static trackResponseInMemory(
     conversationContext: any,
@@ -600,6 +600,35 @@ export class ConfirmedMessageOrchestrator {
 
     // Track variation index
     updated = ConciergeStyleService.incrementVariationIndex(updated, classification.intent);
+
+    // ── Update thread ──────────────────────────────────────────────────
+    const threadType = ConversationMemoryManager.intentToThreadType(classification.intent, classification.requestType);
+    const isResolved = orchestratorResult?.source === 'property_data'
+      || orchestratorResult?.source === 'quick_lookup'
+      || orchestratorResult?.source === 'knowledge_base';
+    updated = ConversationMemoryManager.updateThread(
+      updated,
+      threadType,
+      classification.intent,
+      summary,
+      undefined,
+      isResolved
+    );
+
+    // If switching to a new thread type, resolve the previous escalation thread
+    // so post-escalation topics don't bleed in
+    if (threadType !== 'escalation' && threadType !== 'issue' && updated.threads?.escalation && !updated.threads.escalation.resolved) {
+      const escAge = Date.now() - new Date(updated.threads.escalation.last_updated).getTime();
+      if (escAge > 60000) { // 1 min — user moved on
+        updated = ConversationMemoryManager.resolveThread(updated, 'escalation');
+      }
+    }
+    if (threadType !== 'issue' && updated.threads?.issue && !updated.threads.issue.resolved) {
+      const issueAge = Date.now() - new Date(updated.threads.issue.last_updated).getTime();
+      if (issueAge > 120000) { // 2 min
+        updated = ConversationMemoryManager.resolveThread(updated, 'issue');
+      }
+    }
 
     // Track escalation state
     if (orchestratorResult?.source === 'host_escalation' || orchestratorResult?.source === 'request_response') {
