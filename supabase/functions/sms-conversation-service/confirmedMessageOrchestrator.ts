@@ -754,15 +754,21 @@ function rephrasePreviousAnswer(topic: string, previousSummary: string): string 
   if (topic === 'checkin_info') {
     const timeMatch = previousSummary.match(/\d{1,2}(:\d{2})?\s*(am|pm|AM|PM)?/);
     if (timeMatch) {
-      return `Check-in is at ${timeMatch[0]} as I mentioned. Need any other details about getting in?`;
+      return `Check-in is at ${timeMatch[0]}. Need any other details about getting in?`;
     }
   }
   if (topic === 'wifi_info') {
     return `I shared the WiFi info just a bit ago — scroll up to grab it! Need anything else?`;
   }
 
+  // Never use "As I mentioned" — just rephrase naturally
   if (previousSummary && previousSummary.length < 120) {
-    return `As I mentioned: ${previousSummary.toLowerCase().replace(/^(as i mentioned[,:]\s*)/i, '')} — anything else I can help with?`;
+    const starters = [
+      `Just to confirm: ${previousSummary.toLowerCase().replace(/^(as i mentioned[,:]\s*|just to remind you[,:]\s*)/i, '')}`,
+      `Quick reminder: ${previousSummary.toLowerCase().replace(/^(as i mentioned[,:]\s*)/i, '')}`,
+      previousSummary.replace(/^(As I mentioned[,:]\s*)/i, ''),
+    ];
+    return `${starters[Math.floor(Math.random() * starters.length)]} — anything else I can help with?`;
   }
 
   return `I shared ${topicPhrase} just a moment ago. Want me to look into something else?`;

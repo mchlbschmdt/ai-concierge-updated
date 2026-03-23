@@ -262,8 +262,21 @@ export class EnhancedConversationService {
       return { messages: MessageUtils.ensureSmsLimit(yesResult.response), shouldUpdateState: false };
     }
 
-    // ── STEP 1: Classify once ──────────────────────────────────────────────
-    const classification = ConfirmedMessageOrchestrator.classifyMessage(message);
+    // ── STEP 1: Classify once (may be overridden by followUpThread) ─────
+    let classification = ConfirmedMessageOrchestrator.classifyMessage(message);
+
+    // If follow-up detected, override classification to match the thread
+    if (followUpThread) {
+      console.log(`🧵 [Orchestrator] Overriding classification with follow-up thread: ${followUpThread}`);
+      // For recommendation follow-ups like "something more upscale"
+      if (followUpThread === 'recommendation' && !classification.isRecommendation) {
+        classification = { ...classification, isRecommendation: true, isPropertySpecific: false, shouldUseAI: true, requestType: 'RECOMMENDATION' };
+      }
+      // For request follow-ups like "around noon" → keep as request
+      if (followUpThread === 'request' && !classification.isRequest) {
+        classification = { ...classification, isRequest: true, isPropertySpecific: false, requestType: 'REQUEST' };
+      }
+    }
 
     // ── STEP 2: ISSUE — highest priority, handle immediately ───────────────
     const issueResult = ConfirmedMessageOrchestrator.handleIssue(message, property, classification, conversationContext);
