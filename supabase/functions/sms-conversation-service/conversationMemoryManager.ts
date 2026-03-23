@@ -550,8 +550,131 @@ export class ConversationMemoryManager {
     return updatedContext;
   }
 
-  // Get property location anchor
   static getPropertyLocationAnchor(context: any): string | null {
     return context?.property_location_anchor || null;
+  }
+
+  // ═══ THREAD MANAGEMENT ════════════════════════════════════════════════
+
+  /** Map an intent string to a thread type */
+  static intentToThreadType(intent: string, requestType?: string): ThreadType {
+    // Issue / troubleshooting
+    if (requestType === 'ISSUE' || /^troubleshoot_/.test(intent) || intent === 'wifi_troubleshooting') return 'issue';
+    // Request (approval-based)
+    if (requestType === 'REQUEST' || /early_checkin|late_checkout|extra_guest|pet|host_handoff/.test(intent)) return 'request';
+    // Recommendation
+    if (requestType === 'RECOMMENDATION' || /food_rec|restaurant|beach|activit|attraction|coffee|bar|brunch|dinner|grocery/.test(intent)) return 'recommendation';
+    // Escalation
+    if (intent === 'host_handoff_confirmed' || intent === 'ask_emergency_contact') return 'escalation';
+    // Logistics (property info)
+    if (/wifi|parking|checkin|checkout|check_in|check_out|access|amenity|garbage|property_specific|additional_services/.test(intent)) return 'logistics';
+    return 'general';
+  }
+
+  /** Get a specific thread */
+  static getThread(context: any, type: ThreadType): ConversationThread | null {
+    return context?.threads?.[type] || null;
+  }
+
+  /** Get the most recently-updated unresolved thread */
+  static getMostRecentUnresolvedThread(context: any): ConversationThread | null {
+    const threads = context?.threads as Record<string, ConversationThread> | undefined;
+    if (!threads) return null;
+    let best: ConversationThread | null = null;
+    for (const t of Object.values(threads)) {
+      if (t.resolved) continue;
+      if (!best || new Date(t.last_updated) > new Date(best.last_updated)) best = t;
+    }
+    return best;
+  }
+
+  /** Update (or create) a thread after a response is sent */
+  static updateThread(
+    context: any,
+    threadType: ThreadType,
+    intent: string,
+    responseSummary: string,
+    meta?: Record<string, any>,
+    resolved = false
+  ): any {
+    const updated = { ...context };
+    if (!updated.threads) updated.threads = {};
+    const existing = updated.threads[threadType] as ConversationThread | undefined;
+    updated.threads[threadType] = {
+      type: threadType,
+      last_intent: intent,
+      last_response_summary: responseSummary.length > 120 ? responseSummary.substring(0, 117) + '...' : responseSummary,
+      last_updated: new Date().toISOString(),
+      resolved,
+      turn_count: (existing?.turn_count || 0) + 1,
+      meta: { ...(existing?.meta || {}), ...(meta || {}) },
+    };
+    updated.active_thread = threadType;
+    return updated;
+  }
+
+  /** Resolve a thread (mark it done) */
+  static resolveThread(context: any, threadType: ThreadType): any {
+    const updated = { ...context };
+    if (updated.threads?.[threadType]) {
+      updated.threads[threadType].resolved = true;
+    }
+    return updated;
+  }
+
+  /**
+   * Detect which thread a follow-up message belongs to.
+   * Returns the thread type or null if it's a new topic.
+   */
+  static detectFollowUpThread(message: string, context: any): ThreadType | null {
+    const msg = message.toLowerCase().trim();
+
+    // Short affirmative/modifier messages map to the most recent unresolved thread
+    const isShortFollowUp = /^(yes|yeah|yep|sure|ok|okay|please|no|nah|nope|sounds good|perfect|great|that works|around \d|about \d|\d{1,2}\s*(am|pm|noon)|something (more|less|closer|different|else|cheaper|nicer|fancier)|more upscale|less fancy|closer|further|different vibe|any other|what else)/.test(msg)
+      || msg.length < 20;
+
+    if (!isShortFollowUp) return null;
+
+    const threads = context?.threads as Record<string, ConversationThread> | undefined;
+    if (!threads) return null;
+
+    // Priority: request → recommendation → issue → logistics → escalation
+    const priority: ThreadType[] = ['request', 'recommendation', 'issue', 'logistics', 'escalation', 'general'];
+
+    // Try to match keywords to thread type
+    if (/upscale|fancy|cheap|vibe|closer|further|different|another|more options|what else/.test(msg)) {
+      if (threads.recommendation && !threads.recommendation.resolved) return 'recommendation';
+    }
+    if (/noon|\d{1,2}\s*(am|pm)|around \d|morning|afternoon|evening/.test(msg)) {
+      if (threads.request && !threads.request.resolved) return 'request';
+    }
+
+    // Fallback: most recently updated unresolved thread by priority
+    for (const type of priority) {
+      const thread = threads[type];
+      if (thread && !thread.resolved) {
+        const age = Date.now() - new Date(thread.last_updated).getTime();
+        if (age < 600000) return type; // within 10 min
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Check repetition within a specific thread only
+   */
+  static hasThreadRepetition(context: any, threadType: ThreadType, intent: string): { repeated: boolean; summary?: string } {
+    const thread = context?.threads?.[threadType] as ConversationThread | undefined;
+    if (!thread) return { repeated: false };
+
+    // Same intent in same thread, updated < 5 min ago, turn > 1
+    if (thread.last_intent === intent && thread.turn_count >= 1) {
+      const age = Date.now() - new Date(thread.last_updated).getTime();
+      if (age < 300000) { // 5 min
+        return { repeated: true, summary: thread.last_response_summary };
+      }
+    }
+    return { repeated: false };
   }
 }
