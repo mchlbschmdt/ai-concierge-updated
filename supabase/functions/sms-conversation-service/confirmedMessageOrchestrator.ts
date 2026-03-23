@@ -489,21 +489,37 @@ export class ConfirmedMessageOrchestrator {
 
   /**
    * STEP 6: Build slim AI context for recommendation / general knowledge queries.
+   * Now thread-aware — only passes relevant thread memory, not global.
    */
   static buildSlimAIContext(
     message: string,
     property: Property,
     conversation: Conversation,
     classification: UnifiedClassification,
-    recentHistory: Array<{ role: string; content: string }>
+    recentHistory: Array<{ role: string; content: string }>,
+    activeThreadType?: ThreadType
   ): Record<string, any> {
     const context = (conversation.conversation_context as any) || {};
     const guestName = context.guestName || context.guest_name || null;
 
-    const recentIntents = context.recent_intents?.slice(0, 5) || [];
-    const memorySummary = recentIntents.length > 0
-      ? `Recent topics: ${recentIntents.join(', ')}`
+    // Thread-aware memory summary
+    const threadType = activeThreadType || ConversationMemoryManager.intentToThreadType(classification.intent, classification.requestType);
+    const activeThread = ConversationMemoryManager.getThread(context, threadType);
+    const threads = context.threads || {};
+
+    // Build memory summary from threads only
+    const threadSummaries: string[] = [];
+    for (const [type, thread] of Object.entries(threads) as [string, any][]) {
+      if (!thread.resolved && thread.last_response_summary) {
+        threadSummaries.push(`${type}: ${thread.last_response_summary}`);
+      }
+    }
+    const memorySummary = threadSummaries.length > 0
+      ? `Active topics:\n${threadSummaries.join('\n')}`
       : 'New conversation';
+
+    // If this is a follow-up in recommendation thread, include last recs
+    const threadMeta = activeThread?.meta || {};
 
     const propertySnippets: Record<string, string> = {
       name: property.property_name,
@@ -526,6 +542,13 @@ export class ConfirmedMessageOrchestrator {
       propertySnippets,
       intent: classification.intent,
       requestType: classification.requestType,
+      activeThread: threadType,
+      threadContext: activeThread ? {
+        lastIntent: activeThread.last_intent,
+        lastSummary: activeThread.last_response_summary,
+        turnCount: activeThread.turn_count,
+        meta: threadMeta,
+      } : null,
       conversationHistory: recentHistory.slice(-10),
       memorySummary,
       responseRules: [
@@ -538,7 +561,10 @@ export class ConfirmedMessageOrchestrator {
         'Sound like a warm host texting — not a hotel front desk or chatbot.',
         'Use contractions naturally (it\'s, there\'s, you\'ll, we\'re).',
         'For recommendations, NEVER say "I\'ll need to confirm with the host" — just give local suggestions.',
-      ],
+        activeThread?.turn_count && activeThread.turn_count > 0
+          ? `This is a follow-up in the ${threadType} thread. Previous: "${activeThread.last_response_summary}". Do NOT repeat what was already said — refine, add new info, or rephrase.`
+          : '',
+      ].filter(Boolean),
     };
   }
 
