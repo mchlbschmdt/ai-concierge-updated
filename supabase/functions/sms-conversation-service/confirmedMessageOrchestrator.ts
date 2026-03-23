@@ -371,21 +371,48 @@ export class ConfirmedMessageOrchestrator {
   }
 
   /**
-   * STEP 4: Repetition prevention with varied rephrasing.
+   * STEP 4: Repetition prevention — thread-aware.
+   * Only checks repetition within the SAME thread.
    */
   static checkRepetition(
     message: string,
     classification: UnifiedClassification,
-    conversationContext: any
+    conversationContext: any,
+    threadType?: ThreadType
   ): OrchestratorResult | null {
     if (classification.isIssue || classification.isRequest) return null;
 
+    const effectiveThread = threadType || ConversationMemoryManager.intentToThreadType(classification.intent, classification.requestType);
+
+    // Thread-based repetition check
+    const threadRep = ConversationMemoryManager.hasThreadRepetition(conversationContext, effectiveThread, classification.intent);
+    if (threadRep.repeated && threadRep.summary) {
+      console.log(`♻️ [Orchestrator] Thread repetition in "${effectiveThread}": ${classification.intent}`);
+      const rephrased = rephrasePreviousAnswer(
+        extractTopicFromMessage(message, classification.intent),
+        threadRep.summary
+      );
+      return {
+        response: ConciergeStyleService.polish(rephrased),
+        source: 'repetition_summary',
+        shouldUpdateState: false,
+        routing: {
+          intent: classification.intent,
+          requestType: classification.requestType,
+          propertyDataUsed: false,
+          knowledgeBaseUsed: false,
+          aiUsed: false,
+          escalationTriggered: false,
+          repetitionPrevented: true,
+        },
+      };
+    }
+
+    // Legacy shared_information check as fallback
     const topic = extractTopicFromMessage(message, classification.intent);
     const recentShare = ConversationMemoryManager.hasAlreadySharedInformation(conversationContext, topic, 5);
-
     if (recentShare.shared && recentShare.summary) {
       console.log(`♻️ [Orchestrator] Repetition for "${topic}" (${recentShare.minutesAgo}m ago)`);
-
       const rephrased = rephrasePreviousAnswer(topic, recentShare.summary);
       return {
         response: ConciergeStyleService.polish(rephrased),
