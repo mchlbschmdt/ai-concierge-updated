@@ -241,13 +241,14 @@ export class EnhancedConversationService {
     }
   }
 
-  // ═══ ORCHESTRATED CONCIERGE v3: Priority-based routing with host handoff ═══
+  // ═══ ORCHESTRATED CONCIERGE v4: Thread-aware priority routing ═══
   private async processConfirmedWithAI(phoneNumber: string, message: string, property: Property, conversation: Conversation) {
-    console.log('🤖 Orchestrator v3 processing:', message);
+    console.log('🤖 Orchestrator v4 (threaded) processing:', message);
     const conversationContext = (conversation.conversation_context as any) || {};
 
-    // ── STEP 0: "Yes" confirmation → triggers host handoff ────────────────
-    const yesResult = ConfirmedMessageOrchestrator.handleYesConfirmation(message, property, conversationContext);
+    // ── STEP 0: Follow-up detection + "Yes" confirmation ──────────────
+    const { followUpThread, yesResult } = ConfirmedMessageOrchestrator.handleFollowUpOrConfirmation(message, property, conversationContext);
+
     if (yesResult) {
       await this.saveConversationMessage(phoneNumber, conversation.id, message, yesResult.response);
       const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, yesResult.response,
