@@ -1,4 +1,19 @@
 
+// ═══ THREAD TYPES ═══════════════════════════════════════════════════════
+
+export type ThreadType = 'issue' | 'recommendation' | 'logistics' | 'request' | 'escalation' | 'general';
+
+export interface ConversationThread {
+  type: ThreadType;
+  last_intent: string;
+  last_response_summary: string;
+  last_updated: string;
+  resolved: boolean;
+  turn_count: number;
+  /** Extra data — e.g. last recommendations list, last request topic */
+  meta?: Record<string, any>;
+}
+
 export interface ConversationMemory {
   last_intent?: string;
   recent_intents?: string[];
@@ -8,11 +23,15 @@ export interface ConversationMemory {
   conversation_reset_count?: number;
   guest_name?: string;
   guest_preferences?: GuestPreferences;
-  global_recommendation_blacklist?: string[]; // Persistent across resets
-  last_recommended_restaurant?: string; // Phase 6: Track for menu queries
-  last_food_query_type?: string; // Phase 6: Track food preferences
-  shared_information?: SharedInformation[]; // Track content shared to prevent repetition
-  last_host_contact_offer_timestamp?: string; // Track when we last offered host contact
+  global_recommendation_blacklist?: string[];
+  last_recommended_restaurant?: string;
+  last_food_query_type?: string;
+  shared_information?: SharedInformation[];
+  last_host_contact_offer_timestamp?: string;
+  /** Thread-based context — keyed by ThreadType */
+  threads?: Record<string, ConversationThread>;
+  /** Which thread is currently active */
+  active_thread?: ThreadType;
 }
 
 export interface SharedInformation {
