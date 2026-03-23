@@ -241,10 +241,25 @@ export class EnhancedConversationService {
     }
   }
 
-  // ═══ ORCHESTRATED CONCIERGE: Priority-based routing ═══
+  // ═══ ORCHESTRATED CONCIERGE v3: Priority-based routing with host handoff ═══
   private async processConfirmedWithAI(phoneNumber: string, message: string, property: Property, conversation: Conversation) {
-    console.log('🤖 Orchestrator v2 processing:', message);
+    console.log('🤖 Orchestrator v3 processing:', message);
     const conversationContext = (conversation.conversation_context as any) || {};
+
+    // ── STEP 0: "Yes" confirmation → triggers host handoff ────────────────
+    const yesResult = ConfirmedMessageOrchestrator.handleYesConfirmation(message, property, conversationContext);
+    if (yesResult) {
+      await this.saveConversationMessage(phoneNumber, conversation.id, message, yesResult.response);
+      const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, yesResult.response,
+        { intent: 'host_handoff_confirmed', requestType: 'REQUEST', isPropertySpecific: false, isGeneralKnowledge: false, isRecommendation: false, isIssue: false, isRequest: true, isTroubleshooting: false, troubleshootingResult: null, requiresHostContact: true, shouldUseAI: false, confidence: 1 } as any,
+        yesResult);
+      await this.conversationManager.updateConversationState(phoneNumber, { conversation_context: updatedCtx });
+      if (yesResult.triggerHostHandoff) {
+        await this.sendHostAlert(property, phoneNumber, conversationContext, yesResult.handoffReason || 'Guest confirmed', yesResult.handoffSummary || message);
+      }
+      console.log('📊 [Routing]', yesResult.routing);
+      return { messages: MessageUtils.ensureSmsLimit(yesResult.response), shouldUpdateState: false };
+    }
 
     // ── STEP 1: Classify once ──────────────────────────────────────────────
     const classification = ConfirmedMessageOrchestrator.classifyMessage(message);
@@ -253,13 +268,15 @@ export class EnhancedConversationService {
     const issueResult = ConfirmedMessageOrchestrator.handleIssue(message, property, classification, conversationContext);
     if (issueResult) {
       await this.saveConversationMessage(phoneNumber, conversation.id, message, issueResult.response);
-      const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, issueResult.response, classification);
-      updatedCtx.last_host_contact_offer_timestamp = new Date().toISOString();
+      const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, issueResult.response, classification, issueResult);
       await this.conversationManager.updateConversationState(phoneNumber, {
         last_message_type: classification.intent,
         last_response: issueResult.response,
         conversation_context: updatedCtx,
       });
+      if (issueResult.triggerHostHandoff) {
+        await this.sendHostAlert(property, phoneNumber, conversationContext, issueResult.handoffReason || 'Issue', issueResult.handoffSummary || message);
+      }
       console.log('📊 [Routing]', issueResult.routing);
       return { messages: MessageUtils.ensureSmsLimit(issueResult.response), shouldUpdateState: false };
     }
@@ -268,18 +285,20 @@ export class EnhancedConversationService {
     const requestResult = ConfirmedMessageOrchestrator.handleRequest(message, property, classification, conversationContext);
     if (requestResult) {
       await this.saveConversationMessage(phoneNumber, conversation.id, message, requestResult.response);
-      const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, requestResult.response, classification);
+      const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, requestResult.response, classification, requestResult);
       await this.conversationManager.updateConversationState(phoneNumber, {
         last_message_type: classification.intent,
         last_response: requestResult.response,
         conversation_context: updatedCtx,
       });
+      if (requestResult.triggerHostHandoff) {
+        await this.sendHostAlert(property, phoneNumber, conversationContext, requestResult.handoffReason || 'Request', requestResult.handoffSummary || message);
+      }
       console.log('📊 [Routing]', requestResult.routing);
       return { messages: MessageUtils.ensureSmsLimit(requestResult.response), shouldUpdateState: false };
     }
 
     // ── Quick lookup (WiFi, check-in/out, parking, emergency) ──────────────
-    // Only for INFORMATIONAL messages — issues/requests were already handled
     const quickAnswer = this.checkQuickLookup(message, property);
     if (quickAnswer) {
       console.log('⚡ Quick lookup hit');
@@ -305,7 +324,7 @@ export class EnhancedConversationService {
       const propertyResult = ConfirmedMessageOrchestrator.handlePropertyRetrieval(message, property, classification);
       if (propertyResult) {
         await this.saveConversationMessage(phoneNumber, conversation.id, message, propertyResult.response);
-        const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, propertyResult.response, classification);
+        const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, propertyResult.response, classification, propertyResult);
         await this.conversationManager.updateConversationState(phoneNumber, {
           last_message_type: classification.intent,
           last_response: propertyResult.response,
@@ -320,7 +339,7 @@ export class EnhancedConversationService {
       if (!classification.shouldUseAI) {
         const escalation = ConfirmedMessageOrchestrator.buildHostEscalation(message, property, classification, conversationContext);
         await this.saveConversationMessage(phoneNumber, conversation.id, message, escalation.response);
-        const updatedCtx = { ...conversationContext, last_host_contact_offer_timestamp: new Date().toISOString() };
+        const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, escalation.response, classification, escalation);
         await this.conversationManager.updateConversationState(phoneNumber, { conversation_context: updatedCtx });
         console.log('📊 [Routing]', escalation.routing);
         return { messages: MessageUtils.ensureSmsLimit(escalation.response), shouldUpdateState: false };
@@ -328,7 +347,6 @@ export class EnhancedConversationService {
     }
 
     // ── STEP 6: RECOMMENDATION / GENERAL KNOWLEDGE → AI ───────────────────
-    // This is the ONLY path that uses AI — recommendations and general queries
     try {
       const history = await this.getConversationHistory(phoneNumber, conversation.id);
       const slimContext = ConfirmedMessageOrchestrator.buildSlimAIContext(message, property, conversation, classification, history);
@@ -365,11 +383,81 @@ export class EnhancedConversationService {
     } catch (err) {
       console.error('❌ AI concierge failed:', err);
 
-      // Final fallback — always warm, never robotic
       const fallback = property.emergency_contact
         ? `I'm having a moment — sorry about that! For immediate help, your host is at ${property.emergency_contact}.`
         : "I'm having a moment — could you try again? If it's urgent, reach out to your host directly.";
       return { messages: MessageUtils.ensureSmsLimit(fallback), shouldUpdateState: false };
+    }
+  }
+
+  // ═══ HOST HANDOFF: Send alert SMS to host ═══
+  private async sendHostAlert(property: Property, guestPhone: string, conversationContext: any, reason: string, summary: string) {
+    const hostPhone = property.emergency_contact;
+    if (!hostPhone) {
+      console.log('📞 [Handoff] No host phone number available — logging only');
+      return;
+    }
+
+    // Don't spam — check if we already alerted for this issue recently
+    const lastHandoff = conversationContext?.host_handoff_timestamp;
+    const sameReason = conversationContext?.host_handoff_reason === reason;
+    if (lastHandoff && sameReason) {
+      const elapsed = Date.now() - new Date(lastHandoff).getTime();
+      if (elapsed < 1800000) { // 30 min
+        console.log('📞 [Handoff] Skipping duplicate host alert (same issue, <30 min)');
+        return;
+      }
+    }
+
+    const guestName = conversationContext?.guestName || conversationContext?.guest_name || guestPhone;
+    const alertMessage = [
+      `Guest alert for ${property.property_name}`,
+      `Guest: ${guestName}`,
+      `Issue: ${reason}`,
+      `Latest: "${summary.substring(0, 120)}"`,
+      `Reply to guest: ${guestPhone}`,
+    ].join('\n');
+
+    console.log('📞 [Handoff] Sending host alert:', alertMessage.substring(0, 200));
+
+    // Try to send via OpenPhone API
+    try {
+      const OPENPHONE_API_KEY = Deno.env.get('OPENPHONE_API_KEY');
+      if (OPENPHONE_API_KEY) {
+        const response = await fetch('https://api.openphone.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Authorization': OPENPHONE_API_KEY,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            content: alertMessage,
+            to: [hostPhone],
+          }),
+        });
+
+        if (response.ok) {
+          console.log('✅ [Handoff] Host SMS alert sent successfully');
+        } else {
+          const err = await response.text();
+          console.warn('⚠️ [Handoff] Host SMS send failed:', response.status, err);
+        }
+      } else {
+        console.log('📞 [Handoff] No OpenPhone API key — host alert logged but not sent via SMS');
+      }
+    } catch (err) {
+      console.error('❌ [Handoff] Failed to send host alert:', err);
+    }
+
+    // Always log the handoff internally
+    try {
+      await this.supabase.from('notifications').insert({
+        user_id: property.user_id || '00000000-0000-0000-0000-000000000000',
+        message: `Guest handoff: ${reason} — ${guestName} at ${property.property_name}`,
+        type: 'urgent',
+      });
+    } catch (e) {
+      console.warn('Could not log handoff notification:', e);
     }
   }
 
