@@ -12,21 +12,9 @@ export interface HostContactContext {
 export class HostContactService {
   
   static shouldOfferHostContact(context: HostContactContext): boolean {
-    // Always offer for troubleshooting issues
-    if (context.isTroubleshooting) {
-      return true;
-    }
-    
-    // Offer if no knowledge was found
-    if (!context.knowledgeFound) {
-      return true;
-    }
-    
-    // Offer for urgent matters even if some info was found
-    if (context.isUrgent) {
-      return true;
-    }
-    
+    if (context.isTroubleshooting) return true;
+    if (!context.knowledgeFound) return true;
+    if (context.isUrgent) return true;
     return false;
   }
   
@@ -37,44 +25,41 @@ export class HostContactService {
   ): string {
     const hasHostContact = property?.emergency_contact;
     
-    // Critical/Urgent issues - immediate action
+    // Critical/Urgent issues — immediate, empathetic
     if (context.isUrgent || context.category === 'access' || context.category === 'plumbing') {
       if (hasHostContact) {
-        return `🚨 This needs immediate attention! Your host is: ${property.emergency_contact}. I'm also sending them a notification about this issue.`;
+        return `I'm so sorry about that — let me get your host on it right away. You can also reach them directly at ${property.emergency_contact}.`;
       }
-      return `🚨 This needs immediate attention! I'm notifying your property manager right now. They'll reach out to you shortly.`;
+      return `I'm so sorry about that — I'm notifying your host right now so they can take care of it. They'll reach out to you shortly.`;
     }
     
-    // Troubleshooting issues - helpful and proactive
+    // Troubleshooting — helpful, proactive
     if (context.isTroubleshooting) {
       const equipment = context.equipmentType || context.category || 'this';
-      
       if (hasHostContact) {
-        return `Let's get this fixed for you! Would you like me to contact your property manager about the ${equipment} issue? They can usually help quickly. You can also reach them at: ${property.emergency_contact}`;
+        return `Let's get that sorted! Want me to reach out to your host about the ${equipment} issue? You can also contact them at ${property.emergency_contact}.`;
       }
-      return `Let's get this fixed for you! Would you like me to notify your property manager about the ${equipment} issue? They can usually help quickly.`;
+      return `Let's get that sorted! Want me to notify your host about the ${equipment} issue?`;
     }
     
-    // Information not available - offer to connect
+    // Information not available — natural, never say "property guide"
     if (!context.knowledgeFound) {
       const topic = context.topic || 'that';
       
-      // Check if we've already offered host contact recently
       const recentlyOfferedContact = conversationContext?.last_host_contact_offer_timestamp &&
-        (new Date().getTime() - new Date(conversationContext.last_host_contact_offer_timestamp).getTime()) < 300000; // 5 minutes
+        (Date.now() - new Date(conversationContext.last_host_contact_offer_timestamp).getTime()) < 300000;
       
       if (recentlyOfferedContact) {
-        return `I still don't have specific information about ${topic}. Let me know if you'd like me to reach out to your host for you!`;
+        return `I'll need to confirm ${topic} with the host. Want me to reach out for you?`;
       }
       
       if (hasHostContact) {
-        return `I don't see that specific information in the property guide. Would you like me to contact your host about ${topic}? Their contact is: ${property.emergency_contact}`;
+        return `Let me check on ${topic} for you — would you like me to ask the host? You can also reach them at ${property.emergency_contact}.`;
       }
-      return `I don't see that specific information in the property guide. Would you like me to notify your property manager so they can help you with ${topic}?`;
+      return `Let me check on ${topic} with your host and get back to you!`;
     }
     
-    // General follow-up for complex queries
-    return `Need more details about this? I can connect you with your property manager if that would help!`;
+    return `Need more details? I can check with your host if that would help!`;
   }
   
   static generateFollowUpAfterKnowledge(
@@ -83,37 +68,23 @@ export class HostContactService {
     property: Property | null
   ): string {
     if (foundKnowledge) {
-      // Don't offer host contact if we found good information
-      return `Hope that helps! Let me know if you need anything else! 😊`;
+      return `Hope that helps! Let me know if you need anything else 😊`;
     }
     
-    // Offer host contact as a helpful fallback
     const hasHostContact = property?.emergency_contact;
-    
     if (hasHostContact) {
-      return `I don't have specific details about ${topic} in the guide. Would you like me to contact your host? Their number is: ${property.emergency_contact}`;
+      return `I don't have the specifics on ${topic} right now. Want me to check with your host? Their number is ${property.emergency_contact}.`;
     }
-    
-    return `I don't have specific details about ${topic} in the guide. Would you like me to notify your property manager to help with this?`;
+    return `I don't have the specifics on ${topic} right now. Want me to check with your host?`;
   }
   
   static shouldNotifyHostAutomatically(context: HostContactContext): boolean {
-    // Auto-notify for critical issues
-    if (context.isUrgent) {
-      return true;
-    }
-    
-    // Auto-notify for access issues
-    if (context.category === 'access') {
-      return true;
-    }
-    
-    // Auto-notify for major plumbing issues
+    if (context.isUrgent) return true;
+    if (context.category === 'access') return true;
     if (context.category === 'plumbing' && 
         (context.equipmentType?.includes('leak') || context.equipmentType?.includes('flood'))) {
       return true;
     }
-    
     return false;
   }
 }
