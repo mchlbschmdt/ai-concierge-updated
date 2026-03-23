@@ -69,7 +69,28 @@ export interface OrchestratorResult {
 export class ConfirmedMessageOrchestrator {
 
   /**
-   * STEP 0: Check if "yes" is confirming a previous host-contact offer.
+   * STEP 0: Detect follow-ups and re-route to correct thread.
+   * Also handles "yes" confirmation tied to previous host-contact offers.
+   */
+  static handleFollowUpOrConfirmation(
+    message: string,
+    property: Property,
+    conversationContext: any
+  ): { followUpThread: ThreadType | null; yesResult: OrchestratorResult | null } {
+    // Check "yes" confirmation first
+    const yesResult = this.handleYesConfirmation(message, property, conversationContext);
+    if (yesResult) return { followUpThread: null, yesResult };
+
+    // Detect follow-up thread
+    const followUpThread = ConversationMemoryManager.detectFollowUpThread(message, conversationContext);
+    if (followUpThread) {
+      console.log(`🧵 [Orchestrator] Follow-up detected → ${followUpThread} thread`);
+    }
+    return { followUpThread, yesResult: null };
+  }
+
+  /**
+   * Check if "yes" is confirming a previous host-contact offer.
    */
   static handleYesConfirmation(
     message: string,
@@ -82,7 +103,6 @@ export class ConfirmedMessageOrchestrator {
 
     if (!isYes) return null;
 
-    // Check if previous message offered host contact
     const awaitingHandoff = conversationContext?.awaiting_guest_confirmation_for_handoff;
     const lastOffered = conversationContext?.last_host_contact_offer_timestamp;
     const handoffReason = conversationContext?.pending_handoff_reason || 'guest request';
@@ -90,18 +110,15 @@ export class ConfirmedMessageOrchestrator {
 
     if (!awaitingHandoff && !lastOffered) return null;
 
-    // Check time window — only valid within 10 minutes of offer
     if (lastOffered) {
       const elapsed = Date.now() - new Date(lastOffered).getTime();
-      if (elapsed > 600000) return null; // 10 min expired
+      if (elapsed > 600000) return null;
     }
 
     console.log('✅ [Orchestrator] "Yes" confirmation → triggering host handoff for:', handoffReason);
 
-    const response = ConciergeStyleService.getHandoffConfirmation();
-
     return {
-      response,
+      response: ConciergeStyleService.getHandoffConfirmation(),
       source: 'yes_confirmation',
       shouldUpdateState: true,
       triggerHostHandoff: true,
