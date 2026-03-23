@@ -241,13 +241,14 @@ export class EnhancedConversationService {
     }
   }
 
-  // ═══ ORCHESTRATED CONCIERGE v3: Priority-based routing with host handoff ═══
+  // ═══ ORCHESTRATED CONCIERGE v4: Thread-aware priority routing ═══
   private async processConfirmedWithAI(phoneNumber: string, message: string, property: Property, conversation: Conversation) {
-    console.log('🤖 Orchestrator v3 processing:', message);
+    console.log('🤖 Orchestrator v4 (threaded) processing:', message);
     const conversationContext = (conversation.conversation_context as any) || {};
 
-    // ── STEP 0: "Yes" confirmation → triggers host handoff ────────────────
-    const yesResult = ConfirmedMessageOrchestrator.handleYesConfirmation(message, property, conversationContext);
+    // ── STEP 0: Follow-up detection + "Yes" confirmation ──────────────
+    const { followUpThread, yesResult } = ConfirmedMessageOrchestrator.handleFollowUpOrConfirmation(message, property, conversationContext);
+
     if (yesResult) {
       await this.saveConversationMessage(phoneNumber, conversation.id, message, yesResult.response);
       const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, yesResult.response,
@@ -261,8 +262,21 @@ export class EnhancedConversationService {
       return { messages: MessageUtils.ensureSmsLimit(yesResult.response), shouldUpdateState: false };
     }
 
-    // ── STEP 1: Classify once ──────────────────────────────────────────────
-    const classification = ConfirmedMessageOrchestrator.classifyMessage(message);
+    // ── STEP 1: Classify once (may be overridden by followUpThread) ─────
+    let classification = ConfirmedMessageOrchestrator.classifyMessage(message);
+
+    // If follow-up detected, override classification to match the thread
+    if (followUpThread) {
+      console.log(`🧵 [Orchestrator] Overriding classification with follow-up thread: ${followUpThread}`);
+      // For recommendation follow-ups like "something more upscale"
+      if (followUpThread === 'recommendation' && !classification.isRecommendation) {
+        classification = { ...classification, isRecommendation: true, isPropertySpecific: false, shouldUseAI: true, requestType: 'RECOMMENDATION' };
+      }
+      // For request follow-ups like "around noon" → keep as request
+      if (followUpThread === 'request' && !classification.isRequest) {
+        classification = { ...classification, isRequest: true, isPropertySpecific: false, requestType: 'REQUEST' };
+      }
+    }
 
     // ── STEP 2: ISSUE — highest priority, handle immediately ───────────────
     const issueResult = ConfirmedMessageOrchestrator.handleIssue(message, property, classification, conversationContext);
@@ -349,7 +363,7 @@ export class EnhancedConversationService {
     // ── STEP 6: RECOMMENDATION / GENERAL KNOWLEDGE → AI ───────────────────
     try {
       const history = await this.getConversationHistory(phoneNumber, conversation.id);
-      const slimContext = ConfirmedMessageOrchestrator.buildSlimAIContext(message, property, conversation, classification, history);
+      const slimContext = ConfirmedMessageOrchestrator.buildSlimAIContext(message, property, conversation, classification, history, followUpThread || undefined);
 
       console.log(`🧠 [Orchestrator] AI path (${classification.requestType}): ${classification.intent}`);
 

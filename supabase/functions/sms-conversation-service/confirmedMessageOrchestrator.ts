@@ -16,7 +16,7 @@ import { RequestTypeClassifier, RequestClassification } from './requestTypeClass
 import { TroubleshootingDetectionService, TroubleshootingResult } from './troubleshootingDetectionService.ts';
 import { PropertyDataExtractor } from './propertyDataExtractor.ts';
 import { EnhancedPropertyKnowledgeService } from './enhancedPropertyKnowledgeService.ts';
-import { ConversationMemoryManager } from './conversationMemoryManager.ts';
+import { ConversationMemoryManager, ThreadType } from './conversationMemoryManager.ts';
 import { HostContactService } from './hostContactService.ts';
 import { ConciergeStyleService } from './conciergeStyleService.ts';
 import { MessageUtils } from './messageUtils.ts';
@@ -69,7 +69,28 @@ export interface OrchestratorResult {
 export class ConfirmedMessageOrchestrator {
 
   /**
-   * STEP 0: Check if "yes" is confirming a previous host-contact offer.
+   * STEP 0: Detect follow-ups and re-route to correct thread.
+   * Also handles "yes" confirmation tied to previous host-contact offers.
+   */
+  static handleFollowUpOrConfirmation(
+    message: string,
+    property: Property,
+    conversationContext: any
+  ): { followUpThread: ThreadType | null; yesResult: OrchestratorResult | null } {
+    // Check "yes" confirmation first
+    const yesResult = this.handleYesConfirmation(message, property, conversationContext);
+    if (yesResult) return { followUpThread: null, yesResult };
+
+    // Detect follow-up thread
+    const followUpThread = ConversationMemoryManager.detectFollowUpThread(message, conversationContext);
+    if (followUpThread) {
+      console.log(`🧵 [Orchestrator] Follow-up detected → ${followUpThread} thread`);
+    }
+    return { followUpThread, yesResult: null };
+  }
+
+  /**
+   * Check if "yes" is confirming a previous host-contact offer.
    */
   static handleYesConfirmation(
     message: string,
@@ -82,7 +103,6 @@ export class ConfirmedMessageOrchestrator {
 
     if (!isYes) return null;
 
-    // Check if previous message offered host contact
     const awaitingHandoff = conversationContext?.awaiting_guest_confirmation_for_handoff;
     const lastOffered = conversationContext?.last_host_contact_offer_timestamp;
     const handoffReason = conversationContext?.pending_handoff_reason || 'guest request';
@@ -90,18 +110,15 @@ export class ConfirmedMessageOrchestrator {
 
     if (!awaitingHandoff && !lastOffered) return null;
 
-    // Check time window — only valid within 10 minutes of offer
     if (lastOffered) {
       const elapsed = Date.now() - new Date(lastOffered).getTime();
-      if (elapsed > 600000) return null; // 10 min expired
+      if (elapsed > 600000) return null;
     }
 
     console.log('✅ [Orchestrator] "Yes" confirmation → triggering host handoff for:', handoffReason);
 
-    const response = ConciergeStyleService.getHandoffConfirmation();
-
     return {
-      response,
+      response: ConciergeStyleService.getHandoffConfirmation(),
       source: 'yes_confirmation',
       shouldUpdateState: true,
       triggerHostHandoff: true,
@@ -354,21 +371,48 @@ export class ConfirmedMessageOrchestrator {
   }
 
   /**
-   * STEP 4: Repetition prevention with varied rephrasing.
+   * STEP 4: Repetition prevention — thread-aware.
+   * Only checks repetition within the SAME thread.
    */
   static checkRepetition(
     message: string,
     classification: UnifiedClassification,
-    conversationContext: any
+    conversationContext: any,
+    threadType?: ThreadType
   ): OrchestratorResult | null {
     if (classification.isIssue || classification.isRequest) return null;
 
+    const effectiveThread = threadType || ConversationMemoryManager.intentToThreadType(classification.intent, classification.requestType);
+
+    // Thread-based repetition check
+    const threadRep = ConversationMemoryManager.hasThreadRepetition(conversationContext, effectiveThread, classification.intent);
+    if (threadRep.repeated && threadRep.summary) {
+      console.log(`♻️ [Orchestrator] Thread repetition in "${effectiveThread}": ${classification.intent}`);
+      const rephrased = rephrasePreviousAnswer(
+        extractTopicFromMessage(message, classification.intent),
+        threadRep.summary
+      );
+      return {
+        response: ConciergeStyleService.polish(rephrased),
+        source: 'repetition_summary',
+        shouldUpdateState: false,
+        routing: {
+          intent: classification.intent,
+          requestType: classification.requestType,
+          propertyDataUsed: false,
+          knowledgeBaseUsed: false,
+          aiUsed: false,
+          escalationTriggered: false,
+          repetitionPrevented: true,
+        },
+      };
+    }
+
+    // Legacy shared_information check as fallback
     const topic = extractTopicFromMessage(message, classification.intent);
     const recentShare = ConversationMemoryManager.hasAlreadySharedInformation(conversationContext, topic, 5);
-
     if (recentShare.shared && recentShare.summary) {
       console.log(`♻️ [Orchestrator] Repetition for "${topic}" (${recentShare.minutesAgo}m ago)`);
-
       const rephrased = rephrasePreviousAnswer(topic, recentShare.summary);
       return {
         response: ConciergeStyleService.polish(rephrased),
@@ -445,21 +489,37 @@ export class ConfirmedMessageOrchestrator {
 
   /**
    * STEP 6: Build slim AI context for recommendation / general knowledge queries.
+   * Now thread-aware — only passes relevant thread memory, not global.
    */
   static buildSlimAIContext(
     message: string,
     property: Property,
     conversation: Conversation,
     classification: UnifiedClassification,
-    recentHistory: Array<{ role: string; content: string }>
+    recentHistory: Array<{ role: string; content: string }>,
+    activeThreadType?: ThreadType
   ): Record<string, any> {
     const context = (conversation.conversation_context as any) || {};
     const guestName = context.guestName || context.guest_name || null;
 
-    const recentIntents = context.recent_intents?.slice(0, 5) || [];
-    const memorySummary = recentIntents.length > 0
-      ? `Recent topics: ${recentIntents.join(', ')}`
+    // Thread-aware memory summary
+    const threadType = activeThreadType || ConversationMemoryManager.intentToThreadType(classification.intent, classification.requestType);
+    const activeThread = ConversationMemoryManager.getThread(context, threadType);
+    const threads = context.threads || {};
+
+    // Build memory summary from threads only
+    const threadSummaries: string[] = [];
+    for (const [type, thread] of Object.entries(threads) as [string, any][]) {
+      if (!thread.resolved && thread.last_response_summary) {
+        threadSummaries.push(`${type}: ${thread.last_response_summary}`);
+      }
+    }
+    const memorySummary = threadSummaries.length > 0
+      ? `Active topics:\n${threadSummaries.join('\n')}`
       : 'New conversation';
+
+    // If this is a follow-up in recommendation thread, include last recs
+    const threadMeta = activeThread?.meta || {};
 
     const propertySnippets: Record<string, string> = {
       name: property.property_name,
@@ -482,6 +542,13 @@ export class ConfirmedMessageOrchestrator {
       propertySnippets,
       intent: classification.intent,
       requestType: classification.requestType,
+      activeThread: threadType,
+      threadContext: activeThread ? {
+        lastIntent: activeThread.last_intent,
+        lastSummary: activeThread.last_response_summary,
+        turnCount: activeThread.turn_count,
+        meta: threadMeta,
+      } : null,
       conversationHistory: recentHistory.slice(-10),
       memorySummary,
       responseRules: [
@@ -494,7 +561,10 @@ export class ConfirmedMessageOrchestrator {
         'Sound like a warm host texting — not a hotel front desk or chatbot.',
         'Use contractions naturally (it\'s, there\'s, you\'ll, we\'re).',
         'For recommendations, NEVER say "I\'ll need to confirm with the host" — just give local suggestions.',
-      ],
+        activeThread?.turn_count && activeThread.turn_count > 0
+          ? `This is a follow-up in the ${threadType} thread. Previous: "${activeThread.last_response_summary}". Do NOT repeat what was already said — refine, add new info, or rephrase.`
+          : '',
+      ].filter(Boolean),
     };
   }
 
@@ -535,7 +605,7 @@ export class ConfirmedMessageOrchestrator {
   }
 
   /**
-   * Track response in memory + escalation state.
+   * Track response in memory + escalation state + thread update.
    */
   static trackResponseInMemory(
     conversationContext: any,
@@ -556,6 +626,35 @@ export class ConfirmedMessageOrchestrator {
 
     // Track variation index
     updated = ConciergeStyleService.incrementVariationIndex(updated, classification.intent);
+
+    // ── Update thread ──────────────────────────────────────────────────
+    const threadType = ConversationMemoryManager.intentToThreadType(classification.intent, classification.requestType);
+    const isResolved = orchestratorResult?.source === 'property_data'
+      || orchestratorResult?.source === 'quick_lookup'
+      || orchestratorResult?.source === 'knowledge_base';
+    updated = ConversationMemoryManager.updateThread(
+      updated,
+      threadType,
+      classification.intent,
+      summary,
+      undefined,
+      isResolved
+    );
+
+    // If switching to a new thread type, resolve the previous escalation thread
+    // so post-escalation topics don't bleed in
+    if (threadType !== 'escalation' && threadType !== 'issue' && updated.threads?.escalation && !updated.threads.escalation.resolved) {
+      const escAge = Date.now() - new Date(updated.threads.escalation.last_updated).getTime();
+      if (escAge > 60000) { // 1 min — user moved on
+        updated = ConversationMemoryManager.resolveThread(updated, 'escalation');
+      }
+    }
+    if (threadType !== 'issue' && updated.threads?.issue && !updated.threads.issue.resolved) {
+      const issueAge = Date.now() - new Date(updated.threads.issue.last_updated).getTime();
+      if (issueAge > 120000) { // 2 min
+        updated = ConversationMemoryManager.resolveThread(updated, 'issue');
+      }
+    }
 
     // Track escalation state
     if (orchestratorResult?.source === 'host_escalation' || orchestratorResult?.source === 'request_response') {
@@ -655,15 +754,21 @@ function rephrasePreviousAnswer(topic: string, previousSummary: string): string 
   if (topic === 'checkin_info') {
     const timeMatch = previousSummary.match(/\d{1,2}(:\d{2})?\s*(am|pm|AM|PM)?/);
     if (timeMatch) {
-      return `Check-in is at ${timeMatch[0]} as I mentioned. Need any other details about getting in?`;
+      return `Check-in is at ${timeMatch[0]}. Need any other details about getting in?`;
     }
   }
   if (topic === 'wifi_info') {
     return `I shared the WiFi info just a bit ago — scroll up to grab it! Need anything else?`;
   }
 
+  // Never use "As I mentioned" — just rephrase naturally
   if (previousSummary && previousSummary.length < 120) {
-    return `As I mentioned: ${previousSummary.toLowerCase().replace(/^(as i mentioned[,:]\s*)/i, '')} — anything else I can help with?`;
+    const starters = [
+      `Just to confirm: ${previousSummary.toLowerCase().replace(/^(as i mentioned[,:]\s*|just to remind you[,:]\s*)/i, '')}`,
+      `Quick reminder: ${previousSummary.toLowerCase().replace(/^(as i mentioned[,:]\s*)/i, '')}`,
+      previousSummary.replace(/^(As I mentioned[,:]\s*)/i, ''),
+    ];
+    return `${starters[Math.floor(Math.random() * starters.length)]} — anything else I can help with?`;
   }
 
   return `I shared ${topicPhrase} just a moment ago. Want me to look into something else?`;
