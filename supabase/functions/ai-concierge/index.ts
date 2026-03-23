@@ -12,19 +12,24 @@ serve(async (req) => {
   }
 
   try {
-    const { message, property, conversationHistory, guestName } = await req.json();
+    const { message, property, conversationHistory, guestName, slimContext } = await req.json();
 
     const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
     if (!OPENAI_API_KEY) {
       throw new Error('OPENAI_API_KEY is not configured');
     }
 
-    // Build rich property context
-    const propertyContext = buildPropertyContext(property, guestName);
-    
+    // Build system prompt — use slim context when available for focused responses
+    let systemPrompt: string;
+    if (slimContext) {
+      systemPrompt = buildSlimPropertyContext(slimContext);
+    } else {
+      systemPrompt = buildPropertyContext(property, guestName);
+    }
+
     // Build conversation messages for OpenAI
     const messages: any[] = [
-      { role: 'system', content: propertyContext },
+      { role: 'system', content: systemPrompt },
     ];
 
     // Add conversation history (last 10 messages)
@@ -40,7 +45,7 @@ serve(async (req) => {
     // Add the current message
     messages.push({ role: 'user', content: message });
 
-    console.log(`🤖 AI Concierge request for ${property?.property_name}: "${message}" (${messages.length} msgs in context)`);
+    console.log(`🤖 AI Concierge request for ${property?.property_name || slimContext?.propertyName}: "${message}" (${messages.length} msgs, slim: ${!!slimContext})`);
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
