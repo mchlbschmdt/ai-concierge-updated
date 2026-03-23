@@ -16,7 +16,7 @@ import { RequestTypeClassifier, RequestClassification } from './requestTypeClass
 import { TroubleshootingDetectionService, TroubleshootingResult } from './troubleshootingDetectionService.ts';
 import { PropertyDataExtractor } from './propertyDataExtractor.ts';
 import { EnhancedPropertyKnowledgeService } from './enhancedPropertyKnowledgeService.ts';
-import { ConversationMemoryManager } from './conversationMemoryManager.ts';
+import { ConversationMemoryManager, ThreadType } from './conversationMemoryManager.ts';
 import { HostContactService } from './hostContactService.ts';
 import { ConciergeStyleService } from './conciergeStyleService.ts';
 import { MessageUtils } from './messageUtils.ts';
