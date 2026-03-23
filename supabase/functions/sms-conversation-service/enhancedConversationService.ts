@@ -363,7 +363,7 @@ export class EnhancedConversationService {
     // ── STEP 6: RECOMMENDATION / GENERAL KNOWLEDGE → AI ───────────────────
     try {
       const history = await this.getConversationHistory(phoneNumber, conversation.id);
-      const slimContext = ConfirmedMessageOrchestrator.buildSlimAIContext(message, property, conversation, classification, history);
+      const slimContext = ConfirmedMessageOrchestrator.buildSlimAIContext(message, property, conversation, classification, history, followUpThread || undefined);
 
       console.log(`🧠 [Orchestrator] AI path (${classification.requestType}): ${classification.intent}`);
 
