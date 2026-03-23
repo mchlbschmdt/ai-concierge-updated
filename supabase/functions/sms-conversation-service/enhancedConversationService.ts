@@ -241,15 +241,45 @@ export class EnhancedConversationService {
     }
   }
 
-  // ═══ AI-FIRST CONCIERGE: Main confirmed-state handler ═══
+  // ═══ ORCHESTRATED CONCIERGE: Priority-based routing ═══
   private async processConfirmedWithAI(phoneNumber: string, message: string, property: Property, conversation: Conversation) {
-    console.log('🤖 Orchestrator processing:', message);
+    console.log('🤖 Orchestrator v2 processing:', message);
     const conversationContext = (conversation.conversation_context as any) || {};
 
     // ── STEP 1: Classify once ──────────────────────────────────────────────
     const classification = ConfirmedMessageOrchestrator.classifyMessage(message);
 
+    // ── STEP 2: ISSUE — highest priority, handle immediately ───────────────
+    const issueResult = ConfirmedMessageOrchestrator.handleIssue(message, property, classification, conversationContext);
+    if (issueResult) {
+      await this.saveConversationMessage(phoneNumber, conversation.id, message, issueResult.response);
+      const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, issueResult.response, classification);
+      updatedCtx.last_host_contact_offer_timestamp = new Date().toISOString();
+      await this.conversationManager.updateConversationState(phoneNumber, {
+        last_message_type: classification.intent,
+        last_response: issueResult.response,
+        conversation_context: updatedCtx,
+      });
+      console.log('📊 [Routing]', issueResult.routing);
+      return { messages: MessageUtils.ensureSmsLimit(issueResult.response), shouldUpdateState: false };
+    }
+
+    // ── STEP 3: REQUEST — handle conversationally, not informationally ─────
+    const requestResult = ConfirmedMessageOrchestrator.handleRequest(message, property, classification, conversationContext);
+    if (requestResult) {
+      await this.saveConversationMessage(phoneNumber, conversation.id, message, requestResult.response);
+      const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, requestResult.response, classification);
+      await this.conversationManager.updateConversationState(phoneNumber, {
+        last_message_type: classification.intent,
+        last_response: requestResult.response,
+        conversation_context: updatedCtx,
+      });
+      console.log('📊 [Routing]', requestResult.routing);
+      return { messages: MessageUtils.ensureSmsLimit(requestResult.response), shouldUpdateState: false };
+    }
+
     // ── Quick lookup (WiFi, check-in/out, parking, emergency) ──────────────
+    // Only for INFORMATIONAL messages — issues/requests were already handled
     const quickAnswer = this.checkQuickLookup(message, property);
     if (quickAnswer) {
       console.log('⚡ Quick lookup hit');
@@ -263,47 +293,30 @@ export class EnhancedConversationService {
       return { messages: MessageUtils.ensureSmsLimit(quickAnswer), shouldUpdateState: false };
     }
 
-    // ── STEP 4 (early): Repetition prevention ──────────────────────────────
+    // ── STEP 4: Repetition prevention ──────────────────────────────────────
     const repetitionResult = ConfirmedMessageOrchestrator.checkRepetition(message, classification, conversationContext);
     if (repetitionResult) {
       await this.saveConversationMessage(phoneNumber, conversation.id, message, repetitionResult.response);
       return { messages: MessageUtils.ensureSmsLimit(repetitionResult.response), shouldUpdateState: false };
     }
 
-    // ── STEP 2: Troubleshooting isolation ──────────────────────────────────
-    const troubleshootResult = ConfirmedMessageOrchestrator.handleTroubleshooting(message, property, classification, conversationContext);
-    if (troubleshootResult) {
-      await this.saveConversationMessage(phoneNumber, conversation.id, message, troubleshootResult.response);
-      const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, troubleshootResult.response, classification);
-      updatedCtx.last_host_contact_offer_timestamp = new Date().toISOString();
-      await this.conversationManager.updateConversationState(phoneNumber, {
-        last_message_type: classification.intent,
-        last_response: troubleshootResult.response,
-        conversation_context: updatedCtx,
-      });
-      console.log('📊 [Routing]', troubleshootResult.routing);
-      return { messages: MessageUtils.ensureSmsLimit(troubleshootResult.response), shouldUpdateState: false };
-    }
-
-    // ── STEP 3: Property-first retrieval ───────────────────────────────────
+    // ── STEP 5: Property-first retrieval (INFORMATIONAL only) ─────────────
     if (classification.isPropertySpecific) {
       const propertyResult = ConfirmedMessageOrchestrator.handlePropertyRetrieval(message, property, classification);
       if (propertyResult) {
-        const followUp = this.getContextualFollowUp(classification.intent, message);
-        const fullResponse = propertyResult.response + '\n\n' + followUp;
-        await this.saveConversationMessage(phoneNumber, conversation.id, message, fullResponse);
-        const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, fullResponse, classification);
+        await this.saveConversationMessage(phoneNumber, conversation.id, message, propertyResult.response);
+        const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, propertyResult.response, classification);
         await this.conversationManager.updateConversationState(phoneNumber, {
           last_message_type: classification.intent,
-          last_response: fullResponse,
+          last_response: propertyResult.response,
           last_intent: classification.intent,
           conversation_context: updatedCtx,
         });
         console.log('📊 [Routing]', propertyResult.routing);
-        return { messages: MessageUtils.ensureSmsLimit(fullResponse), shouldUpdateState: false };
+        return { messages: MessageUtils.ensureSmsLimit(propertyResult.response), shouldUpdateState: false };
       }
 
-      // Property-specific question but no data → STEP 6: host escalation
+      // Property-specific question but no data → host escalation
       if (!classification.shouldUseAI) {
         const escalation = ConfirmedMessageOrchestrator.buildHostEscalation(message, property, classification, conversationContext);
         await this.saveConversationMessage(phoneNumber, conversation.id, message, escalation.response);
@@ -314,12 +327,13 @@ export class EnhancedConversationService {
       }
     }
 
-    // ── STEP 5: AI fallback (recommendations, general knowledge, ambiguous) ─
+    // ── STEP 6: RECOMMENDATION / GENERAL KNOWLEDGE → AI ───────────────────
+    // This is the ONLY path that uses AI — recommendations and general queries
     try {
       const history = await this.getConversationHistory(phoneNumber, conversation.id);
       const slimContext = ConfirmedMessageOrchestrator.buildSlimAIContext(message, property, conversation, classification, history);
 
-      console.log(`🧠 [Orchestrator] STEP 5: Calling AI concierge (${history.length} history msgs, intent: ${classification.intent})`);
+      console.log(`🧠 [Orchestrator] AI path (${classification.requestType}): ${classification.intent}`);
 
       const { data, error } = await this.supabase.functions.invoke('ai-concierge', {
         body: {
@@ -327,7 +341,7 @@ export class EnhancedConversationService {
           property,
           conversationHistory: history,
           guestName: slimContext.guestName,
-          slimContext, // Pass the slim context for enhanced processing
+          slimContext,
         },
       });
 
@@ -346,16 +360,15 @@ export class EnhancedConversationService {
         conversation_context: updatedCtx,
       });
 
-      console.log('📊 [Routing]', { intent: classification.intent, propertyDataUsed: false, knowledgeBaseUsed: false, aiUsed: true, escalationTriggered: false, repetitionPrevented: false });
-
+      console.log('📊 [Routing]', { intent: classification.intent, requestType: classification.requestType, aiUsed: true });
       return { messages: MessageUtils.ensureSmsLimit(aiResponse), shouldUpdateState: false };
     } catch (err) {
       console.error('❌ AI concierge failed:', err);
 
-      // STEP 6: Final host escalation fallback
+      // Final fallback — always warm, never robotic
       const fallback = property.emergency_contact
-        ? `I'm having trouble right now. For immediate help, contact your host at ${property.emergency_contact}.`
-        : "I'm having trouble right now. Please try again in a moment or contact your host directly.";
+        ? `I'm having a moment — sorry about that! For immediate help, your host is at ${property.emergency_contact}.`
+        : "I'm having a moment — could you try again? If it's urgent, reach out to your host directly.";
       return { messages: MessageUtils.ensureSmsLimit(fallback), shouldUpdateState: false };
     }
   }

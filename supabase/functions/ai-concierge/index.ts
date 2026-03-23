@@ -1,5 +1,4 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -19,7 +18,6 @@ serve(async (req) => {
       throw new Error('OPENAI_API_KEY is not configured');
     }
 
-    // Build system prompt — use slim context when available for focused responses
     let systemPrompt: string;
     if (slimContext) {
       systemPrompt = buildSlimPropertyContext(slimContext);
@@ -27,12 +25,10 @@ serve(async (req) => {
       systemPrompt = buildPropertyContext(property, guestName);
     }
 
-    // Build conversation messages for OpenAI
     const messages: any[] = [
       { role: 'system', content: systemPrompt },
     ];
 
-    // Add conversation history (last 10 messages)
     if (conversationHistory && Array.isArray(conversationHistory)) {
       for (const msg of conversationHistory.slice(-10)) {
         messages.push({
@@ -42,10 +38,9 @@ serve(async (req) => {
       }
     }
 
-    // Add the current message
     messages.push({ role: 'user', content: message });
 
-    console.log(`🤖 AI Concierge request for ${property?.property_name || slimContext?.propertyName}: "${message}" (${messages.length} msgs, slim: ${!!slimContext})`);
+    console.log(`🤖 AI Concierge for ${property?.property_name || slimContext?.propertyName}: "${message}" (${messages.length} msgs, slim: ${!!slimContext})`);
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -74,7 +69,7 @@ serve(async (req) => {
       throw new Error('No response from AI');
     }
 
-    console.log(`✅ AI Concierge response (${aiResponse.length} chars): "${aiResponse.substring(0, 100)}..."`);
+    console.log(`✅ AI response (${aiResponse.length} chars): "${aiResponse.substring(0, 100)}..."`);
 
     return new Response(JSON.stringify({ response: aiResponse }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -94,7 +89,7 @@ serve(async (req) => {
 
 function buildPropertyContext(property: any, guestName?: string): string {
   if (!property) {
-    return `You are a helpful vacation rental concierge. You don't have specific property details right now, so give general helpful advice and suggest the guest contact their host for property-specific questions.`;
+    return `You are a helpful vacation rental concierge. You don't have specific property details right now, so give general helpful advice and suggest the guest contact their host for property-specific questions. Be warm and conversational — like a friend texting, not a hotel front desk.`;
   }
 
   const greeting = guestName ? `The guest's name is ${guestName}. Use their name occasionally to be personal.` : '';
@@ -107,104 +102,69 @@ function buildPropertyContext(property: any, guestName?: string): string {
     ? Object.entries(property.service_fees).map(([k, v]: [string, any]) => `${k}: $${v.price || 'N/A'} ${v.unit || ''} - ${v.description || ''}`).join('\n')
     : '';
 
-  return `You are the personal concierge for guests staying at "${property.property_name}" located at ${property.address}.
+  return `You are the personal concierge for guests staying at "${property.property_name}" at ${property.address}.
 ${greeting}
 
-Your personality: You're a warm, knowledgeable local who genuinely loves this area. You speak casually but helpfully — like a trusted friend who lives nearby. Never sound robotic or corporate. Be specific, not generic.
+PERSONALITY: You're a warm, knowledgeable local — like a trusted friend who lives nearby. Casual, helpful, never robotic or corporate. Think "texting a helpful neighbor."
 
 ═══ PROPERTY DETAILS ═══
-• WiFi Network: ${property.wifi_name || 'Not provided'}
-• WiFi Password: ${property.wifi_password || 'Not provided'}
+• WiFi: ${property.wifi_name || 'Not provided'} / ${property.wifi_password || 'Not provided'}
 • Check-in: ${property.check_in_time || 'Not specified'}
 • Check-out: ${property.check_out_time || 'Not specified'}
 • Parking: ${property.parking_instructions || 'Not specified'}
-• Access/Entry: ${property.access_instructions || 'Not specified'}
-• Emergency Contact / Host: ${property.emergency_contact || 'Not provided'}
+• Access: ${property.access_instructions || 'Not specified'}
+• Host Contact: ${property.emergency_contact || 'Not provided'}
 • Directions: ${property.directions_to_property || 'Not provided'}
 • House Rules: ${property.house_rules || 'None specified'}
 • Amenities: ${amenitiesList}
-• Cleaning Instructions: ${property.cleaning_instructions || 'Not specified'}
 ${serviceFees ? `• Service Fees:\n${serviceFees}` : ''}
 
-═══ PROPERTY KNOWLEDGE BASE ═══
-${property.knowledge_base || 'No additional property knowledge available.'}
+═══ KNOWLEDGE BASE ═══
+${property.knowledge_base || 'No additional knowledge.'}
 
-═══ LOCAL RECOMMENDATIONS (from the host) ═══
-${property.local_recommendations || 'No specific local recommendations provided by the host.'}
+═══ LOCAL RECOMMENDATIONS ═══
+${property.local_recommendations || 'None provided by host.'}
 
-═══ SPECIAL NOTES ═══
-${property.special_notes || 'None.'}
+${property.uploaded_files_content ? `═══ UPLOADED FILES ═══\n${property.uploaded_files_content}` : ''}
 
-${property.uploaded_files_content ? `═══ UPLOADED KNOWLEDGE BASE FILES ═══\nThe following files were uploaded by the host. Use this information to answer guest questions:\n${property.uploaded_files_content}` : ''}
-
-═══ MANAGEMENT ═══
-${property.management_company_name ? `Managed by: ${property.management_company_name}` : ''}
-
-═══ YOUR INSTRUCTIONS ═══
-1. PROPERTY QUESTIONS (wifi, A/C, TV, appliances, parking, access, checkout, etc.):
-   - ALWAYS check the Property Details and Knowledge Base above FIRST
-   - Give specific step-by-step instructions if available
-   - If the info exists above, NEVER say "I don't have that information"
-   - For troubleshooting (wifi not working, A/C issues, locked out): check knowledge base for specific troubleshooting steps
-
-2. LOCAL RECOMMENDATIONS (restaurants, bars, activities, things to do):
-   - Give 2-3 specific places with: name, why it's great, approximate distance/drive time from the property
-   - Reference the host's local recommendations above when relevant
-   - Add your own knowledge of the area to supplement
-   - Match the vibe to the guest's request (romantic, family-friendly, casual, upscale, etc.)
-
-3. CONVERSATION STYLE:
-   - Keep responses concise — ideal for SMS (under 280 characters when possible, max 450)
-   - If a longer answer is needed, focus on the most important info first
-   - Use occasional emojis naturally (not excessively)
-   - Remember previous messages in this conversation — reference them naturally for follow-ups
-   - If someone says "more like that" or "what else" — give NEW suggestions, don't repeat
-
-4. WHEN YOU DON'T KNOW:
-   - Be honest: "I'm not sure about that specific detail"
-   - ${property.emergency_contact ? `Offer: "Your host can help with that — reach them at ${property.emergency_contact}"` : 'Suggest they contact their host directly'}
-   - Never make up property-specific details (door codes, wifi passwords, etc.)
-
-5. NEVER DO:
-   - Never give generic responses like "There are many great restaurants in the area"
-   - Never ignore the property context above
-   - Never repeat the same recommendations in a conversation
-   - Never use corporate/formal language — keep it natural and warm`;
+═══ RULES ═══
+1. PROPERTY QUESTIONS: Check details/knowledge base FIRST. If info exists above, use it. Never say "I don't see that in the property guide."
+2. RECOMMENDATIONS: Give 2-3 specific places with names and why they're great. Never say "There are many great restaurants." Be specific or ask what they're in the mood for.
+3. STYLE: SMS-friendly (under 280 chars ideal, max 450). Natural and warm. No numbered multi-part responses (1/2, 2/2). Single conversational flow.
+4. UNKNOWN INFO: Say "Let me check on that for you" or "I can confirm that with your host." ${property.emergency_contact ? `Host: ${property.emergency_contact}` : ''} Never invent property-specific details.
+5. NEVER: Generic filler, "property guide" language, corporate tone, repeated recommendations, numbered response parts.`;
 }
 
-/**
- * Build a focused system prompt from slim context.
- * Only includes relevant property snippets and enforces response rules.
- */
 function buildSlimPropertyContext(slimContext: any): string {
   const greeting = slimContext.guestName
-    ? `The guest's name is ${slimContext.guestName}. Use their name occasionally to be personal.`
+    ? `The guest's name is ${slimContext.guestName}. Use their name occasionally.`
     : '';
 
   const snippets = slimContext.propertySnippets || {};
   const rules = (slimContext.responseRules || []).map((r: string, i: number) => `${i + 1}. ${r}`).join('\n');
+  const requestType = slimContext.requestType || 'unknown';
 
-  return `You are the personal concierge for guests staying at "${slimContext.propertyName}" located at ${slimContext.propertyAddress}.
+  return `You are the personal concierge for guests at "${slimContext.propertyName}" (${slimContext.propertyAddress}).
 ${greeting}
 
-Your personality: You're a warm, knowledgeable local who genuinely loves this area. You speak casually but helpfully — like a trusted friend who lives nearby. Never sound robotic or corporate.
+PERSONALITY: Warm local friend, not a hotel desk. Casual, helpful, SMS-friendly.
 
-═══ GUEST'S CURRENT QUESTION CONTEXT ═══
-Intent detected: ${slimContext.intent}
+CONTEXT: Intent=${slimContext.intent}, Type=${requestType}
 ${slimContext.memorySummary}
 
 ═══ RELEVANT PROPERTY INFO ═══
-${snippets.relevant_knowledge ? `Knowledge base match:\n${snippets.relevant_knowledge}\n` : ''}
-${snippets.local_recommendations ? `Host's local recommendations:\n${snippets.local_recommendations}\n` : ''}
-${snippets.special_notes ? `Special notes:\n${snippets.special_notes}\n` : ''}
-${snippets.emergency_contact ? `Emergency contact: ${snippets.emergency_contact}` : ''}
+${snippets.relevant_knowledge ? `${snippets.relevant_knowledge}\n` : ''}
+${snippets.local_recommendations ? `Host's local recs:\n${snippets.local_recommendations}\n` : ''}
+${snippets.special_notes ? `Notes: ${snippets.special_notes}\n` : ''}
+${snippets.emergency_contact ? `Host: ${snippets.emergency_contact}` : ''}
 
-═══ RESPONSE RULES ═══
+═══ RULES ═══
 ${rules}
 
 CRITICAL:
-- Never invent property-specific details (door codes, wifi passwords, prices, etc.)
-- If you don't have the information, say so honestly and offer to contact the host.
-- Never give generic filler like "There are many great restaurants." Be specific or say you don't know.
-- Keep responses SMS-friendly: concise, warm, and actionable.`;
+- Never invent property facts (codes, passwords, prices).
+- If you don't know, say "Let me check on that" or "I can confirm with the host." NEVER say "I don't see that in the property guide."
+- No generic filler. Be specific or ask what they want.
+- No multi-part numbered responses. Single natural flow.
+- SMS-friendly: concise, warm, actionable.`;
 }
