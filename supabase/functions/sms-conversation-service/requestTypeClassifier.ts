@@ -105,14 +105,18 @@ export class RequestTypeClassifier {
     const recPatterns = [
       /\b(recommend|suggestion|where.*(eat|go|visit|drink|shop|hike))\b/,
       /\b(best|good|great|nice|top|favorite|favourite)\s+(restaurant|bar|cafe|beach|park|trail|hike|spot|place|shop|store|brunch|breakfast|lunch|dinner|pizza|sushi|seafood|taco|burger|bbq|bakery|ice cream|dessert|coffee)\b/,
-      /\b(restaurant|bar|cafe|beach|park|trail|hike|spot|place|shop|store|brunch|breakfast|lunch|dinner)\s+(near|nearby|around|close)\b/,
-      /\bwhere (can|should|do|to)\s+(i|we)\s+(eat|go|visit|drink|shop|hike|swim|surf|snorkel|kayak)\b/,
+      /\b(restaurant|bar|cafe|beach|park|trail|hike|spot|place|shop|store|brunch|breakfast|lunch|dinner)\s*(near|nearby|around|close|here)?\b/,
+      /\bwhere (can|should|do|to)\s+(i|we)\s+(eat|go|visit|drink|shop|hike|swim|surf|snorkel|kayak|get)\b/,
       /\b(things to do|activities|attractions|entertainment|nightlife|live music)\b/,
-      /\b(beach|beaches|swimming|surfing|snorkeling|kayaking|boating|fishing)\s*(near|nearby|around|close|to do)?\b/,
+      /\b(beach|beaches|swimming|surfing|snorkeling|kayaking|boating|fishing)\b/,
       /\bwhat('s|s| is) (there to do|to see|good around here|fun)\b/,
       /\b(any|know any|got any)\s+(good|great|nice)?\s*(restaurant|bar|cafe|beach|place|spot|recommendation)\b/,
       /\bfamily.?(friendly|fun|activities|things)\b/,
       /\b(date night|romantic|upscale|casual|cheap eats|fast food|takeout|delivery)\b.*\b(place|spot|restaurant|option)\b/,
+      // Direct food/drink words — these are ALWAYS recommendations, never property info
+      /\b(restaurants?|brunch|dinner|lunch|breakfast|coffee|bars?|cocktails?|food|eat|dining)\b/,
+      /\b(things to do|what to do|stuff to do|where to go)\b/,
+      /\b(happy hour|wine bar|brewery|pub|tapas|ramen|tacos?|burgers?|seafood|steakhouse|bistro|diner)\b/,
     ];
 
     return recPatterns.some(p => p.test(msg));
