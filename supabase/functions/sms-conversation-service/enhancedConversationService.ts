@@ -1,4 +1,5 @@
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { ConfirmedMessageOrchestrator, UnifiedClassification, OrchestratorResult } from './confirmedMessageOrchestrator.ts';
 import { ConversationManager } from './conversationManager.ts';
 import { IntentRecognitionService } from './intentRecognitionService.ts';
 import { RecommendationService } from './recommendationService.ts';
