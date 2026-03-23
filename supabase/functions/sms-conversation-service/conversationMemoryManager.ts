@@ -385,17 +385,7 @@ export class ConversationMemoryManager {
     return context?.rejected_restaurants || [];
   }
 
-  static clearRecommendationMemory(context: any): any {
-    return {
-      ...context,
-      recommendation_history: {
-        ...context.recommendation_history,
-        food_recommendations: [],
-        activities: [],
-        last_recommendation_timestamp: new Date().toISOString()
-      }
-    };
-  }
+  // Duplicate removed — see clearRecommendationMemory above (line 318)
   
   /**
    * Check if information on a topic was recently shared

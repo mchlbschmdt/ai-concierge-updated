@@ -1,4 +1,5 @@
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { ConfirmedMessageOrchestrator, UnifiedClassification, OrchestratorResult } from './confirmedMessageOrchestrator.ts';
 import { ConversationManager } from './conversationManager.ts';
 import { IntentRecognitionService } from './intentRecognitionService.ts';
 import { RecommendationService } from './recommendationService.ts';
@@ -242,69 +243,120 @@ export class EnhancedConversationService {
 
   // ═══ AI-FIRST CONCIERGE: Main confirmed-state handler ═══
   private async processConfirmedWithAI(phoneNumber: string, message: string, property: Property, conversation: Conversation) {
-    console.log('🤖 AI-First Concierge processing:', message);
+    console.log('🤖 Orchestrator processing:', message);
+    const conversationContext = (conversation.conversation_context as any) || {};
 
-    // FAST PATH: Quick property data lookups that don't need AI
+    // ── STEP 1: Classify once ──────────────────────────────────────────────
+    const classification = ConfirmedMessageOrchestrator.classifyMessage(message);
+
+    // ── Quick lookup (WiFi, check-in/out, parking, emergency) ──────────────
     const quickAnswer = this.checkQuickLookup(message, property);
     if (quickAnswer) {
       console.log('⚡ Quick lookup hit');
       await this.saveConversationMessage(phoneNumber, conversation.id, message, quickAnswer);
+      const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, quickAnswer, classification);
       await this.conversationManager.updateConversationState(phoneNumber, {
         last_message_type: 'quick_lookup',
         last_response: quickAnswer,
+        conversation_context: updatedCtx,
       });
-      return {
-        messages: MessageUtils.ensureSmsLimit(quickAnswer),
-        shouldUpdateState: false,
-      };
+      return { messages: MessageUtils.ensureSmsLimit(quickAnswer), shouldUpdateState: false };
     }
 
-    // AI PATH: Everything else goes to the AI concierge
-    try {
-      // Load conversation history for context
-      const history = await this.getConversationHistory(phoneNumber, conversation.id);
-      const guestName = (conversation.conversation_context as any)?.guestName || null;
+    // ── STEP 4 (early): Repetition prevention ──────────────────────────────
+    const repetitionResult = ConfirmedMessageOrchestrator.checkRepetition(message, classification, conversationContext);
+    if (repetitionResult) {
+      await this.saveConversationMessage(phoneNumber, conversation.id, message, repetitionResult.response);
+      return { messages: MessageUtils.ensureSmsLimit(repetitionResult.response), shouldUpdateState: false };
+    }
 
-      console.log(`🧠 Calling AI concierge with ${history.length} history messages`);
+    // ── STEP 2: Troubleshooting isolation ──────────────────────────────────
+    const troubleshootResult = ConfirmedMessageOrchestrator.handleTroubleshooting(message, property, classification, conversationContext);
+    if (troubleshootResult) {
+      await this.saveConversationMessage(phoneNumber, conversation.id, message, troubleshootResult.response);
+      const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, troubleshootResult.response, classification);
+      updatedCtx.last_host_contact_offer_timestamp = new Date().toISOString();
+      await this.conversationManager.updateConversationState(phoneNumber, {
+        last_message_type: classification.intent,
+        last_response: troubleshootResult.response,
+        conversation_context: updatedCtx,
+      });
+      console.log('📊 [Routing]', troubleshootResult.routing);
+      return { messages: MessageUtils.ensureSmsLimit(troubleshootResult.response), shouldUpdateState: false };
+    }
+
+    // ── STEP 3: Property-first retrieval ───────────────────────────────────
+    if (classification.isPropertySpecific) {
+      const propertyResult = ConfirmedMessageOrchestrator.handlePropertyRetrieval(message, property, classification);
+      if (propertyResult) {
+        const followUp = this.getContextualFollowUp(classification.intent, message);
+        const fullResponse = propertyResult.response + '\n\n' + followUp;
+        await this.saveConversationMessage(phoneNumber, conversation.id, message, fullResponse);
+        const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, fullResponse, classification);
+        await this.conversationManager.updateConversationState(phoneNumber, {
+          last_message_type: classification.intent,
+          last_response: fullResponse,
+          last_intent: classification.intent,
+          conversation_context: updatedCtx,
+        });
+        console.log('📊 [Routing]', propertyResult.routing);
+        return { messages: MessageUtils.ensureSmsLimit(fullResponse), shouldUpdateState: false };
+      }
+
+      // Property-specific question but no data → STEP 6: host escalation
+      if (!classification.shouldUseAI) {
+        const escalation = ConfirmedMessageOrchestrator.buildHostEscalation(message, property, classification, conversationContext);
+        await this.saveConversationMessage(phoneNumber, conversation.id, message, escalation.response);
+        const updatedCtx = { ...conversationContext, last_host_contact_offer_timestamp: new Date().toISOString() };
+        await this.conversationManager.updateConversationState(phoneNumber, { conversation_context: updatedCtx });
+        console.log('📊 [Routing]', escalation.routing);
+        return { messages: MessageUtils.ensureSmsLimit(escalation.response), shouldUpdateState: false };
+      }
+    }
+
+    // ── STEP 5: AI fallback (recommendations, general knowledge, ambiguous) ─
+    try {
+      const history = await this.getConversationHistory(phoneNumber, conversation.id);
+      const slimContext = ConfirmedMessageOrchestrator.buildSlimAIContext(message, property, conversation, classification, history);
+
+      console.log(`🧠 [Orchestrator] STEP 5: Calling AI concierge (${history.length} history msgs, intent: ${classification.intent})`);
 
       const { data, error } = await this.supabase.functions.invoke('ai-concierge', {
-        body: { message, property, conversationHistory: history, guestName },
+        body: {
+          message,
+          property,
+          conversationHistory: history,
+          guestName: slimContext.guestName,
+          slimContext, // Pass the slim context for enhanced processing
+        },
       });
 
-      if (error) {
-        console.error('❌ AI concierge invocation error:', error);
-        throw error;
-      }
+      if (error) throw error;
 
       const aiResponse = data?.response;
-      if (!aiResponse) {
-        throw new Error('Empty AI response');
-      }
+      if (!aiResponse) throw new Error('Empty AI response');
 
-      console.log('✅ AI concierge responded:', aiResponse.substring(0, 100));
-
-      // Save to conversation history
+      console.log('✅ AI responded:', aiResponse.substring(0, 100));
       await this.saveConversationMessage(phoneNumber, conversation.id, message, aiResponse);
-
-      // Update conversation state
+      const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, aiResponse, classification);
       await this.conversationManager.updateConversationState(phoneNumber, {
         last_message_type: 'ai_concierge',
         last_response: aiResponse,
+        last_intent: classification.intent,
+        conversation_context: updatedCtx,
       });
 
-      return {
-        messages: MessageUtils.ensureSmsLimit(aiResponse),
-        shouldUpdateState: false,
-      };
+      console.log('📊 [Routing]', { intent: classification.intent, propertyDataUsed: false, knowledgeBaseUsed: false, aiUsed: true, escalationTriggered: false, repetitionPrevented: false });
+
+      return { messages: MessageUtils.ensureSmsLimit(aiResponse), shouldUpdateState: false };
     } catch (err) {
-      console.error('❌ AI concierge failed, using fallback:', err);
+      console.error('❌ AI concierge failed:', err);
+
+      // STEP 6: Final host escalation fallback
       const fallback = property.emergency_contact
         ? `I'm having trouble right now. For immediate help, contact your host at ${property.emergency_contact}.`
         : "I'm having trouble right now. Please try again in a moment or contact your host directly.";
-      return {
-        messages: MessageUtils.ensureSmsLimit(fallback),
-        shouldUpdateState: false,
-      };
+      return { messages: MessageUtils.ensureSmsLimit(fallback), shouldUpdateState: false };
     }
   }
 

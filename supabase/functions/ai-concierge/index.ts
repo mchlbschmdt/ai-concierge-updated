@@ -12,19 +12,24 @@ serve(async (req) => {
   }
 
   try {
-    const { message, property, conversationHistory, guestName } = await req.json();
+    const { message, property, conversationHistory, guestName, slimContext } = await req.json();
 
     const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
     if (!OPENAI_API_KEY) {
       throw new Error('OPENAI_API_KEY is not configured');
     }
 
-    // Build rich property context
-    const propertyContext = buildPropertyContext(property, guestName);
-    
+    // Build system prompt — use slim context when available for focused responses
+    let systemPrompt: string;
+    if (slimContext) {
+      systemPrompt = buildSlimPropertyContext(slimContext);
+    } else {
+      systemPrompt = buildPropertyContext(property, guestName);
+    }
+
     // Build conversation messages for OpenAI
     const messages: any[] = [
-      { role: 'system', content: propertyContext },
+      { role: 'system', content: systemPrompt },
     ];
 
     // Add conversation history (last 10 messages)
@@ -40,7 +45,7 @@ serve(async (req) => {
     // Add the current message
     messages.push({ role: 'user', content: message });
 
-    console.log(`🤖 AI Concierge request for ${property?.property_name}: "${message}" (${messages.length} msgs in context)`);
+    console.log(`🤖 AI Concierge request for ${property?.property_name || slimContext?.propertyName}: "${message}" (${messages.length} msgs, slim: ${!!slimContext})`);
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -165,4 +170,41 @@ ${property.management_company_name ? `Managed by: ${property.management_company_
    - Never ignore the property context above
    - Never repeat the same recommendations in a conversation
    - Never use corporate/formal language — keep it natural and warm`;
+}
+
+/**
+ * Build a focused system prompt from slim context.
+ * Only includes relevant property snippets and enforces response rules.
+ */
+function buildSlimPropertyContext(slimContext: any): string {
+  const greeting = slimContext.guestName
+    ? `The guest's name is ${slimContext.guestName}. Use their name occasionally to be personal.`
+    : '';
+
+  const snippets = slimContext.propertySnippets || {};
+  const rules = (slimContext.responseRules || []).map((r: string, i: number) => `${i + 1}. ${r}`).join('\n');
+
+  return `You are the personal concierge for guests staying at "${slimContext.propertyName}" located at ${slimContext.propertyAddress}.
+${greeting}
+
+Your personality: You're a warm, knowledgeable local who genuinely loves this area. You speak casually but helpfully — like a trusted friend who lives nearby. Never sound robotic or corporate.
+
+═══ GUEST'S CURRENT QUESTION CONTEXT ═══
+Intent detected: ${slimContext.intent}
+${slimContext.memorySummary}
+
+═══ RELEVANT PROPERTY INFO ═══
+${snippets.relevant_knowledge ? `Knowledge base match:\n${snippets.relevant_knowledge}\n` : ''}
+${snippets.local_recommendations ? `Host's local recommendations:\n${snippets.local_recommendations}\n` : ''}
+${snippets.special_notes ? `Special notes:\n${snippets.special_notes}\n` : ''}
+${snippets.emergency_contact ? `Emergency contact: ${snippets.emergency_contact}` : ''}
+
+═══ RESPONSE RULES ═══
+${rules}
+
+CRITICAL:
+- Never invent property-specific details (door codes, wifi passwords, prices, etc.)
+- If you don't have the information, say so honestly and offer to contact the host.
+- Never give generic filler like "There are many great restaurants." Be specific or say you don't know.
+- Keep responses SMS-friendly: concise, warm, and actionable.`;
 }
