@@ -599,6 +599,41 @@ export type Database = {
         }
         Relationships: []
       }
+      property_access: {
+        Row: {
+          access_level: string
+          created_at: string
+          granted_by: string | null
+          id: string
+          property_id: string
+          user_id: string
+        }
+        Insert: {
+          access_level?: string
+          created_at?: string
+          granted_by?: string | null
+          id?: string
+          property_id: string
+          user_id: string
+        }
+        Update: {
+          access_level?: string
+          created_at?: string
+          granted_by?: string | null
+          id?: string
+          property_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "property_access_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       property_codes: {
         Row: {
           address: string
@@ -1204,6 +1239,10 @@ export type Database = {
       admin_update_user_password: {
         Args: { new_password: string; target_user_id: string }
         Returns: undefined
+      }
+      has_property_access: {
+        Args: { _property_id: string; _user_id: string }
+        Returns: boolean
       }
       has_role: {
         Args: {
