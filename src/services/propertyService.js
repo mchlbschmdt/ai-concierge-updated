@@ -39,9 +39,14 @@ export async function fetchProperties() {
       }
     });
 
+    // Check which properties are shared (not owned by current user)
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    const currentUserId = currentUser?.id;
+
     const propertiesWithFiles = (properties || []).map(p => ({
       ...p,
-      files: filesByProperty[p.id] || []
+      files: filesByProperty[p.id] || [],
+      is_shared: currentUserId && p.user_id !== currentUserId,
     }));
     
     return propertiesWithFiles;

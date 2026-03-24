@@ -347,8 +347,11 @@ function UserAccessDrawer({ user, products, currentUser, onClose, onRefresh }) {
             <div className="text-xs text-muted-foreground mt-1">Joined {format(new Date(user.created_at), 'MMM d, yyyy')}</div>
           </div>
 
+          {/* Property Access */}
+          <PropertyAssignment user={user} currentUser={currentUser} />
+
           {/* Products */}
-          <div className="space-y-3">
+          <div className="space-y-3 mt-6">
             {products.map(prod => {
               const ent = user.entitlements?.find(e => e.product_id === prod.id);
               const isExpanded = actionProduct === prod.id;
