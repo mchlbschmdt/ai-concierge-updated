@@ -94,9 +94,16 @@ export default function PropertyGridCard({ property, onUpdate }) {
 
         {nameEdit.error && <p className="text-xs text-error mb-2">{nameEdit.error}</p>}
 
-        <p className="text-xs text-muted-foreground mb-1">
-          Code: <span className="font-medium text-foreground">{property.code || "N/A"}</span>
-        </p>
+        <div className="flex items-center gap-2 mb-1">
+          <p className="text-xs text-muted-foreground">
+            Code: <span className="font-medium text-foreground">{property.code || "N/A"}</span>
+          </p>
+          {property.is_shared && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-primary/30 text-primary">
+              Shared
+            </Badge>
+          )}
+        </div>
         
         <p className="text-sm text-foreground/80 mb-2">{property.address || "No Address"}</p>
 
