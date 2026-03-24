@@ -11,6 +11,7 @@ import { roleService } from '@/services/roleService';
 import { toast } from 'sonner';
 import Layout from '@/components/Layout';
 import { Input } from '@/components/ui/input';
+import PropertyAssignment from '@/components/admin/PropertyAssignment';
 import { format, formatDistanceToNow, subDays } from 'date-fns';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
