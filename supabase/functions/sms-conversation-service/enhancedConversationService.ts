@@ -379,8 +379,10 @@ export class EnhancedConversationService {
 
     // ── STEP 5: Property-first retrieval (INFORMATIONAL only) ─────────────
     if (classification.isPropertySpecific) {
-      const propertyResult = ConfirmedMessageOrchestrator.handlePropertyRetrieval(message, property, classification);
+      let propertyResult = ConfirmedMessageOrchestrator.handlePropertyRetrieval(message, property, classification);
       if (propertyResult) {
+        // Validate response doesn't contain cross-topic content
+        propertyResult = { ...propertyResult, response: ConfirmedMessageOrchestrator.validateResponseForIntent(propertyResult.response, classification.intent) };
         await this.saveConversationMessage(phoneNumber, conversation.id, message, propertyResult.response);
         const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, propertyResult.response, classification, propertyResult);
         await this.conversationManager.updateConversationState(phoneNumber, {
