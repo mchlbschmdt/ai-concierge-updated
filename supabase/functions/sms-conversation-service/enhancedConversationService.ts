@@ -24,6 +24,8 @@ import { TroubleshootingDetectionService } from './troubleshootingDetectionServi
 import { HostContactService } from './hostContactService.ts';
 import { PropertyDataExtractorEnhanced } from './propertyDataExtractorEnhanced.ts';
 import { PropertyLocationAnalyzer } from './propertyLocationAnalyzer.ts';
+import { FaqMatchingService } from './faqMatchingService.ts';
+import { ConciergeStyleService } from './conciergeStyleService.ts';
 import { Conversation, Property } from './types.ts';
 
 export class EnhancedConversationService {
