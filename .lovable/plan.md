@@ -1,41 +1,72 @@
 
 
-# Fix: Webhook Signature Verification Still Failing (401)
+# Plan: Implement Priority-Solve-Before-Escalation Rules
 
-## Problem
-The updated `verifyWebhookSignature` function is still computing an incorrect HMAC, causing every incoming SMS to be rejected with 401. The logs confirm the new code is deployed (v2.1) but signature verification fails silently -- no debug output about what specifically mismatched.
+## Summary
+Embed your new operational rules into the SMS concierge across three layers: the AI system prompt, the orchestration pipeline, and the style service. The core change is shifting from "escalate immediately on issues" to "troubleshoot first, escalate only if unresolved."
 
-## Root Cause Analysis
-The OpenPhone signature format `hmac;1;timestamp;signature` splits into 4 parts, but the code destructures as `[, , timestamp, signature]` skipping index 1 (the version "1"). This is correct. However, there are two likely remaining issues:
+## Current Behavior (Problems)
+1. **Issues auto-escalate**: When no knowledge base steps exist, `handleIssue` immediately triggers host handoff — no troubleshooting attempt
+2. **AI underutilized**: `shouldUseAI` is only `true` for RECOMMENDATION and GENERAL_KNOWLEDGE — issues and ambiguous questions bypass AI entirely
+3. **No confidence-based responses**: All unknowns treated identically (escalate to host)
+4. **No specific escalation contact**: Escalation messages use generic phrasing instead of the property manager number `+1 321-340-6333`
 
-1. **The webhook secret may not be base64-encoded** -- the 44-char length is suggestive but not conclusive. The secret could be a raw string that should be used directly as UTF-8.
-2. **Body normalization** -- Supabase edge runtime may alter whitespace/encoding when `req.text()` is called, changing the body hash.
+## Changes
 
-## Fix (Two-Part)
+### 1. Update AI system prompt (`ai-concierge/index.ts`)
 
-### 1. Add bypass using existing `BYPASS_SIGNATURE_VERIFICATION` secret
-You already have this secret configured. Add a check at the top of the verification block: if `BYPASS_SIGNATURE_VERIFICATION` is set to `"true"`, skip verification entirely. This unblocks SMS immediately.
+In both `buildPropertyContext` and `buildSlimPropertyContext`, replace the STRICT RULES section with the full new ruleset:
 
-### 2. Add debug logging to signature verification
-Log the computed vs expected signature so we can diagnose the exact mismatch and fix verification permanently.
+- **Priority Rule**: Answer from property data → best-guess from typical rental behavior → helpful alternatives → troubleshooting steps → escalate only as last resort
+- **Troubleshooting Mode**: When guest reports a problem, MUST acknowledge + provide 2-4 specific troubleshooting steps + explain expected outcome + only escalate if unresolved
+- **Confidence-Based Responses**: HIGH → answer directly, MEDIUM → hedge with "Typically..." / "Usually...", LOW → offer to confirm
+- **Unknown Info Handling**: Provide most helpful likely answer first, then optionally offer to confirm — never lead with "I'll double-check with the host"
+- **Anti-Repetition**: Never repeat previously provided info unless asked; prioritize most recent question
+- **Escalation Behavior**: When escalating, explain WHY, summarize the request, and confirm contacting Property Manager at +1 321-340-6333. Never use vague "I'll check on that"
 
-### Code Change (openphone-webhook/index.ts, lines 232-260)
-```typescript
-// Check bypass flag first
-const bypassVerification = Deno.env.get('BYPASS_SIGNATURE_VERIFICATION') === 'true';
+### 2. Update orchestrator issue handling (`confirmedMessageOrchestrator.ts`)
 
-if (bypassVerification) {
-  console.log('⚠️ Signature verification BYPASSED via BYPASS_SIGNATURE_VERIFICATION flag');
-} else if (webhookSecret && signature) {
-  const isValid = await verifyWebhookSignature(body, signature, webhookSecret);
-  if (!isValid) {
-    // Return 401
-  }
-} ...
-```
+**`handleIssue` method (lines 197-268)**: Change the "no KB steps found" path. Instead of immediately setting `triggerHandoff = true`, route to AI concierge for troubleshooting guidance first:
 
-Also add debug logging inside `verifyWebhookSignature` to log computed vs expected signatures so the root cause can be identified and fixed permanently.
+- When KB has steps → use them (unchanged)
+- When KB has NO steps → return `null` so the message falls through to AI concierge with a troubleshooting-mode context flag, NOT immediate host escalation
+- Only escalate after AI has provided troubleshooting and guest confirms issue persists
+
+**`classifyMessage` method (line 162)**: Update `shouldUseAI` to also be `true` for ISSUE type (so unresolved issues get AI troubleshooting instead of immediate escalation).
+
+### 3. Update slim AI context rules (`confirmedMessageOrchestrator.ts`, lines 554-567)
+
+Add new response rules to the `responseRules` array:
+- Troubleshooting-first instruction for ISSUE-type messages
+- Confidence-based response guidance
+- Anti-repetition rule
+- Escalation format with specific contact number
+
+### 4. Update escalation language (`conciergeStyleService.ts`)
+
+- Update `getEscalationResponse` to include specific property manager number `+1 321-340-6333` in all escalation variants
+- Update `getIssueAcknowledgment` to always include troubleshooting steps (even generic ones) before offering escalation
+- Add new method `getTroubleshootingPrompt` that returns category-specific troubleshooting steps for common issues (AC, WiFi, hot tub, leak, TV, lock) as a fallback when KB has nothing
+
+### 5. Update issue acknowledgment flow
+
+Add a new `TROUBLESHOOTING_STEPS` bank in `conciergeStyleService.ts` with generic steps per category:
+- **AC/heating**: Check thermostat settings, ensure doors/windows closed, check breaker
+- **WiFi**: Verify correct network name, restart router, move closer to router
+- **Hot tub**: Check timer/jets button, wait 15 min for heating, verify breaker
+- **Leak**: Locate and turn off water source, contain with towels, then escalate
+- **TV**: Check input/source button, ensure HDMI connected, replace remote batteries
+- **Lock/access**: Re-enter code slowly, check battery indicator, try alternate entry
+
+## Files Modified
+1. `supabase/functions/ai-concierge/index.ts` — system prompt rules
+2. `supabase/functions/sms-conversation-service/confirmedMessageOrchestrator.ts` — issue routing + slim context rules
+3. `supabase/functions/sms-conversation-service/conciergeStyleService.ts` — escalation language + troubleshooting step banks
 
 ## Expected Result
-SMS messages from OpenPhone will be accepted immediately (via bypass), and the debug logs will reveal the exact signature mismatch for a permanent fix.
+- Issues get troubleshooting guidance before any host alert
+- AI handles ambiguous questions and general knowledge
+- Escalation messages include specific property manager contact
+- Responses use confidence-based language instead of uniform "I'll check with the host"
+- No unnecessary host alerts for solvable problems
 
