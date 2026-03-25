@@ -749,6 +749,9 @@ export class ConfirmedMessageOrchestrator {
       updated.last_response_type = orchestratorResult?.source || 'answer';
     }
 
+    // Store last response text for courtesy loop prevention
+    updated.last_response_text = response;
+
     if (orchestratorResult?.triggerHostHandoff) {
       updated.host_handoff_sent = true;
       updated.host_handoff_timestamp = new Date().toISOString();
@@ -756,6 +759,8 @@ export class ConfirmedMessageOrchestrator {
       updated.unresolved_issue_type = classification.troubleshootingResult?.category || null;
       updated.awaiting_host_response = true;
       updated.awaiting_guest_confirmation_for_handoff = false;
+      updated.last_escalation_sent_at = new Date().toISOString();
+      updated.last_escalation_issue_type = classification.intent;
     }
 
     if (orchestratorResult?.source === 'yes_confirmation') {
