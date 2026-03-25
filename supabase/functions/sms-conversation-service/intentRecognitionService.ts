@@ -435,6 +435,58 @@ export class IntentRecognitionService {
     ])) {
       return { intent: 'ask_towels', confidence: 0.95 };
     }
+
+    // Overnight guests / visitors / extra guests
+    if (this.matchesKeywords(message, [
+      'overnight guest', 'overnight guests', 'can guests stay', 'friend stay',
+      'family stay', 'visitor', 'visitors', 'company over', 'people over',
+      'extra guest', 'extra guests', 'additional guest', 'additional guests',
+      'have someone stay', 'someone stay over', 'guest stay the night',
+      'can my friend', 'can my family', 'bring a friend', 'bring a guest',
+      'overnight', 'stay the night', 'sleep over', 'sleepover'
+    ])) {
+      return { intent: 'ask_overnight_guests', confidence: 0.95 };
+    }
+
+    // Beach chairs / beach gear / beach equipment
+    if (this.matchesKeywords(message, [
+      'beach chair', 'beach chairs', 'beach umbrella', 'beach umbrellas',
+      'beach gear', 'beach equipment', 'beach setup', 'beach supplies',
+      'chairs for the beach', 'umbrella for the beach', 'cooler',
+      'beach cooler', 'sand toys', 'boogie board'
+    ])) {
+      return { intent: 'ask_beach_chairs', confidence: 0.95 };
+    }
+
+    // House rules / policies
+    if (this.matchesKeywords(message, [
+      'house rules', 'house rule', 'rules', 'policy', 'policies',
+      'allowed', 'not allowed', 'prohibited', 'restrictions',
+      'quiet hours', 'noise', 'party', 'parties', 'events',
+      'can i smoke', 'smoking', 'smoke', 'vape', 'vaping'
+    ])) {
+      return { intent: 'ask_house_rules', confidence: 0.95 };
+    }
+
+    // Pet policy
+    if (this.matchesKeywords(message, [
+      'pet', 'pets', 'dog', 'dogs', 'cat', 'cats', 'animal', 'animals',
+      'pet friendly', 'pet-friendly', 'bring my dog', 'bring my pet',
+      'pet policy', 'pet fee', 'pet deposit'
+    ])) {
+      return { intent: 'ask_pet_policy', confidence: 0.95 };
+    }
+
+    // What's included / unit amenities
+    if (this.matchesKeywords(message, [
+      'what is included', 'whats included', 'what\'s included',
+      'come with', 'does it come with', 'does the unit have',
+      'is there a', 'do you provide', 'do you have',
+      'supplies', 'provided', 'included in the unit',
+      'what amenities', 'unit amenities', 'in the apartment'
+    ])) {
+      return { intent: 'ask_included_amenities', confidence: 0.9 };
+    }
     
     // NEW: Resort amenities intent
     if (this.detectResortAmenitiesIntent(lowerMessage)) {
