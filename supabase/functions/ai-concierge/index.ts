@@ -225,6 +225,7 @@ ${snippets.relevant_knowledge ? `${snippets.relevant_knowledge}\n` : ''}
 ${snippets.local_recommendations ? `Host's local recs:\n${snippets.local_recommendations}\n` : ''}
 ${snippets.special_notes ? `Notes: ${snippets.special_notes}\n` : ''}
 ${snippets.emergency_contact ? `Host: ${snippets.emergency_contact}` : ''}
+${slimContext.faqContext ? `\n═══ RELEVANT FAQ ENTRIES ═══\n${slimContext.faqContext}\nUse these as reference but respond naturally. Do NOT copy verbatim.` : ''}
 
 ═══ RULES ═══
 ${rules}
