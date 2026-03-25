@@ -248,9 +248,36 @@ export class EnhancedConversationService {
     console.log('🤖 Orchestrator v4 (threaded) processing:', message);
     const conversationContext = (conversation.conversation_context as any) || {};
 
+    // ── STEP -2: TOPIC-SWITCH DETECTION — reset stale intent context ──
+    const lastIntent = conversationContext?.last_intent || conversation.last_intent;
+    const currentTopicBucket = this.getTopicBucket(message);
+    const lastTopicBucket = lastIntent ? this.getTopicBucketFromIntent(lastIntent) : null;
+
+    if (currentTopicBucket && lastTopicBucket && currentTopicBucket !== lastTopicBucket) {
+      console.log(`🔄 [Topic Switch] ${lastTopicBucket} → ${currentTopicBucket} — clearing stale context`);
+      // Clear stale state that would cause the old topic to bleed
+      conversationContext.awaiting_guest_confirmation_for_handoff = false;
+      conversationContext.pending_handoff_reason = null;
+      conversationContext.pending_handoff_topic = null;
+      // Do NOT clear escalation tracking (host_handoff_sent etc.) — those are safety-critical
+    }
+
+    // ── STEP -1.5: PENDING APPROVAL CHECK — if awaiting host approval, don't re-answer ──
+    if (conversationContext?.pending_approval_type && this.isNewQuestion(message)) {
+      const pendingType = conversationContext.pending_approval_type;
+      const currentBucket = this.getTopicBucket(message);
+      const pendingBucket = this.getTopicBucketFromApprovalType(pendingType);
+
+      // If same topic as pending approval, tell guest we're still waiting
+      if (currentBucket === pendingBucket) {
+        const waitResponse = "I'm checking with the host now and will update you as soon as I hear back.";
+        await this.saveConversationMessage(phoneNumber, conversation.id, message, waitResponse);
+        return { messages: MessageUtils.ensureSmsLimit(waitResponse), shouldUpdateState: false };
+      }
+      // Different topic — proceed normally (topic switch already cleared stale state above)
+    }
+
     // ── STEP -1: COURTESY LOOP PREVENTION ─────────────────────────────
-    // If last response was a courtesy/closing message and new message looks like a question,
-    // force fresh intent detection — do NOT reuse previous response template.
     const lastResponseType = conversationContext?.last_response_type;
     const lastResponse = (conversationContext?.last_response_text || conversation.last_response || '').toLowerCase();
     const isLastCourtesy = this.isCourtesyResponse(lastResponse, lastResponseType);
@@ -258,7 +285,6 @@ export class EnhancedConversationService {
 
     if (isLastCourtesy && isNewQuestion) {
       console.log('🚫 [Courtesy Guard] Last response was courtesy, new message is a question — forcing fresh intent detection');
-      // Clear any stale state that might cause the courtesy to repeat
       if (conversationContext.awaiting_guest_confirmation_for_handoff) {
         conversationContext.awaiting_guest_confirmation_for_handoff = false;
       }
@@ -353,8 +379,10 @@ export class EnhancedConversationService {
 
     // ── STEP 5: Property-first retrieval (INFORMATIONAL only) ─────────────
     if (classification.isPropertySpecific) {
-      const propertyResult = ConfirmedMessageOrchestrator.handlePropertyRetrieval(message, property, classification);
+      let propertyResult = ConfirmedMessageOrchestrator.handlePropertyRetrieval(message, property, classification);
       if (propertyResult) {
+        // Validate response doesn't contain cross-topic content
+        propertyResult = { ...propertyResult, response: ConfirmedMessageOrchestrator.validateResponseForIntent(propertyResult.response, classification.intent) };
         await this.saveConversationMessage(phoneNumber, conversation.id, message, propertyResult.response);
         const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, propertyResult.response, classification, propertyResult);
         await this.conversationManager.updateConversationState(phoneNumber, {
@@ -481,7 +509,8 @@ export class EnhancedConversationService {
       let aiResponse = data?.response;
       if (!aiResponse) throw new Error('Empty AI response');
 
-      // ── POST-AI: Detect escalation language and trigger real host SMS ──
+      // ── POST-AI: Validate response content matches intent ──
+      aiResponse = ConfirmedMessageOrchestrator.validateResponseForIntent(aiResponse, classification.intent);
       const escalationTriggered = await this.detectAndTriggerEscalation(
         aiResponse, property, phoneNumber, conversationContext, message, classification
       );
@@ -724,23 +753,21 @@ export class EnhancedConversationService {
         if (property.wifi_password) response += `\nPassword: ${property.wifi_password}`;
         return response;
       }
-      return null; // Fall through to AI if no wifi data
+      return null;
     }
 
-    // Check-out
-    if (/\b(check\s*-?\s*out|checkout)\b/.test(msg) && !/recommend|restaurant|food|eat/i.test(msg)) {
+    // Check-out (ONLY time, not late checkout requests)
+    if (/\b(check\s*-?\s*out|checkout)\b/.test(msg) && !/recommend|restaurant|food|eat|late|later|extend/i.test(msg)) {
       if (property.check_out_time) {
-        return `🕐 Check-out time is ${property.check_out_time}.${property.cleaning_instructions ? ` ${property.cleaning_instructions}` : ''}`;
+        return `🕐 Check-out time is ${property.check_out_time}.`;
       }
       return null;
     }
 
-    // Check-in
-    if (/\b(check\s*-?\s*in|checkin)\b/.test(msg) && !/recommend|restaurant|food|eat/i.test(msg)) {
+    // Check-in (ONLY time, not early check-in requests — MINIMAL answer, no access instructions)
+    if (/\b(check\s*-?\s*in|checkin)\b/.test(msg) && !/recommend|restaurant|food|eat|early|before|earlier/i.test(msg)) {
       if (property.check_in_time) {
-        let response = `🕐 Check-in time is ${property.check_in_time}.`;
-        if (property.access_instructions) response += `\n🔑 ${property.access_instructions}`;
-        return response;
+        return `🕐 Check-in time is ${property.check_in_time}.`;
       }
       return null;
     }
@@ -761,7 +788,56 @@ export class EnhancedConversationService {
       return null;
     }
 
-    return null; // Not a quick lookup → go to AI
+    return null;
+  }
+
+  // ═══ TOPIC BUCKET HELPERS — for topic-switch detection ═══
+  private getTopicBucket(message: string): string | null {
+    const msg = message.toLowerCase();
+    if (/\b(trash|garbage|basura|recycle|recycling)\b/.test(msg)) return 'trash';
+    if (/\b(towel|beach towel|linen|sheet)\b/.test(msg)) return 'towels';
+    if (/\b(bag|luggage|baggage|drop.*bag|store.*bag|hold.*bag)\b/.test(msg)) return 'bag_drop';
+    if (/\b(early|before).*\b(check.?in|arrive|arrival)\b/.test(msg) || /\bcheck.?in\b.*\b(early|before|earlier)\b/.test(msg)) return 'early_checkin';
+    if (/\b(late|after|later|extend).*\b(check.?out|departure|leave|stay)\b/.test(msg) || /\bcheck.?out\b.*\b(late|later|extend)\b/.test(msg)) return 'late_checkout';
+    if (/\b(check.?in|checkin)\b/.test(msg) && !/early|before/.test(msg)) return 'checkin_time';
+    if (/\b(check.?out|checkout)\b/.test(msg) && !/late|later|extend/.test(msg)) return 'checkout_time';
+    if (/\b(wifi|wi-fi|internet|password|network)\b/.test(msg)) return 'wifi';
+    if (/\b(parking|park|garage)\b/.test(msg)) return 'parking';
+    if (/\b(key fob|keyfob|key card|keycard|get.*(the )?key)\b/.test(msg)) return 'key_fob';
+    if (/\b(door code|entry code|access code|lock code)\b/.test(msg)) return 'door_code';
+    if (/\b(building access|building entrance|enter.*building|get into.*building)\b/.test(msg)) return 'building_access';
+    if (/\b(restaurant|food|eat|dining|hungry|meal|lunch|dinner|breakfast|brunch)\b/.test(msg)) return 'food';
+    if (/\b(coffee|café|cafe|espresso)\b/.test(msg)) return 'coffee';
+    if (/\b(pool|swim|hot tub|jacuzzi)\b/.test(msg)) return 'pool';
+    if (/\b(grill|bbq|barbecue)\b/.test(msg)) return 'grill';
+    if (/\b(direction|how to get|airport|driving)\b/.test(msg)) return 'directions';
+    if (/\b(emergency|contact.*host|manager)\b/.test(msg)) return 'emergency';
+    if (/\b(attraction|things to do|sightseeing|tour|museum|beach|hik)\b/.test(msg)) return 'activities';
+    return null;
+  }
+
+  private getTopicBucketFromIntent(intent: string): string | null {
+    const map: Record<string, string> = {
+      'ask_garbage': 'trash', 'ask_towels': 'towels', 'ask_bag_drop': 'bag_drop',
+      'ask_early_checkin': 'early_checkin', 'ask_late_checkout': 'late_checkout',
+      'ask_checkin_time': 'checkin_time', 'ask_checkout_time': 'checkout_time',
+      'ask_wifi': 'wifi', 'ask_parking': 'parking', 'ask_key_fob': 'key_fob',
+      'ask_door_code': 'door_code', 'ask_building_access': 'building_access',
+      'ask_food_recommendations': 'food', 'ask_coffee_recommendations': 'coffee',
+      'ask_amenity': 'pool', 'ask_directions': 'directions',
+      'ask_emergency_contact': 'emergency', 'ask_attractions': 'activities',
+      'ask_access': 'building_access',
+    };
+    return map[intent] || null;
+  }
+
+  private getTopicBucketFromApprovalType(approvalType: string): string | null {
+    const map: Record<string, string> = {
+      'early_check_in': 'early_checkin',
+      'late_check_out': 'late_checkout',
+      'bag_drop': 'bag_drop',
+    };
+    return map[approvalType] || null;
   }
 
   // Load recent conversation messages for AI context

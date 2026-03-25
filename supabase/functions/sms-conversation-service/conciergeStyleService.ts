@@ -236,13 +236,17 @@ const RESPONSE_VARIATIONS: Record<string, string[]> = {
 
 const REQUEST_VARIATIONS: Record<string, string[]> = {
   'early_checkin': [
-    "Early check-in can sometimes be arranged depending on the cleaning schedule. What time were you thinking of arriving?",
-    "It's not always guaranteed, but we can usually check based on timing. When were you planning to get there?",
-    "We may be able to accommodate that depending on turnover — what time works best for you?",
+    "We'd be happy to check with the host to see if an early check-in may be possible. What time were you hoping to arrive?",
+    "Early check-in isn't guaranteed, but we can certainly ask the host. What time were you thinking?",
+    "We can check whether early check-in may be available — it depends on turnover. What time did you have in mind?",
   ],
   'late_checkout': [
-    "Late checkout is sometimes possible depending on the next booking. What time were you thinking? I'll check for you.",
-    "We might be able to arrange a later checkout — what time would work best? I'll reach out to the host.",
+    "We can check with the host to see whether a later checkout might be possible. What time were you hoping for?",
+    "Late checkout depends on the next booking — we can ask the host for you. What time were you thinking?",
+  ],
+  'bag_drop': [
+    "We can check whether early bag drop may be possible — it depends on turnover and cleaner timing. BagsAway and Bounce are also great nearby luggage storage options. Would you like me to check with the host?",
+    "Early bag drop isn't always guaranteed, but we can ask. In the meantime, BagsAway and Bounce offer nearby luggage storage. Want me to check with the host?",
   ],
   'pets': [
     "Let me check with the host about pets for you. I'll get back to you with their answer!",
