@@ -171,7 +171,7 @@ export class ConfirmedMessageOrchestrator {
       isRequest,
       isTroubleshooting: isIssue,
       troubleshootingResult: isIssue ? troubleshootingResult : null,
-      requiresHostContact: requestClassification.requiresHostContact || isIssue,
+      requiresHostContact: requestClassification.requiresHostContact,
       shouldUseAI,
       confidence: Math.max(intentResult.confidence, requestClassification.confidence),
       subIntents: intentResult.subIntents,
