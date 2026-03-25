@@ -586,6 +586,132 @@ export class EnhancedConversationService {
     }
   }
 
+  // ═══ COURTESY LOOP PREVENTION HELPERS ═══
+  private isCourtesyResponse(response: string, responseType?: string): boolean {
+    if (responseType === 'thanks_reply' || responseType === 'closing_reply' || responseType === 'generic_courtesy') return true;
+    const courtesyPatterns = [
+      /you'?re welcome/i,
+      /enjoy your stay/i,
+      /anything else.*(help|need|assist)/i,
+      /have a (great|wonderful|lovely|fantastic)/i,
+      /glad (i|to) could help/i,
+      /happy to help/i,
+      /let me know if (you |there'?s )?(need|anything)/i,
+      /feel free to (ask|reach|message)/i,
+      /hope that helps/i,
+    ];
+    return courtesyPatterns.some(p => p.test(response));
+  }
+
+  private isNewQuestion(message: string): boolean {
+    const msg = message.toLowerCase().trim();
+    // Short gratitude messages are NOT new questions
+    const pureGratitude = /^(thanks?|thank you|ty|thx|ok|okay|great|got it|perfect|awesome|cool|nice|good|sounds good|appreciate it)\.?!?$/i;
+    if (pureGratitude.test(msg)) return false;
+    // Check for question indicators
+    if (msg.includes('?')) return true;
+    if (/^(can|do|where|what|is|are|how|when|will|could|would|should|does|did|has|have|who|why)\b/.test(msg)) return true;
+    // Known FAQ keywords
+    const faqKeywords = ['bag', 'luggage', 'trash', 'garbage', 'wifi', 'parking', 'pool', 'checkout', 'checkin', 'check-in', 'check-out', 'grill', 'bbq', 'restaurant', 'food', 'beach', 'towel', 'key', 'code', 'door', 'coffee', 'gym', 'laundry', 'iron', 'remote', 'tv', 'stove', 'ice'];
+    if (faqKeywords.some(k => msg.includes(k))) return true;
+    // Message longer than 6 chars and not just gratitude
+    if (msg.length > 6 && !pureGratitude.test(msg)) return true;
+    return false;
+  }
+
+  // ═══ ESCALATION DETECTION & REAL HOST SMS TRIGGER ═══
+  private async detectAndTriggerEscalation(
+    aiResponse: string,
+    property: Property,
+    guestPhone: string,
+    conversationContext: any,
+    guestMessage: string,
+    classification: any
+  ): Promise<boolean> {
+    const lower = aiResponse.toLowerCase();
+    const escalationPhrases = [
+      /i'?ll check with (the |your )?host/i,
+      /i'?ll confirm with (the |your )?host/i,
+      /i'?ll (reach out|let) (the |your )?(host|property manager)/i,
+      /i'?m reaching out/i,
+      /i'?ve (reached out|alerted|notified) (the |your )?(host|property manager)/i,
+      /i'?ll notify (the |your )?host/i,
+      /notifying (the |your )?(host|property manager)/i,
+    ];
+
+    const hasEscalationLanguage = escalationPhrases.some(p => p.test(aiResponse));
+    if (!hasEscalationLanguage) return false;
+
+    // Check for duplicate escalation (same issue within 30 min)
+    const lastEscalation = conversationContext?.last_escalation_sent_at;
+    const lastEscalationType = conversationContext?.last_escalation_issue_type;
+    if (lastEscalation && lastEscalationType === classification.intent) {
+      const elapsed = Date.now() - new Date(lastEscalation).getTime();
+      if (elapsed < 1800000) {
+        console.log('📞 [Auto-Escalation] Skipping duplicate (same issue, <30 min)');
+        return false;
+      }
+    }
+
+    console.log('📞 [Auto-Escalation] AI response contains escalation language — sending real host SMS');
+
+    const guestName = conversationContext?.guestName || conversationContext?.guest_name || guestPhone;
+    const propertyCode = property.code || property.property_name;
+
+    // Build structured host message
+    const hostMessage = [
+      `🏠 Guest alert at ${propertyCode}`,
+      `Guest: ${guestName} (${guestPhone})`,
+      ``,
+      `Message: "${guestMessage.substring(0, 150)}"`,
+      ``,
+      `How would you like me to respond?`,
+    ].join('\n');
+
+    const HOST_PHONE = '+13213406333';
+
+    try {
+      const OPENPHONE_API_KEY = Deno.env.get('OPENPHONE_API_KEY');
+      if (OPENPHONE_API_KEY) {
+        const response = await fetch('https://api.openphone.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Authorization': OPENPHONE_API_KEY,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            content: hostMessage,
+            to: [HOST_PHONE],
+          }),
+        });
+
+        if (response.ok) {
+          console.log('✅ [Auto-Escalation] Host SMS sent to', HOST_PHONE);
+        } else {
+          const err = await response.text();
+          console.warn('⚠️ [Auto-Escalation] SMS send failed:', response.status, err);
+        }
+      } else {
+        console.log('📞 [Auto-Escalation] No OpenPhone API key — logged but not sent');
+      }
+    } catch (err) {
+      console.error('❌ [Auto-Escalation] Failed:', err);
+    }
+
+    // Log notification
+    try {
+      await this.supabase.from('notifications').insert({
+        user_id: property.user_id || '00000000-0000-0000-0000-000000000000',
+        message: `Auto-escalation: ${guestName} at ${propertyCode} — "${guestMessage.substring(0, 100)}"`,
+        type: 'urgent',
+      });
+    } catch (e) {
+      console.warn('Could not log auto-escalation notification:', e);
+    }
+
+    return true;
+  }
+
   // Quick property data lookups — no AI needed
   private checkQuickLookup(message: string, property: Property): string | null {
     const msg = message.toLowerCase().trim();
