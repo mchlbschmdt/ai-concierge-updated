@@ -1,58 +1,41 @@
 
 
-# Fix: SMS Messages Not Getting Responses
+# Fix: Webhook Signature Verification Still Failing (401)
 
-## Root Cause
+## Problem
+The updated `verifyWebhookSignature` function is still computing an incorrect HMAC, causing every incoming SMS to be rejected with 401. The logs confirm the new code is deployed (v2.1) but signature verification fails silently -- no debug output about what specifically mismatched.
 
-The `openphone-webhook` edge function is **rejecting every incoming SMS** with a 401 error because webhook signature verification always fails.
+## Root Cause Analysis
+The OpenPhone signature format `hmac;1;timestamp;signature` splits into 4 parts, but the code destructures as `[, , timestamp, signature]` skipping index 1 (the version "1"). This is correct. However, there are two likely remaining issues:
 
-The bug is in `verifyWebhookSignature`: the OpenPhone webhook secret is a **base64-encoded** signing key, but the code uses it as a raw UTF-8 string. Per OpenPhone's docs (now Quo), step 3 is "Decode signing key from base64", then use the binary key for HMAC-SHA256. The current code skips this decode step, so no computed signature ever matches.
+1. **The webhook secret may not be base64-encoded** -- the 44-char length is suggestive but not conclusive. The secret could be a raw string that should be used directly as UTF-8.
+2. **Body normalization** -- Supabase edge runtime may alter whitespace/encoding when `req.text()` is called, changing the body hash.
 
-The secret length of 44 characters (visible in logs) confirms it's a base64-encoded 32-byte key.
+## Fix (Two-Part)
 
-## Fix
+### 1. Add bypass using existing `BYPASS_SIGNATURE_VERIFICATION` secret
+You already have this secret configured. Add a check at the top of the verification block: if `BYPASS_SIGNATURE_VERIFICATION` is set to `"true"`, skip verification entirely. This unblocks SMS immediately.
 
-### 1. Fix signature verification in `openphone-webhook/index.ts`
+### 2. Add debug logging to signature verification
+Log the computed vs expected signature so we can diagnose the exact mismatch and fix verification permanently.
 
-Replace the `verifyWebhookSignature` function to:
-- **Base64-decode the webhook secret** before using it as the HMAC key
-- Use the correct signed data format: `timestamp + "." + body`
-- Remove the verbose multi-approach guessing logic -- only the correct algorithm is needed
-- Keep one clean verification path
-
+### Code Change (openphone-webhook/index.ts, lines 232-260)
 ```typescript
-async function verifyWebhookSignature(body: string, signature: string, secret: string): Promise<boolean> {
-  const parts = signature.split(';');
-  if (parts.length !== 4 || parts[0] !== 'hmac') return false;
+// Check bypass flag first
+const bypassVerification = Deno.env.get('BYPASS_SIGNATURE_VERIFICATION') === 'true';
 
-  const [, , timestamp, providedSignature] = parts;
-  const payload = timestamp + '.' + body;
-
-  // Key step: base64-decode the secret before using as HMAC key
-  const keyBytes = Uint8Array.from(atob(secret), c => c.charCodeAt(0));
-
-  const key = await crypto.subtle.importKey(
-    'raw', keyBytes,
-    { name: 'HMAC', hash: 'SHA-256' },
-    false, ['sign']
-  );
-
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
-  const computed = btoa(String.fromCharCode(...new Uint8Array(sig)));
-
-  return computed === providedSignature;
-}
+if (bypassVerification) {
+  console.log('⚠️ Signature verification BYPASSED via BYPASS_SIGNATURE_VERIFICATION flag');
+} else if (webhookSecret && signature) {
+  const isValid = await verifyWebhookSignature(body, signature, webhookSecret);
+  if (!isValid) {
+    // Return 401
+  }
+} ...
 ```
 
-### 2. Clean up excessive debug logging
-
-Remove the ~100 lines of verbose signature debug logging. Keep a single success/fail log line.
-
-### 3. Redeploy the edge function
-
-Deploy the updated `openphone-webhook` function so real SMS messages from OpenPhone are accepted and processed.
+Also add debug logging inside `verifyWebhookSignature` to log computed vs expected signatures so the root cause can be identified and fixed permanently.
 
 ## Expected Result
-
-After this fix, incoming SMS messages will pass signature verification, be forwarded to `sms-conversation-service`, and generate responses back to the guest.
+SMS messages from OpenPhone will be accepted immediately (via bypass), and the debug logs will reveal the exact signature mismatch for a permanent fix.
 
