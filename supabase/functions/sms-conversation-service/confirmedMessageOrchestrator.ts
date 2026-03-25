@@ -159,7 +159,7 @@ export class ConfirmedMessageOrchestrator {
     const isPropertySpecific = !isIssue && !isRequest && !isRecommendation && !isGeneralKnowledge &&
       (propertySpecificIntents.includes(intentResult.intent) || requestClassification.type === 'INFORMATIONAL');
 
-    const shouldUseAI = isRecommendation || isGeneralKnowledge;
+    const shouldUseAI = isRecommendation || isGeneralKnowledge || isIssue;
 
     const classification: UnifiedClassification = {
       intent: isIssue ? `troubleshoot_${troubleshootingResult.category || 'general'}` : intentResult.intent,
@@ -171,7 +171,7 @@ export class ConfirmedMessageOrchestrator {
       isRequest,
       isTroubleshooting: isIssue,
       troubleshootingResult: isIssue ? troubleshootingResult : null,
-      requiresHostContact: requestClassification.requiresHostContact || isIssue,
+      requiresHostContact: requestClassification.requiresHostContact,
       shouldUseAI,
       confidence: Math.max(intentResult.confidence, requestClassification.confidence),
       subIntents: intentResult.subIntents,
@@ -233,38 +233,58 @@ export class ConfirmedMessageOrchestrator {
 
     // Check knowledge base for troubleshooting steps
     const kbResult = EnhancedPropertyKnowledgeService.searchPropertyKnowledge(property, message);
-    let response: string;
-    let triggerHandoff = false;
 
     if (kbResult.found && kbResult.confidence >= 0.5) {
-      response = ConciergeStyleService.getIssueAcknowledgment(equipment, true, property.emergency_contact || undefined);
+      // KB has steps — use them directly
+      let response = ConciergeStyleService.getIssueAcknowledgment(equipment, true, property.emergency_contact || undefined);
       response += `\n\n${kbResult.content}`;
       if (property.emergency_contact) {
-        response += `\n\nIf that doesn't do the trick, your host is at ${property.emergency_contact}.`;
+        response += `\n\nIf that doesn't do the trick, I'll reach out to the property manager at +1 321-340-6333.`;
       }
-    } else {
-      response = ConciergeStyleService.getIssueAcknowledgment(equipment, false, property.emergency_contact || undefined);
-      triggerHandoff = true; // Auto-alert host for unresolved issues
+
+      return {
+        response,
+        source: 'issue_response',
+        shouldUpdateState: true,
+        triggerHostHandoff: false,
+        routing: {
+          intent: classification.intent,
+          requestType: 'ISSUE',
+          propertyDataUsed: true,
+          knowledgeBaseUsed: true,
+          aiUsed: false,
+          escalationTriggered: false,
+          repetitionPrevented: false,
+        },
+      };
     }
 
-    return {
-      response,
-      source: 'issue_response',
-      shouldUpdateState: true,
-      triggerHostHandoff: triggerHandoff,
-      handoffReason: `Issue reported: ${equipment}`,
-      handoffSummary: `Guest reported ${equipment} issue: "${message}"`,
-      routing: {
-        intent: classification.intent,
-        requestType: 'ISSUE',
-        propertyDataUsed: kbResult.found,
-        knowledgeBaseUsed: kbResult.found,
-        aiUsed: false,
-        escalationTriggered: true,
-        repetitionPrevented: false,
-        hostHandoffTriggered: triggerHandoff,
-      },
-    };
+    // No KB steps → check built-in troubleshooting bank
+    const builtInSteps = ConciergeStyleService.getTroubleshootingSteps(category);
+    if (builtInSteps) {
+      let response = `Thanks for letting me know about the ${equipment}. Let's try a few things:\n\n${builtInSteps}`;
+      response += `\n\nLet me know if that helps! If not, I'll reach out to the property manager at +1 321-340-6333.`;
+
+      return {
+        response,
+        source: 'issue_response',
+        shouldUpdateState: true,
+        triggerHostHandoff: false,
+        routing: {
+          intent: classification.intent,
+          requestType: 'ISSUE',
+          propertyDataUsed: false,
+          knowledgeBaseUsed: false,
+          aiUsed: false,
+          escalationTriggered: false,
+          repetitionPrevented: false,
+        },
+      };
+    }
+
+    // No built-in steps either → fall through to AI concierge for troubleshooting guidance
+    console.log('🤖 [Orchestrator] No KB or built-in steps for issue, routing to AI for troubleshooting');
+    return null;
   }
 
   /**
@@ -555,12 +575,17 @@ export class ConfirmedMessageOrchestrator {
         'You are a luxury vacation rental concierge — warm, polished, and knowledgeable like a trusted local friend.',
         'Keep responses SMS-friendly — 1-3 sentences, max 400 chars. Concise and conversational.',
         'For recommendations: give 2-3 specific places with names and a one-line reason each.',
-        'Never invent property-specific facts. If unsure, say "Let me confirm that for you."',
-        'Never say "property guide", "general_info", or "I don\'t see that information."',
+        'Never invent property-specific facts. If unsure, provide a best-guess with a light hedge ("Typically..." or "Usually...").',
+        'Never say "property guide", "general_info", "I don\'t see that information", or "I\'ll check on that."',
         'No numbered multi-part responses (1/2, 2/2). Single natural flow.',
         'Sound like a warm host texting — not a hotel front desk or chatbot.',
         'Use contractions naturally (it\'s, there\'s, you\'ll, we\'re).',
         'For recommendations, NEVER say "I\'ll need to confirm with the host" — just give local suggestions.',
+        'TROUBLESHOOTING: If guest reports an issue, acknowledge it, provide 2-4 specific troubleshooting steps, and only escalate if unresolved.',
+        'PRIORITY: Try to answer from property data → best-guess → helpful alternatives → troubleshooting before escalating.',
+        'ANTI-REPETITION: Never repeat previously provided info unless asked. Prioritize the most recent question.',
+        'ESCALATION: When needed, explain WHY and confirm contacting Property Manager at +1 321-340-6333. Never use vague "I\'ll check on that."',
+        'Handle ambiguous questions, general knowledge (distance, travel, tickets), and troubleshooting — not just recommendations.',
         activeThread?.turn_count && activeThread.turn_count > 0
           ? `This is a follow-up in the ${threadType} thread. Previous: "${activeThread.last_response_summary}". Do NOT repeat what was already said — refine, add new info, or rephrase.`
           : '',
