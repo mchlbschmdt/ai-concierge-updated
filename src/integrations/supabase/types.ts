@@ -275,6 +275,104 @@ export type Database = {
           },
         ]
       }
+      faq_entries: {
+        Row: {
+          answer: string
+          category: string
+          created_at: string
+          id: string
+          is_active: boolean
+          priority: number
+          property_id: string
+          question: string
+          subcategory: string
+          tags: string[] | null
+          updated_at: string
+        }
+        Insert: {
+          answer: string
+          category?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          priority?: number
+          property_id: string
+          question: string
+          subcategory?: string
+          tags?: string[] | null
+          updated_at?: string
+        }
+        Update: {
+          answer?: string
+          category?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          priority?: number
+          property_id?: string
+          question?: string
+          subcategory?: string
+          tags?: string[] | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "faq_entries_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      faq_match_logs: {
+        Row: {
+          ai_used: boolean
+          confidence_score: number
+          created_at: string
+          guest_message: string
+          id: string
+          matched_faq_id: string | null
+          property_id: string | null
+          response_source: string
+        }
+        Insert: {
+          ai_used?: boolean
+          confidence_score?: number
+          created_at?: string
+          guest_message: string
+          id?: string
+          matched_faq_id?: string | null
+          property_id?: string | null
+          response_source?: string
+        }
+        Update: {
+          ai_used?: boolean
+          confidence_score?: number
+          created_at?: string
+          guest_message?: string
+          id?: string
+          matched_faq_id?: string | null
+          property_id?: string | null
+          response_source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "faq_match_logs_matched_faq_id_fkey"
+            columns: ["matched_faq_id"]
+            isOneToOne: false
+            referencedRelation: "faq_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "faq_match_logs_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       file_uploads: {
         Row: {
           created_at: string

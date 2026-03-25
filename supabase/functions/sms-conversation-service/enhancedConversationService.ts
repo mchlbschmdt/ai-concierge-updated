@@ -24,6 +24,8 @@ import { TroubleshootingDetectionService } from './troubleshootingDetectionServi
 import { HostContactService } from './hostContactService.ts';
 import { PropertyDataExtractorEnhanced } from './propertyDataExtractorEnhanced.ts';
 import { PropertyLocationAnalyzer } from './propertyLocationAnalyzer.ts';
+import { FaqMatchingService } from './faqMatchingService.ts';
+import { ConciergeStyleService } from './conciergeStyleService.ts';
 import { Conversation, Property } from './types.ts';
 
 export class EnhancedConversationService {
@@ -358,6 +360,91 @@ export class EnhancedConversationService {
         console.log('📊 [Routing]', escalation.routing);
         return { messages: MessageUtils.ensureSmsLimit(escalation.response), shouldUpdateState: false };
       }
+    }
+
+    // ── STEP 5.5: FAQ MATCHING — check structured FAQ before AI ────────────
+    try {
+      const faqResult = await FaqMatchingService.matchMessage(this.supabase, property.id, message);
+      
+      if (faqResult.matched && faqResult.answer) {
+        if (faqResult.level === 'HIGH') {
+          // HIGH confidence → return FAQ answer directly, NO AI call
+          const faqResponse = ConciergeStyleService.polish(faqResult.answer);
+          console.log(`📚 [FAQ] HIGH confidence match — returning directly`);
+          await this.saveConversationMessage(phoneNumber, conversation.id, message, faqResponse);
+          const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, faqResponse, classification);
+          await this.conversationManager.updateConversationState(phoneNumber, {
+            last_message_type: 'faq_direct',
+            last_response: faqResponse,
+            last_intent: classification.intent,
+            conversation_context: updatedCtx,
+          });
+          return { messages: MessageUtils.ensureSmsLimit(faqResponse), shouldUpdateState: false };
+        }
+
+        if (faqResult.level === 'MEDIUM') {
+          // MEDIUM confidence → FAQ answer + slight AI rephrasing for tone
+          console.log(`📚 [FAQ] MEDIUM confidence — FAQ answer with AI tone polish`);
+          try {
+            const history = await this.getConversationHistory(phoneNumber, conversation.id);
+            const { data, error } = await this.supabase.functions.invoke('ai-concierge', {
+              body: {
+                message: `Rephrase this answer in a warm, concierge SMS tone (keep it short, 1-3 sentences). Original: "${faqResult.answer}"`,
+                property,
+                conversationHistory: history.slice(-3),
+                guestName: (conversationContext?.guestName || conversationContext?.guest_name || null),
+              },
+            });
+            const aiPolished = data?.response || faqResult.answer;
+            await this.saveConversationMessage(phoneNumber, conversation.id, message, aiPolished);
+            const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, aiPolished, classification);
+            await this.conversationManager.updateConversationState(phoneNumber, {
+              last_message_type: 'faq_ai_polished',
+              last_response: aiPolished,
+              last_intent: classification.intent,
+              conversation_context: updatedCtx,
+            });
+            return { messages: MessageUtils.ensureSmsLimit(aiPolished), shouldUpdateState: false };
+          } catch (polishErr) {
+            // If AI polish fails, use FAQ answer directly
+            const faqResponse = ConciergeStyleService.polish(faqResult.answer);
+            await this.saveConversationMessage(phoneNumber, conversation.id, message, faqResponse);
+            return { messages: MessageUtils.ensureSmsLimit(faqResponse), shouldUpdateState: false };
+          }
+        }
+
+        // LOW confidence → pass top 3 FAQ matches as context to AI (not full KB)
+        if (faqResult.level === 'LOW' && faqResult.topMatches.length > 0) {
+          console.log(`📚 [FAQ] LOW confidence — passing top matches as AI context`);
+          const faqContext = faqResult.topMatches.map((m, i) =>
+            `FAQ ${i + 1}: Q: ${m.question} A: ${m.answer}`
+          ).join('\n');
+
+          const history = await this.getConversationHistory(phoneNumber, conversation.id);
+          const slimContext = ConfirmedMessageOrchestrator.buildSlimAIContext(message, property, conversation, classification, history, followUpThread || undefined);
+          slimContext.faqContext = faqContext;
+          slimContext.responseRules.push('Relevant FAQ entries are provided below. Use them as reference but respond naturally. Do NOT copy verbatim.');
+
+          const { data, error } = await this.supabase.functions.invoke('ai-concierge', {
+            body: { message, property, conversationHistory: history, guestName: slimContext.guestName, slimContext },
+          });
+          if (error) throw error;
+          const aiResponse = data?.response;
+          if (!aiResponse) throw new Error('Empty AI response');
+
+          await this.saveConversationMessage(phoneNumber, conversation.id, message, aiResponse);
+          const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, aiResponse, classification);
+          await this.conversationManager.updateConversationState(phoneNumber, {
+            last_message_type: 'faq_ai_fallback',
+            last_response: aiResponse,
+            last_intent: classification.intent,
+            conversation_context: updatedCtx,
+          });
+          return { messages: MessageUtils.ensureSmsLimit(aiResponse), shouldUpdateState: false };
+        }
+      }
+    } catch (faqErr) {
+      console.error('⚠️ [FAQ] Match error (continuing to AI):', faqErr);
     }
 
     // ── STEP 6: RECOMMENDATION / GENERAL KNOWLEDGE → AI ───────────────────
