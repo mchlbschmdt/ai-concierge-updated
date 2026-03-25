@@ -18,115 +18,33 @@ const DEPLOYMENT_VERSION = 'v2.1-' + new Date().toISOString().slice(0, 16);
 console.log(`🚀 DEPLOYMENT VERSION: ${DEPLOYMENT_VERSION}`);
 console.log(`📱 BUSINESS PHONE NUMBER: ${BUSINESS_PHONE_NUMBER}`);
 
-// Enhanced webhook signature verification with comprehensive approaches
-async function verifyWebhookSignature(body: string, signature: string, secret: string, req: Request): Promise<boolean> {
+// Webhook signature verification - base64-decode secret per OpenPhone docs
+async function verifyWebhookSignature(body: string, signature: string, secret: string): Promise<boolean> {
   try {
-    console.log('=== ENHANCED SIGNATURE VERIFICATION DEBUG ===');
-    console.log('Body length:', body.length);
-    console.log('Body (first 200 chars):', body.substring(0, 200));
-    console.log('Signature header:', signature);
-    console.log('Secret length:', secret.length);
-    console.log('Request method:', req.method);
-    console.log('Request URL:', req.url);
-    console.log('Request headers:', Object.fromEntries(req.headers.entries()));
-    
-    const encoder = new TextEncoder();
-    
-    // Parse signature format: "hmac;1;timestamp;signature"
     const parts = signature.split(';');
     if (parts.length !== 4 || parts[0] !== 'hmac') {
-      console.error('❌ Invalid signature format. Expected: hmac;1;timestamp;signature, got:', parts);
+      console.error('❌ Invalid signature format:', signature);
       return false;
     }
 
-    const [method, version, timestamp, providedSignature] = parts;
-    console.log('Parsed signature components:');
-    console.log('- Method:', method);
-    console.log('- Version:', version);
-    console.log('- Timestamp:', timestamp);
-    console.log('- Provided signature:', providedSignature);
+    const [, , timestamp, providedSignature] = parts;
+    const payload = timestamp + '.' + body;
 
-    // Try multiple verification approaches based on OpenPhone and common webhook patterns
-    const approaches = [
-      {
-        name: 'OpenPhone standard: timestamp + . + body',
-        payload: timestamp + '.' + body,
-        secret: secret
-      },
-      {
-        name: 'Raw body only',
-        payload: body,
-        secret: secret
-      },
-      {
-        name: 'Timestamp + body',
-        payload: timestamp + body,
-        secret: secret
-      }
-    ];
+    // Key fix: base64-decode the webhook secret before using as HMAC key
+    const keyBytes = Uint8Array.from(atob(secret), c => c.charCodeAt(0));
 
-    // Test each approach
-    for (const approach of approaches) {
-      try {
-        console.log(`\n🔍 Trying: ${approach.name}`);
-        console.log('- Payload length:', approach.payload.length);
-        console.log('- Payload (first 100 chars):', approach.payload.substring(0, 100));
-        
-        // Import the key for HMAC-SHA256
-        const key = await crypto.subtle.importKey(
-          'raw',
-          encoder.encode(approach.secret),
-          { name: 'HMAC', hash: 'SHA-256' },
-          false,
-          ['sign', 'verify']
-        );
-        
-        // Generate our signature
-        const signatureBuffer = await crypto.subtle.sign(
-          'HMAC',
-          key,
-          encoder.encode(approach.payload)
-        );
-        
-        // Convert to base64 for comparison
-        const ourSignature = btoa(String.fromCharCode(...new Uint8Array(signatureBuffer)));
-        console.log('- Our signature:', ourSignature);
-        console.log('- Expected signature:', providedSignature);
-        console.log('- Signatures match:', ourSignature === providedSignature);
-        
-        // Also try direct verification
-        let signatureToVerify;
-        try {
-          signatureToVerify = Uint8Array.from(atob(providedSignature), c => c.charCodeAt(0));
-        } catch (e) {
-          console.log('- Failed to decode provided signature as base64:', e.message);
-          continue;
-        }
-        
-        const isValid = await crypto.subtle.verify(
-          'HMAC',
-          key,
-          signatureToVerify,
-          encoder.encode(approach.payload)
-        );
+    const key = await crypto.subtle.importKey(
+      'raw', keyBytes,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false, ['sign']
+    );
 
-        console.log(`- Verification result: ${isValid}`);
-        
-        if (isValid || ourSignature === providedSignature) {
-          console.log(`✅ SUCCESS! Signature verified with: ${approach.name}`);
-          return true;
-        }
-        
-      } catch (error) {
-        console.log(`- Error with ${approach.name}:`, error.message);
-      }
-    }
+    const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
+    const computed = btoa(String.fromCharCode(...new Uint8Array(sig)));
 
-    console.log('❌ All signature verification approaches failed');
-    return false;
-    
+    return computed === providedSignature;
   } catch (error) {
-    console.error('❌ Fatal error in signature verification:', error);
+    console.error('❌ Signature verification error:', error);
     return false;
   }
 }
