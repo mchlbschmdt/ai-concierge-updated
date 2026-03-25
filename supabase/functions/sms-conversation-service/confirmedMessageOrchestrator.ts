@@ -159,7 +159,7 @@ export class ConfirmedMessageOrchestrator {
     const isPropertySpecific = !isIssue && !isRequest && !isRecommendation && !isGeneralKnowledge &&
       (propertySpecificIntents.includes(intentResult.intent) || requestClassification.type === 'INFORMATIONAL');
 
-    const shouldUseAI = isRecommendation || isGeneralKnowledge;
+    const shouldUseAI = isRecommendation || isGeneralKnowledge || isIssue;
 
     const classification: UnifiedClassification = {
       intent: isIssue ? `troubleshoot_${troubleshootingResult.category || 'general'}` : intentResult.intent,
