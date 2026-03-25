@@ -585,6 +585,18 @@ export class IntentRecognitionService {
       return { intent: 'ask_directions', confidence: 0.85 };
     }
 
+    // Bag drop / luggage hold / early arrival bags
+    if (this.matchesKeywords(message, [
+      'bag drop', 'drop bags', 'drop my bags', 'drop off bags', 'leave bags',
+      'hold luggage', 'store luggage', 'luggage storage', 'luggage hold',
+      'baggage hold', 'store my bags', 'hold my bags', 'bag storage',
+      'bags before check', 'bags before check-in', 'early arrival bags',
+      'leave my luggage', 'leave luggage', 'can i leave my bags',
+      'somewhere to put bags', 'where can i put my bags'
+    ])) {
+      return { intent: 'ask_bag_drop', confidence: 0.95 };
+    }
+
     // Basic greetings
     if (this.matchesKeywords(message, ['hi', 'hello', 'hey', 'good morning', 'good afternoon'])) {
       return { intent: 'greeting', confidence: 0.9 };

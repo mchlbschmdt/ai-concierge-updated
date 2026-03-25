@@ -663,8 +663,11 @@ export class ConfirmedMessageOrchestrator {
     if (/\b(trash|garbage|basura|recycle)\b/.test(lower)) {
       return "Trash and recycling are typically located near the building entrance or in a designated disposal area. If you have trouble finding it, just let me know! 👍";
     }
-    if (/\b(bag|luggage|store|hold)\b/.test(lower) && /\b(early|before|arrive|arrival)\b/.test(lower)) {
-      return "If you arrive before check-in, you might want to check local luggage storage services like BagsAway or Hold My Bags. I can also suggest nearby spots to relax while the place is being prepared!";
+    if (/\b(bag|luggage|store|hold|drop)\b/.test(lower) && /\b(early|before|arrive|arrival|check.?in|off)\b/.test(lower)) {
+      return "Great question! Early bag drop isn't always guaranteed, but we can sometimes work it out depending on cleaner timing. In the meantime, nearby luggage storage services like BagsAway and Bounce are solid options. I can also suggest nearby spots to explore while your place is being prepared! 🧳";
+    }
+    if (/\b(bag drop|drop.*(my )?bags|luggage.*(hold|storage|store)|hold.*(my )?bags|store.*(my )?(luggage|bags)|baggage hold)\b/.test(lower)) {
+      return "Great question! Early bag drop isn't always guaranteed, but we can sometimes work it out depending on cleaner timing. Nearby luggage storage services like BagsAway and Bounce are also great options. Want me to check if bag drop is possible for your arrival? 🧳";
     }
     if (/\b(grill|bbq|barbecue)\b/.test(lower)) {
       return "Good question! Grills are usually available in the common area or patio. I can confirm the exact location if needed — just let me know!";
