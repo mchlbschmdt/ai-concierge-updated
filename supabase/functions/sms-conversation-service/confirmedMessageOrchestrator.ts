@@ -151,7 +151,7 @@ export class ConfirmedMessageOrchestrator {
       'ask_wifi', 'ask_parking', 'ask_amenity', 'ask_emergency_contact',
       'ask_property_specific', 'ask_additional_services', 'ask_resort_amenities',
       'ask_garbage', 'ask_grocery', 'ask_transportation_no_car', 'ask_grocery_transport',
-      'ask_bag_drop',
+      'ask_bag_drop', 'ask_towels', 'ask_late_checkout',
     ];
 
     const isIssue = requestClassification.type === 'ISSUE' || troubleshootingResult.isTroubleshooting;
