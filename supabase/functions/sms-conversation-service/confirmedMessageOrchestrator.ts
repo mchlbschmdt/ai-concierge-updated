@@ -934,11 +934,13 @@ function extractTopicFromMessage(message: string, intent: string): string {
   if (lower.includes('tv') || lower.includes('television')) return 'tv_info';
   if (lower.includes('grill') || lower.includes('bbq')) return 'grill_info';
   if (lower.includes('garbage') || lower.includes('trash')) return 'garbage_info';
+  if (lower.includes('towel') || lower.includes('linen') || lower.includes('sheet')) return 'towels_info';
   if (lower.includes('grocery')) return 'grocery_info';
   if (lower.includes('emergency') || lower.includes('contact host')) return 'emergency_contact';
   if (lower.includes('key fob') || lower.includes('keyfob') || lower.includes('key card')) return 'key_fob_info';
   if (lower.includes('door code') || lower.includes('entry code') || lower.includes('access code')) return 'door_code_info';
   if (lower.includes('building') && (lower.includes('access') || lower.includes('entrance') || lower.includes('enter'))) return 'building_access_info';
+  if (lower.includes('bag') || lower.includes('luggage') || lower.includes('baggage')) return 'bag_drop_info';
   if (lower.includes('access') || lower.includes('key') || lower.includes('door')) return 'access_info';
   if (lower.includes('beach')) return 'beach_recs';
   if (lower.includes('restaurant') || lower.includes('food') || lower.includes('eat')) return 'food_recs';
@@ -950,6 +952,7 @@ function extractTopicFromMessage(message: string, intent: string): string {
     'ask_checkout_time': 'checkout_info',
     'ask_checkin_time': 'checkin_info',
     'ask_early_checkin': 'early_checkin_info',
+    'ask_late_checkout': 'late_checkout_info',
     'ask_access': 'access_info',
     'ask_key_fob': 'key_fob_info',
     'ask_door_code': 'door_code_info',
@@ -959,6 +962,8 @@ function extractTopicFromMessage(message: string, intent: string): string {
     'ask_coffee_recommendations': 'coffee_recs',
     'ask_attractions': 'attraction_recs',
     'ask_bag_drop': 'bag_drop_info',
+    'ask_towels': 'towels_info',
+    'ask_garbage': 'garbage_info',
   };
 
   return intentMap[intent] || 'general_info';
