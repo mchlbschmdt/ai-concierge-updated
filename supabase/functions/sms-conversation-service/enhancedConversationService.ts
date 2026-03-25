@@ -597,6 +597,7 @@ export class EnhancedConversationService {
         : "I'm having a moment — could you try again? If it's urgent, reach out to your host directly.";
       return { messages: MessageUtils.ensureSmsLimit(fallback), shouldUpdateState: false };
     }
+  }
 
   // ═══ HOST HANDOFF: Send alert SMS to host ═══
   private async sendHostAlert(property: Property, guestPhone: string, conversationContext: any, reason: string, summary: string) {
