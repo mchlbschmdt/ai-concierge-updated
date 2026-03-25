@@ -234,7 +234,7 @@ serve(async (req) => {
       const signature = req.headers.get('openphone-signature');
       
       if (webhookSecret && signature) {
-        const isValid = await verifyWebhookSignature(body, signature, webhookSecret, req);
+        const isValid = await verifyWebhookSignature(body, signature, webhookSecret);
         if (!isValid) {
           console.error('❌ Webhook signature verification failed');
           return new Response(
