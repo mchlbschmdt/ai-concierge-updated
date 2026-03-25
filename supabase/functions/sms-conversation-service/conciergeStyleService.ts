@@ -137,15 +137,47 @@ export class ConciergeStyleService {
       return `Thanks for letting me know about the ${equipment}. Here's what usually helps:`;
     }
 
+    // No steps available — provide generic troubleshooting-first response
     const acks = [
-      `Thanks for letting me know — I'm sorry about the ${equipment} issue. I've alerted your host so they can take care of it.`,
-      `I'm sorry to hear that! I've notified your host about the ${equipment} situation so they can get it sorted.`,
-      `Oh no — sorry about the ${equipment} trouble. I'm letting your host know right now so it gets handled.`,
+      `Thanks for letting me know about the ${equipment}. Let me walk you through a few things that usually help before I escalate this.`,
+      `I'm sorry to hear about the ${equipment} issue. Let's try some quick fixes first!`,
+      `Oh no — sorry about the ${equipment} trouble. Let's troubleshoot a few things together before I contact the property manager.`,
     ];
     let response = acks[Math.floor(Math.random() * acks.length)];
-    if (hostContact) response += ` You can also reach them directly at ${hostContact}.`;
-    response += " If anything changes, just message me here.";
     return response;
+  }
+
+  // ═══ TROUBLESHOOTING STEPS BANK ═══════════════════════════════════════
+
+  static getTroubleshootingSteps(category: string): string | null {
+    const steps: Record<string, string> = {
+      'ac': '• Check the thermostat — make sure it\'s set to COOL and the temp is below room temp\n• Ensure all doors and windows are fully closed\n• Check the breaker panel — flip the AC breaker off and back on\n• Give it 10-15 minutes to kick in',
+      'heating': '• Check the thermostat — make sure it\'s set to HEAT and the temp is above room temp\n• Ensure all doors and windows are closed\n• Check the breaker panel for the heating unit\n• Give it 10-15 minutes to warm up',
+      'wifi': '• Verify you\'re connecting to the correct network name\n• Forget the network and re-enter the password (it\'s case-sensitive)\n• Unplug the router for 30 seconds and plug it back in\n• Move closer to the router — some areas may have weaker signal',
+      'hot_tub': '• Look for a jets/timer button near the hot tub and press it\n• Wait 15-20 minutes for it to heat up after activation\n• Check the breaker panel for the hot tub breaker\n• Make sure the cover was removed before heating',
+      'leak': '• If possible, locate the water source and turn it off\n• Contain the water with towels to prevent spreading\n• Avoid using the affected fixture until resolved\n• This one likely needs the property manager — I\'ll reach out',
+      'tv': '• Press the Input/Source button on the remote and select HDMI 1\n• Make sure all HDMI cables are firmly connected\n• Try replacing the remote batteries\n• Unplug the TV for 30 seconds and plug it back in',
+      'lock': '• Re-enter the code slowly, one digit at a time\n• Check if there\'s a battery indicator light on the lock\n• Try the code after pressing the * or # key first\n• Check for an alternate entry point (back door, garage)',
+      'appliance': '• Check that it\'s plugged in and the outlet has power\n• Look for a reset button on the appliance\n• Check the breaker panel for the corresponding breaker\n• Try unplugging for 30 seconds and plugging back in',
+      'water': '• Check if other faucets/fixtures have the same issue\n• Look under the sink for shut-off valves\n• If it\'s a hot water issue, check the water heater breaker\n• Run the water for 2-3 minutes — sometimes air gets trapped in lines',
+    };
+
+    // Try direct match first
+    if (steps[category]) return steps[category];
+
+    // Fuzzy match
+    const lowerCategory = category.toLowerCase();
+    if (lowerCategory.includes('ac') || lowerCategory.includes('air') || lowerCategory.includes('cool')) return steps['ac'];
+    if (lowerCategory.includes('heat') || lowerCategory.includes('furnace')) return steps['heating'];
+    if (lowerCategory.includes('wifi') || lowerCategory.includes('internet') || lowerCategory.includes('network')) return steps['wifi'];
+    if (lowerCategory.includes('hot tub') || lowerCategory.includes('jacuzzi') || lowerCategory.includes('spa')) return steps['hot_tub'];
+    if (lowerCategory.includes('leak') || lowerCategory.includes('flood') || lowerCategory.includes('drip')) return steps['leak'];
+    if (lowerCategory.includes('tv') || lowerCategory.includes('television') || lowerCategory.includes('screen')) return steps['tv'];
+    if (lowerCategory.includes('lock') || lowerCategory.includes('door') || lowerCategory.includes('key') || lowerCategory.includes('access')) return steps['lock'];
+    if (lowerCategory.includes('water') || lowerCategory.includes('faucet') || lowerCategory.includes('shower')) return steps['water'];
+    if (lowerCategory.includes('appliance') || lowerCategory.includes('dishwasher') || lowerCategory.includes('washer') || lowerCategory.includes('dryer') || lowerCategory.includes('oven') || lowerCategory.includes('stove') || lowerCategory.includes('microwave')) return steps['appliance'];
+
+    return null;
   }
 
   static getIssueFollowUp(): string {
