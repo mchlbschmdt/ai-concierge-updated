@@ -233,38 +233,58 @@ export class ConfirmedMessageOrchestrator {
 
     // Check knowledge base for troubleshooting steps
     const kbResult = EnhancedPropertyKnowledgeService.searchPropertyKnowledge(property, message);
-    let response: string;
-    let triggerHandoff = false;
 
     if (kbResult.found && kbResult.confidence >= 0.5) {
-      response = ConciergeStyleService.getIssueAcknowledgment(equipment, true, property.emergency_contact || undefined);
+      // KB has steps — use them directly
+      let response = ConciergeStyleService.getIssueAcknowledgment(equipment, true, property.emergency_contact || undefined);
       response += `\n\n${kbResult.content}`;
       if (property.emergency_contact) {
-        response += `\n\nIf that doesn't do the trick, your host is at ${property.emergency_contact}.`;
+        response += `\n\nIf that doesn't do the trick, I'll reach out to the property manager at +1 321-340-6333.`;
       }
-    } else {
-      response = ConciergeStyleService.getIssueAcknowledgment(equipment, false, property.emergency_contact || undefined);
-      triggerHandoff = true; // Auto-alert host for unresolved issues
+
+      return {
+        response,
+        source: 'issue_response',
+        shouldUpdateState: true,
+        triggerHostHandoff: false,
+        routing: {
+          intent: classification.intent,
+          requestType: 'ISSUE',
+          propertyDataUsed: true,
+          knowledgeBaseUsed: true,
+          aiUsed: false,
+          escalationTriggered: false,
+          repetitionPrevented: false,
+        },
+      };
     }
 
-    return {
-      response,
-      source: 'issue_response',
-      shouldUpdateState: true,
-      triggerHostHandoff: triggerHandoff,
-      handoffReason: `Issue reported: ${equipment}`,
-      handoffSummary: `Guest reported ${equipment} issue: "${message}"`,
-      routing: {
-        intent: classification.intent,
-        requestType: 'ISSUE',
-        propertyDataUsed: kbResult.found,
-        knowledgeBaseUsed: kbResult.found,
-        aiUsed: false,
-        escalationTriggered: true,
-        repetitionPrevented: false,
-        hostHandoffTriggered: triggerHandoff,
-      },
-    };
+    // No KB steps → check built-in troubleshooting bank
+    const builtInSteps = ConciergeStyleService.getTroubleshootingSteps(category);
+    if (builtInSteps) {
+      let response = `Thanks for letting me know about the ${equipment}. Let's try a few things:\n\n${builtInSteps}`;
+      response += `\n\nLet me know if that helps! If not, I'll reach out to the property manager at +1 321-340-6333.`;
+
+      return {
+        response,
+        source: 'issue_response',
+        shouldUpdateState: true,
+        triggerHostHandoff: false,
+        routing: {
+          intent: classification.intent,
+          requestType: 'ISSUE',
+          propertyDataUsed: false,
+          knowledgeBaseUsed: false,
+          aiUsed: false,
+          escalationTriggered: false,
+          repetitionPrevented: false,
+        },
+      };
+    }
+
+    // No built-in steps either → fall through to AI concierge for troubleshooting guidance
+    console.log('🤖 [Orchestrator] No KB or built-in steps for issue, routing to AI for troubleshooting');
+    return null;
   }
 
   /**
