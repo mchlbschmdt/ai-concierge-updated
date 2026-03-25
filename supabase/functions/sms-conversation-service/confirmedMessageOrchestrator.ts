@@ -146,7 +146,8 @@ export class ConfirmedMessageOrchestrator {
     const troubleshootingResult = TroubleshootingDetectionService.detectTroubleshootingIntent(message);
 
     const propertySpecificIntents = [
-      'ask_checkout_time', 'ask_checkin_time', 'ask_access',
+      'ask_checkout_time', 'ask_checkin_time', 'ask_early_checkin', 'ask_access',
+      'ask_key_fob', 'ask_door_code', 'ask_building_access',
       'ask_wifi', 'ask_parking', 'ask_amenity', 'ask_emergency_contact',
       'ask_property_specific', 'ask_additional_services', 'ask_resort_amenities',
       'ask_garbage', 'ask_grocery', 'ask_transportation_no_car', 'ask_grocery_transport',
@@ -574,6 +575,12 @@ export class ConfirmedMessageOrchestrator {
       responseRules: [
         'You are a luxury vacation rental concierge — warm, polished, and knowledgeable like a trusted local friend.',
         'Keep responses SMS-friendly — 1-3 sentences, max 400 chars. Concise and conversational.',
+        'MINIMUM NECESSARY ANSWER RULE: Answer ONLY the specific question asked. Do NOT bundle related topics.',
+        '  - If guest asks "what time can I check in?" → respond ONLY with check-in time. Do NOT add building entrance, key fob, parking, or unit code info.',
+        '  - If guest asks about key fob → respond ONLY about how/where to get the key fob. Do NOT include check-in time, building access, or door codes.',
+        '  - If guest asks about door code → respond ONLY with door/entry code info.',
+        '  - If guest asks about building access → respond ONLY with building entrance instructions.',
+        '  - Only combine multiple topics if the guest explicitly asked multiple questions in one message.',
         'For recommendations: give 2-3 specific places with names and a one-line reason each.',
         'Never invent property-specific facts. If unsure, provide a best-guess with a light hedge ("Typically..." or "Usually...").',
         'CRITICAL: NEVER say any of these phrases: "Let me check with the host", "I\'ll confirm with the host", "I\'ll reach out to the property manager", "Let me check on that", "property guide", "general_info", "I don\'t see that information".',
@@ -588,6 +595,7 @@ export class ConfirmedMessageOrchestrator {
         'ANTI-REPETITION: Never repeat previously provided info unless asked. Prioritize the most recent question.',
         'ESCALATION RULES: Only escalate for urgent issues (leaks, damage, locked out) or things that genuinely require host approval (refunds, booking changes). For everything else — trash, amenities, restaurants, how-to — just answer.',
         'Handle ambiguous questions, general knowledge (distance, travel, tickets), and troubleshooting — not just recommendations.',
+        'RESPONSE PRUNING: Before finalizing, remove any sentences about topics the guest did NOT ask about. Keep only directly relevant info.',
         activeThread?.turn_count && activeThread.turn_count > 0
           ? `This is a follow-up in the ${threadType} thread. Previous: "${activeThread.last_response_summary}". Do NOT repeat what was already said — refine, add new info, or rephrase.`
           : '',
@@ -790,6 +798,9 @@ function extractTopicFromMessage(message: string, intent: string): string {
   if (lower.includes('garbage') || lower.includes('trash')) return 'garbage_info';
   if (lower.includes('grocery')) return 'grocery_info';
   if (lower.includes('emergency') || lower.includes('contact host')) return 'emergency_contact';
+  if (lower.includes('key fob') || lower.includes('keyfob') || lower.includes('key card')) return 'key_fob_info';
+  if (lower.includes('door code') || lower.includes('entry code') || lower.includes('access code')) return 'door_code_info';
+  if (lower.includes('building') && (lower.includes('access') || lower.includes('entrance') || lower.includes('enter'))) return 'building_access_info';
   if (lower.includes('access') || lower.includes('key') || lower.includes('door')) return 'access_info';
   if (lower.includes('beach')) return 'beach_recs';
   if (lower.includes('restaurant') || lower.includes('food') || lower.includes('eat')) return 'food_recs';
@@ -800,11 +811,16 @@ function extractTopicFromMessage(message: string, intent: string): string {
     'ask_amenity': 'amenity_info',
     'ask_checkout_time': 'checkout_info',
     'ask_checkin_time': 'checkin_info',
+    'ask_early_checkin': 'early_checkin_info',
     'ask_access': 'access_info',
+    'ask_key_fob': 'key_fob_info',
+    'ask_door_code': 'door_code_info',
+    'ask_building_access': 'building_access_info',
     'ask_emergency_contact': 'emergency_contact',
     'ask_food_recommendations': 'food_recs',
     'ask_coffee_recommendations': 'coffee_recs',
     'ask_attractions': 'attraction_recs',
+    'ask_bag_drop': 'bag_drop_info',
   };
 
   return intentMap[intent] || 'general_info';
@@ -815,14 +831,19 @@ function getTopicPhrase(topic: string): string {
     'wifi_info': 'the WiFi details',
     'checkout_info': 'checkout time',
     'checkin_info': 'check-in details',
+    'early_checkin_info': 'early check-in',
     'parking_info': 'parking',
     'amenity_info': 'that amenity',
     'access_info': 'access instructions',
+    'key_fob_info': 'the key fob',
+    'door_code_info': 'the door code',
+    'building_access_info': 'building access',
     'pool_info': 'pool info',
     'hot_tub_info': 'hot tub details',
     'garbage_info': 'trash pickup',
     'grocery_info': 'nearby stores',
     'emergency_contact': 'host contact info',
+    'bag_drop_info': 'bag drop',
     'general_info': 'that',
   };
   return phrases[topic] || 'that';

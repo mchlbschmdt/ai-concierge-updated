@@ -541,17 +541,59 @@ export class IntentRecognitionService {
       return { intent: 'ask_emergency_contact', confidence: 0.95 };
     }
 
-    // Access/Entry (don't confuse with check-out)
+    // Key fob - SPECIFIC intent (before broad access)
+    if (this.matchesKeywords(message, [
+      'key fob', 'keyfob', 'fob', 'key card', 'keycard',
+      'where do i get the key', 'how do i get the key', 'pick up key',
+      'collect key', 'get my key', 'key pickup', 'key collection'
+    ])) {
+      return { intent: 'ask_key_fob', confidence: 0.96 };
+    }
+
+    // Door code - SPECIFIC intent (before broad access)
+    if (this.matchesKeywords(message, [
+      'door code', 'entry code', 'access code', 'lock code', 'keypad code',
+      'what is the code', 'what\'s the code', 'unit code', 'gate code',
+      'security code', 'pin code', 'combination'
+    ])) {
+      return { intent: 'ask_door_code', confidence: 0.96 };
+    }
+
+    // Building access - SPECIFIC intent (before broad access)
+    if (this.matchesKeywords(message, [
+      'building access', 'building entrance', 'how do i get into the building',
+      'front door of building', 'main entrance', 'lobby access',
+      'get into the building', 'enter the building', 'building door'
+    ])) {
+      return { intent: 'ask_building_access', confidence: 0.96 };
+    }
+
+    // Access/Entry - BROAD (catches remaining access questions)
     if (this.matchesKeywords(message, [
       'access', 'entry', 'how do i get in', 'getting in', 'enter',
-      'access code', 'entry code', 'door code', 'lock code'
+      'how do i access'
     ])) {
-      return { intent: 'ask_access', confidence: 0.95 };
+      return { intent: 'ask_access', confidence: 0.90 };
     }
     
-    // Check-in time
-    if (this.matchesKeywords(message, ['checkin', 'check in', 'check-in', 'arrival time', 'when can i arrive', 'early check'])) {
+    // Check-in time - NARROW (only time questions, not access)
+    if (this.matchesKeywords(message, [
+      'check in time', 'checkin time', 'check-in time',
+      'what time can i check in', 'when can i check in',
+      'when is check in', 'when is check-in', 'when is checkin',
+      'arrival time', 'when can i arrive',
+      'what time is check in', 'what time is check-in'
+    ])) {
       return { intent: 'ask_checkin_time', confidence: 0.95 };
+    }
+
+    // Early check-in - DISTINCT from check-in time
+    if (this.matchesKeywords(message, [
+      'early check in', 'early check-in', 'early checkin',
+      'check in early', 'arrive early', 'come early',
+      'before check in', 'before check-in'
+    ])) {
+      return { intent: 'ask_early_checkin', confidence: 0.95 };
     }
 
     // WiFi
