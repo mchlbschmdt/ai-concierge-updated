@@ -509,7 +509,8 @@ export class EnhancedConversationService {
       let aiResponse = data?.response;
       if (!aiResponse) throw new Error('Empty AI response');
 
-      // ── POST-AI: Detect escalation language and trigger real host SMS ──
+      // ── POST-AI: Validate response content matches intent ──
+      aiResponse = ConfirmedMessageOrchestrator.validateResponseForIntent(aiResponse, classification.intent);
       const escalationTriggered = await this.detectAndTriggerEscalation(
         aiResponse, property, phoneNumber, conversationContext, message, classification
       );
