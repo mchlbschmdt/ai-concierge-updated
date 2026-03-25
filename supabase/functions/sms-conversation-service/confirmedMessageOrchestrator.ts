@@ -292,6 +292,13 @@ export class ConfirmedMessageOrchestrator {
   /**
    * STEP 3: Handle REQUESTS — respond like a host with varied phrasing.
    */
+  /**
+   * HOST-APPROVAL-REQUIRED intents — NEVER approve without host confirmation.
+   */
+  static readonly HOST_APPROVAL_REQUIRED = [
+    'ask_early_checkin', 'ask_late_checkout', 'ask_bag_drop', 'ask_baggage_hold'
+  ];
+
   static handleRequest(
     message: string,
     property: Property,
@@ -307,18 +314,57 @@ export class ConfirmedMessageOrchestrator {
     let triggerHandoff = false;
     let setAwaitingConfirmation = false;
     let pendingTopic = '';
+    let pendingApprovalType: string | null = null;
 
-    // Early check-in
+    // Early check-in — NEVER approve, always ask host
     if (/\b(early|before)\b.*\b(check.?in|arrive|arrival)\b/.test(msg) || /\bcheck.?in\b.*\b(early|before|earlier)\b/.test(msg)) {
-      response = ConciergeStyleService.getRequestResponse('early_checkin');
+      // Check if guest is providing a time (follow-up to earlier question)
+      const timeMatch = msg.match(/\b(\d{1,2}(?::\d{2})?\s*(?:am|pm)?|noon|midday)\b/i);
+      if (timeMatch && conversationContext?.pending_approval_type === 'early_check_in') {
+        // Guest gave a time — send host SMS and tell guest we're checking
+        const requestedTime = timeMatch[0];
+        response = `Thanks! I'm checking with the host now about a ${requestedTime} arrival and will let you know as soon as I hear back.`;
+        triggerHandoff = true;
+        pendingApprovalType = 'early_check_in';
+        pendingTopic = `early check-in at ${requestedTime}`;
+      } else {
+        response = "We'd be happy to check with the host to see if an early check-in may be possible. What time were you hoping to arrive?";
+        pendingApprovalType = 'early_check_in';
+        pendingTopic = 'early check-in';
+      }
       setAwaitingConfirmation = true;
-      pendingTopic = 'early check-in';
     }
-    // Late check-out
+    // Late check-out — NEVER approve, always ask host
     else if (/\b(late|after|later|extend)\b.*\b(check.?out|departure|leave|stay)\b/.test(msg) || /\bcheck.?out\b.*\b(late|later|extend)\b/.test(msg)) {
-      response = ConciergeStyleService.getRequestResponse('late_checkout');
+      const timeMatch = msg.match(/\b(\d{1,2}(?::\d{2})?\s*(?:am|pm)?|noon|midday)\b/i);
+      if (timeMatch && conversationContext?.pending_approval_type === 'late_check_out') {
+        const requestedTime = timeMatch[0];
+        response = `Thanks! I'm checking with the host now about a ${requestedTime} checkout and will let you know as soon as I hear back.`;
+        triggerHandoff = true;
+        pendingApprovalType = 'late_check_out';
+        pendingTopic = `late checkout at ${requestedTime}`;
+      } else {
+        response = "We can check with the host to see whether a later checkout might be possible. What time were you hoping for?";
+        pendingApprovalType = 'late_check_out';
+        pendingTopic = 'late checkout';
+      }
       setAwaitingConfirmation = true;
-      pendingTopic = 'late checkout';
+    }
+    // Bag drop / baggage hold — NEVER guarantee, offer alternatives
+    else if (/\b(bag|luggage|baggage|drop.*bag|store.*bag|hold.*bag|leave.*bag|drop.*off)\b/.test(msg) && /\b(early|before|drop|hold|store|leave|off)\b/.test(msg)) {
+      const timeMatch = msg.match(/\b(\d{1,2}(?::\d{2})?\s*(?:am|pm)?|noon|midday)\b/i);
+      if (timeMatch && conversationContext?.pending_approval_type === 'bag_drop') {
+        const requestedTime = timeMatch[0];
+        response = `Thanks! I'm checking with the host now about bag drop around ${requestedTime} and will let you know as soon as I hear back.`;
+        triggerHandoff = true;
+        pendingApprovalType = 'bag_drop';
+        pendingTopic = `bag drop around ${requestedTime}`;
+      } else {
+        response = "We can check whether early bag drop may be possible — it depends on turnover and cleaner timing. In the meantime, nearby luggage storage services like BagsAway and Bounce are great options. Would you like me to check with the host?";
+        pendingApprovalType = 'bag_drop';
+        pendingTopic = 'bag drop';
+      }
+      setAwaitingConfirmation = true;
     }
     // Pets
     else if (/\b(bring|pet|dog|cat|animal)\b/.test(msg)) {
@@ -368,7 +414,15 @@ export class ConfirmedMessageOrchestrator {
     // Generic request — DON'T auto-escalate, let it fall through to AI
     else {
       console.log('🤝 [Orchestrator] Generic request — routing to AI instead of auto-escalation');
-      return null; // Fall through to FAQ/AI path
+      return null;
+    }
+
+    // Build host escalation message for approval-required intents
+    let handoffSummary = triggerHandoff ? `Guest wants to speak with host: "${message}"` : undefined;
+    if (triggerHandoff && pendingApprovalType) {
+      const guestName = conversationContext?.guestName || conversationContext?.guest_name || 'Guest';
+      const propertyCode = property.code || property.property_name;
+      handoffSummary = this.buildApprovalHostMessage(pendingApprovalType, propertyCode, guestName, pendingTopic, message);
     }
 
     return {
@@ -376,8 +430,8 @@ export class ConfirmedMessageOrchestrator {
       source: 'request_response',
       shouldUpdateState: true,
       triggerHostHandoff: triggerHandoff,
-      handoffReason: triggerHandoff ? 'Guest requested to speak with host' : undefined,
-      handoffSummary: triggerHandoff ? `Guest wants to speak with host: "${message}"` : undefined,
+      handoffReason: triggerHandoff ? pendingTopic : undefined,
+      handoffSummary,
       routing: {
         intent: classification.intent,
         requestType: 'REQUEST',
@@ -388,7 +442,25 @@ export class ConfirmedMessageOrchestrator {
         repetitionPrevented: false,
         hostHandoffTriggered: triggerHandoff,
       },
-    };
+      // Store pending approval state
+      ...(pendingApprovalType ? { _pendingApprovalType: pendingApprovalType, _pendingTopic: pendingTopic } : {}),
+    } as any;
+  }
+
+  /**
+   * Build structured host SMS for approval-required intents.
+   */
+  static buildApprovalHostMessage(approvalType: string, propertyCode: string, guestName: string, topic: string, originalMessage: string): string {
+    switch (approvalType) {
+      case 'early_check_in':
+        return `Guest at ${propertyCode} is requesting early check-in${topic.includes('at') ? ` for ${topic.replace('early check-in at ', '')}` : ''}. Would you like me to approve it?\nGuest: ${guestName}\nMessage: "${originalMessage.substring(0, 120)}"`;
+      case 'late_check_out':
+        return `Guest at ${propertyCode} is requesting late checkout${topic.includes('at') ? ` for ${topic.replace('late checkout at ', '')}` : ''}. Would you like me to approve it?\nGuest: ${guestName}\nMessage: "${originalMessage.substring(0, 120)}"`;
+      case 'bag_drop':
+        return `Guest at ${propertyCode} is asking if early bag drop / baggage hold is possible${topic.includes('around') ? ` ${topic.replace('bag drop ', '')}` : ''}. Would you like me to approve that?\nGuest: ${guestName}\nMessage: "${originalMessage.substring(0, 120)}"`;
+      default:
+        return `Guest at ${propertyCode} needs approval for: ${topic}\nGuest: ${guestName}\nMessage: "${originalMessage.substring(0, 120)}"`;
+    }
   }
 
   /**
@@ -697,6 +769,60 @@ export class ConfirmedMessageOrchestrator {
   /**
    * Track response in memory + escalation state + thread update.
    */
+  /**
+   * Validate response doesn't contain content from unrelated topics.
+   * Returns cleaned response if cross-topic bleed detected.
+   */
+  static validateResponseForIntent(response: string, intent: string): string {
+    const lower = response.toLowerCase();
+
+    // Define what should NOT appear for each narrow intent
+    const blockedContentByIntent: Record<string, RegExp[]> = {
+      'ask_garbage': [/check.?in time/i, /check-in/i, /airport/i, /direction/i, /key fob/i, /door code/i, /avenue/i, /building entrance/i, /entry code/i],
+      'ask_checkin_time': [/parking/i, /key fob/i, /door code/i, /building entrance/i, /garbage/i, /trash/i, /direction.*airport/i],
+      'ask_checkout_time': [/parking/i, /key fob/i, /door code/i, /building entrance/i, /garbage/i, /trash/i],
+      'ask_key_fob': [/check.?in time/i, /check.?out time/i, /parking/i, /garbage/i, /trash/i, /direction.*airport/i],
+      'ask_door_code': [/check.?in time/i, /check.?out time/i, /parking/i, /garbage/i, /trash/i, /key fob/i],
+      'ask_building_access': [/check.?in time/i, /check.?out time/i, /garbage/i, /trash/i],
+    };
+
+    // Blocked approval phrases for restricted intents
+    const approvalBlockedIntents = ['ask_early_checkin', 'ask_late_checkout', 'ask_bag_drop', 'ask_baggage_hold'];
+    if (approvalBlockedIntents.includes(intent)) {
+      const approvalPhrases = [
+        /\b(we'll aim for|we can accommodate|that should be fine|yes,? you can|you can definitely|definitely)\b/i,
+        /\b(we'll? do|approved|confirmed|all set for)\b/i,
+      ];
+      for (const phrase of approvalPhrases) {
+        if (phrase.test(response)) {
+          console.log(`🚫 [Validation] BLOCKED approval language in ${intent}: "${response.substring(0, 80)}"`);
+          // Replace with safe language
+          if (intent === 'ask_bag_drop') {
+            return "We can check whether early bag drop may be possible — it depends on turnover and cleaner timing. BagsAway and Bounce are also great nearby luggage storage options. Would you like me to check with the host?";
+          }
+          return "We'd be happy to check with the host on that. I'll let you know as soon as I hear back!";
+        }
+      }
+    }
+
+    const blockedPatterns = blockedContentByIntent[intent];
+    if (!blockedPatterns) return response;
+
+    // Check if response contains blocked content
+    const hasBlockedContent = blockedPatterns.some(p => p.test(response));
+    if (!hasBlockedContent) return response;
+
+    console.log(`🚫 [Validation] Cross-topic bleed detected for ${intent} — content will be pruned`);
+    // Filter out sentences containing blocked content
+    const sentences = response.split(/(?<=[.!?])\s+/);
+    const cleanSentences = sentences.filter(sentence => {
+      return !blockedPatterns.some(p => p.test(sentence));
+    });
+
+    if (cleanSentences.length === 0) return response; // Don't return empty
+    return cleanSentences.join(' ');
+  }
+
   static trackResponseInMemory(
     conversationContext: any,
     message: string,
@@ -732,16 +858,15 @@ export class ConfirmedMessageOrchestrator {
     );
 
     // If switching to a new thread type, resolve the previous escalation thread
-    // so post-escalation topics don't bleed in
     if (threadType !== 'escalation' && threadType !== 'issue' && updated.threads?.escalation && !updated.threads.escalation.resolved) {
       const escAge = Date.now() - new Date(updated.threads.escalation.last_updated).getTime();
-      if (escAge > 60000) { // 1 min — user moved on
+      if (escAge > 60000) {
         updated = ConversationMemoryManager.resolveThread(updated, 'escalation');
       }
     }
     if (threadType !== 'issue' && updated.threads?.issue && !updated.threads.issue.resolved) {
       const issueAge = Date.now() - new Date(updated.threads.issue.last_updated).getTime();
-      if (issueAge > 120000) { // 2 min
+      if (issueAge > 120000) {
         updated = ConversationMemoryManager.resolveThread(updated, 'issue');
       }
     }
@@ -749,7 +874,7 @@ export class ConfirmedMessageOrchestrator {
     // Track escalation state — ONLY for actual host escalation, not generic requests
     if (orchestratorResult?.source === 'host_escalation' || orchestratorResult?.triggerHostHandoff) {
       updated.awaiting_guest_confirmation_for_handoff = true;
-      updated.pending_handoff_reason = orchestratorResult.handoffReason || classification.intent;
+      updated.pending_handoff_reason = (orchestratorResult as any).handoffReason || classification.intent;
       updated.pending_handoff_topic = topic;
       updated.last_host_contact_offer_timestamp = new Date().toISOString();
       updated.last_response_type = 'escalation';
@@ -759,11 +884,24 @@ export class ConfirmedMessageOrchestrator {
 
     // Store last response text for courtesy loop prevention
     updated.last_response_text = response;
+    // Store last intent for topic-switch detection
+    updated.last_intent = classification.intent;
+
+    // Track pending approval state for restricted intents
+    const resultAny = orchestratorResult as any;
+    if (resultAny?._pendingApprovalType) {
+      updated.pending_approval_type = resultAny._pendingApprovalType;
+      updated.pending_approval_topic = resultAny._pendingTopic;
+    } else if (!this.HOST_APPROVAL_REQUIRED.includes(classification.intent)) {
+      // Clear pending approval if we moved to a non-restricted intent
+      updated.pending_approval_type = null;
+      updated.pending_approval_topic = null;
+    }
 
     if (orchestratorResult?.triggerHostHandoff) {
       updated.host_handoff_sent = true;
       updated.host_handoff_timestamp = new Date().toISOString();
-      updated.host_handoff_reason = orchestratorResult.handoffReason;
+      updated.host_handoff_reason = (orchestratorResult as any).handoffReason;
       updated.unresolved_issue_type = classification.troubleshootingResult?.category || null;
       updated.awaiting_host_response = true;
       updated.awaiting_guest_confirmation_for_handoff = false;
