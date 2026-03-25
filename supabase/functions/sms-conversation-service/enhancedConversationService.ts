@@ -248,6 +248,22 @@ export class EnhancedConversationService {
     console.log('🤖 Orchestrator v4 (threaded) processing:', message);
     const conversationContext = (conversation.conversation_context as any) || {};
 
+    // ── STEP -1: COURTESY LOOP PREVENTION ─────────────────────────────
+    // If last response was a courtesy/closing message and new message looks like a question,
+    // force fresh intent detection — do NOT reuse previous response template.
+    const lastResponseType = conversationContext?.last_response_type;
+    const lastResponse = (conversationContext?.last_response_text || conversation.last_response || '').toLowerCase();
+    const isLastCourtesy = this.isCourtesyResponse(lastResponse, lastResponseType);
+    const isNewQuestion = this.isNewQuestion(message);
+
+    if (isLastCourtesy && isNewQuestion) {
+      console.log('🚫 [Courtesy Guard] Last response was courtesy, new message is a question — forcing fresh intent detection');
+      // Clear any stale state that might cause the courtesy to repeat
+      if (conversationContext.awaiting_guest_confirmation_for_handoff) {
+        conversationContext.awaiting_guest_confirmation_for_handoff = false;
+      }
+    }
+
     // ── STEP 0: Follow-up detection + "Yes" confirmation ──────────────
     const { followUpThread, yesResult } = ConfirmedMessageOrchestrator.handleFollowUpOrConfirmation(message, property, conversationContext);
 
@@ -462,12 +478,24 @@ export class EnhancedConversationService {
 
       if (error) throw error;
 
-      const aiResponse = data?.response;
+      let aiResponse = data?.response;
       if (!aiResponse) throw new Error('Empty AI response');
+
+      // ── POST-AI: Detect escalation language and trigger real host SMS ──
+      const escalationTriggered = await this.detectAndTriggerEscalation(
+        aiResponse, property, phoneNumber, conversationContext, message, classification
+      );
 
       console.log('✅ AI responded:', aiResponse.substring(0, 100));
       await this.saveConversationMessage(phoneNumber, conversation.id, message, aiResponse);
       const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, aiResponse, classification);
+      // Store last response text for courtesy loop prevention
+      updatedCtx.last_response_text = aiResponse;
+      if (escalationTriggered) {
+        updatedCtx.last_escalation_sent_at = new Date().toISOString();
+        updatedCtx.last_escalation_issue_type = classification.intent;
+        updatedCtx.awaiting_host_response = true;
+      }
       await this.conversationManager.updateConversationState(phoneNumber, {
         last_message_type: 'ai_concierge',
         last_response: aiResponse,
@@ -475,7 +503,7 @@ export class EnhancedConversationService {
         conversation_context: updatedCtx,
       });
 
-      console.log('📊 [Routing]', { intent: classification.intent, requestType: classification.requestType, aiUsed: true });
+      console.log('📊 [Routing]', { intent: classification.intent, requestType: classification.requestType, aiUsed: true, escalationTriggered });
       return { messages: MessageUtils.ensureSmsLimit(aiResponse), shouldUpdateState: false };
     } catch (err) {
       console.error('❌ AI concierge failed:', err);
