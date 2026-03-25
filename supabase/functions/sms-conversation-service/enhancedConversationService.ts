@@ -488,6 +488,61 @@ export class EnhancedConversationService {
     }
 
     // ── STEP 6: RECOMMENDATION / GENERAL KNOWLEDGE → AI ───────────────────
+    // For property-specific questions that reached here (no structured data / no FAQ match),
+    // enforce "confirm with host" instead of letting AI hallucinate property facts
+    if (classification.isPropertySpecific) {
+      console.log('🏠 [Orchestrator] Property-specific question reached AI step — checking KB one more time');
+      const kbLastCheck = EnhancedPropertyKnowledgeService.searchPropertyKnowledge(property, message);
+      if (kbLastCheck.found && kbLastCheck.confidence >= 0.3) {
+        // KB has something — use AI only to rewrite it
+        console.log('📚 [KB Lock] Found KB answer — AI will rewrite only');
+        try {
+          const history = await this.getConversationHistory(phoneNumber, conversation.id);
+          const { data, error } = await this.supabase.functions.invoke('ai-concierge', {
+            body: {
+              message: `Rephrase this property answer in a warm, concierge SMS tone (keep it short, 1-3 sentences). Do NOT add any new facts. Original answer: "${kbLastCheck.content}"`,
+              property,
+              conversationHistory: history.slice(-3),
+              guestName: (conversationContext?.guestName || conversationContext?.guest_name || null),
+            },
+          });
+          const aiPolished = data?.response || ConciergeStyleService.polish(kbLastCheck.content);
+          const validated = ConfirmedMessageOrchestrator.validateResponseForIntent(aiPolished, classification.intent);
+          await this.saveConversationMessage(phoneNumber, conversation.id, message, validated);
+          const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, validated, classification);
+          updatedCtx.last_response_text = validated;
+          await this.conversationManager.updateConversationState(phoneNumber, {
+            last_message_type: 'kb_ai_rewrite',
+            last_response: validated,
+            last_intent: classification.intent,
+            conversation_context: updatedCtx,
+          });
+          return { messages: MessageUtils.ensureSmsLimit(validated), shouldUpdateState: false };
+        } catch (rewriteErr) {
+          const fallback = ConciergeStyleService.polish(kbLastCheck.content);
+          await this.saveConversationMessage(phoneNumber, conversation.id, message, fallback);
+          return { messages: MessageUtils.ensureSmsLimit(fallback), shouldUpdateState: false };
+        }
+      }
+
+      // No KB data at all for property-specific question → safe fallback, don't hallucinate
+      console.log('⚠️ [KB Lock] No KB data for property-specific question — using safe confirmation fallback');
+      const safeFallback = "I want to make sure I give you the right info — let me confirm that for you.";
+      await this.saveConversationMessage(phoneNumber, conversation.id, message, safeFallback);
+      const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, safeFallback, classification);
+      updatedCtx.last_response_text = safeFallback;
+      updatedCtx.awaiting_host_response = true;
+      await this.conversationManager.updateConversationState(phoneNumber, {
+        last_message_type: 'host_confirmation_pending',
+        last_response: safeFallback,
+        last_intent: classification.intent,
+        conversation_context: updatedCtx,
+      });
+      // Send host alert for property-specific question we couldn't answer
+      await this.sendHostAlert(property, phoneNumber, conversationContext, `Unanswered property question: ${classification.intent}`, message);
+      return { messages: MessageUtils.ensureSmsLimit(safeFallback), shouldUpdateState: false };
+    }
+
     try {
       const history = await this.getConversationHistory(phoneNumber, conversation.id);
       const slimContext = ConfirmedMessageOrchestrator.buildSlimAIContext(message, property, conversation, classification, history, followUpThread || undefined);
@@ -542,7 +597,6 @@ export class EnhancedConversationService {
         : "I'm having a moment — could you try again? If it's urgent, reach out to your host directly.";
       return { messages: MessageUtils.ensureSmsLimit(fallback), shouldUpdateState: false };
     }
-  }
 
   // ═══ HOST HANDOFF: Send alert SMS to host ═══
   private async sendHostAlert(property: Property, guestPhone: string, conversationContext: any, reason: string, summary: string) {
