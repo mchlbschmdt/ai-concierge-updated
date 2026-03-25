@@ -872,7 +872,12 @@ export class EnhancedConversationService {
     if (/\b(grill|bbq|barbecue)\b/.test(msg)) return 'grill';
     if (/\b(direction|how to get|airport|driving)\b/.test(msg)) return 'directions';
     if (/\b(emergency|contact.*host|manager)\b/.test(msg)) return 'emergency';
-    if (/\b(attraction|things to do|sightseeing|tour|museum|beach|hik)\b/.test(msg)) return 'activities';
+    if (/\b(attraction|things to do|sightseeing|tour|museum|hik)\b/.test(msg)) return 'activities';
+    if (/\b(beach chair|beach umbrella|beach gear|beach equipment)\b/.test(msg)) return 'beach_gear';
+    if (/\b(beach)\b/.test(msg) && !/chair|umbrella|gear|equipment|towel/.test(msg)) return 'beach_recs';
+    if (/\b(overnight|extra guest|visitor|company|friend.*stay|family.*stay|guest.*stay)\b/.test(msg)) return 'overnight_guests';
+    if (/\b(house rule|rule|policy|policies|allowed|not allowed|smoking|smoke|pet|animal|dog|cat)\b/.test(msg)) return 'house_rules';
+    if (/\b(included|come with|provide|supply|supplies)\b/.test(msg)) return 'included_amenities';
     return null;
   }
 
@@ -887,6 +892,13 @@ export class EnhancedConversationService {
       'ask_amenity': 'pool', 'ask_directions': 'directions',
       'ask_emergency_contact': 'emergency', 'ask_attractions': 'activities',
       'ask_access': 'building_access',
+      'ask_overnight_guests': 'overnight_guests', 'ask_visitor_parking': 'parking',
+      'ask_beach_chairs': 'beach_gear', 'ask_beach_towels': 'towels',
+      'ask_beach_gear': 'beach_gear', 'ask_house_rules': 'house_rules',
+      'ask_pet_policy': 'house_rules', 'ask_smoking': 'house_rules',
+      'ask_pool_access': 'pool', 'ask_gym': 'pool',
+      'ask_included_amenities': 'included_amenities', 'ask_unit_amenities': 'included_amenities',
+      'ask_building_policy': 'house_rules',
     };
     return map[intent] || null;
   }
