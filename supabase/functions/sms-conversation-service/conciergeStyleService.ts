@@ -99,24 +99,20 @@ export class ConciergeStyleService {
 
   static getEscalationResponse(type: 'urgent' | 'unanswerable' | 'approval' | 'explicit_host_request', details?: { topic?: string; hostContact?: string }): string {
     const topic = details?.topic || 'that';
-    const hostContact = details?.hostContact;
+    const pmContact = '+1 321-340-6333';
 
     switch (type) {
       case 'urgent':
-        return hostContact
-          ? `Thanks for letting me know — I'm sorry about that. I've alerted your host so they can jump on it right away. You can also reach them at ${hostContact}. If anything changes, just message me here.`
-          : "Thanks for letting me know — I'm sorry about that. I've alerted your host so they can jump on it right away. If anything changes, just message me here.";
+        return `Thanks for letting me know — I'm sorry about that. I've reached out to the property manager at ${pmContact} so they can jump on it right away. If anything changes, just message me here.`;
 
       case 'unanswerable':
-        return `I want to make sure you get the right answer on ${topic}. Let me check with your host and follow up for you.`;
+        return `I want to make sure you get the right answer on ${topic}. I'll reach out to the property manager at ${pmContact} to confirm for you.`;
 
       case 'approval':
-        return `I can check on that for you — let me reach out to your host now.`;
+        return `That one needs the property manager's approval — I'm reaching out to them at ${pmContact} now.`;
 
       case 'explicit_host_request':
-        return hostContact
-          ? `Of course! Your host can be reached at ${hostContact}. I've also flagged your conversation so they have context.`
-          : "Of course — I've flagged this so your host can reach out to you directly.";
+        return `Of course! You can reach the property manager at ${pmContact}. I've also flagged your conversation so they have context.`;
     }
   }
 
