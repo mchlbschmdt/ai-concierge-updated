@@ -152,6 +152,50 @@ export default function PropertyFaqTab({ property }) {
     });
   };
 
+  const [showPasteImport, setShowPasteImport] = useState(false);
+  const [pasteInput, setPasteInput] = useState('');
+  const [pasteImporting, setPasteImporting] = useState(false);
+
+  const handlePasteImport = async () => {
+    if (!pasteInput.trim()) return;
+    setPasteImporting(true);
+    try {
+      let parsed;
+      try { parsed = JSON.parse(pasteInput); } catch { 
+        toast({ title: 'Invalid JSON', description: 'Please paste valid JSON data.', variant: 'destructive' }); 
+        return; 
+      }
+      const entries = parsed.add_faqs || parsed.faqs || parsed.entries || (Array.isArray(parsed) ? parsed : null);
+      if (!Array.isArray(entries) || entries.length === 0) {
+        toast({ title: 'No entries found', description: 'JSON must contain an array under "add_faqs", "faqs", "entries", or be an array.', variant: 'destructive' });
+        return;
+      }
+      const rows = entries.filter(e => e.question && e.answer).map(e => ({
+        property_id: property.id,
+        category: e.category || 'General',
+        subcategory: e.subcategory || '',
+        question: e.question,
+        answer: e.answer,
+        tags: Array.isArray(e.tags) ? e.tags : (e.tags ? e.tags.split(',').map(t => t.trim()) : []),
+        priority: Number(e.priority) || 0,
+      }));
+      if (rows.length === 0) {
+        toast({ title: 'No valid entries', description: 'Entries must have "question" and "answer" fields.', variant: 'destructive' });
+        return;
+      }
+      const { error } = await supabase.from('faq_entries').insert(rows);
+      if (error) throw error;
+      toast({ title: 'Import Complete', description: `${rows.length} FAQ entries imported.` });
+      setPasteInput('');
+      setShowPasteImport(false);
+      fetchFaqs();
+    } catch (err) {
+      toast({ title: 'Import Failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setPasteImporting(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -166,9 +210,35 @@ export default function PropertyFaqTab({ property }) {
             {importing ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Upload size={14} className="mr-1" />}
             Import
           </Button>
+          <Button size="sm" variant="outline" onClick={() => setShowPasteImport(v => !v)}>
+            📋 Paste JSON
+          </Button>
           <input ref={fileInputRef} type="file" accept=".json,.csv" onChange={handleImport} className="hidden" />
         </div>
       </div>
+
+      {/* Paste Import */}
+      {showPasteImport && (
+        <div className="border rounded-lg p-4 bg-muted/30 space-y-3">
+          <h4 className="font-medium text-sm">Paste FAQ JSON</h4>
+          <p className="text-xs text-muted-foreground">Paste JSON with an array under "add_faqs", "faqs", "entries", or a top-level array. Each entry needs "question" and "answer" fields.</p>
+          <Textarea
+            value={pasteInput}
+            onChange={e => setPasteInput(e.target.value)}
+            placeholder='{"add_faqs": [{"category": "...", "question": "...", "answer": "...", "tags": [...]}]}'
+            className="font-mono text-sm min-h-[150px]"
+            disabled={pasteImporting}
+          />
+          <div className="flex gap-2">
+            <Button size="sm" onClick={handlePasteImport} disabled={!pasteInput.trim() || pasteImporting}>
+              {pasteImporting ? <><Loader2 size={14} className="mr-1 animate-spin" /> Importing...</> : <><Check size={14} className="mr-1" /> Import Entries</>}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setShowPasteImport(false)}>
+              <X size={14} className="mr-1" /> Cancel
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 items-center">
