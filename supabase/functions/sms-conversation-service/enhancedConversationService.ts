@@ -577,7 +577,9 @@ export class EnhancedConversationService {
     // Try to send via OpenPhone API
     try {
       const OPENPHONE_API_KEY = Deno.env.get('OPENPHONE_API_KEY');
+      const BUSINESS_PHONE = '+18333301032';
       if (OPENPHONE_API_KEY) {
+        console.log(`📞 [Handoff] Sending host SMS to ${hostPhone} from ${BUSINESS_PHONE}`);
         const response = await fetch('https://api.openphone.com/v1/messages', {
           method: 'POST',
           headers: {
@@ -586,12 +588,13 @@ export class EnhancedConversationService {
           },
           body: JSON.stringify({
             content: alertMessage,
-            to: [hostPhone],
+            to: [hostPhone.startsWith('+') ? hostPhone : `+1${hostPhone.replace(/\D/g, '')}`],
+            from: BUSINESS_PHONE,
           }),
         });
 
         if (response.ok) {
-          console.log('✅ [Handoff] Host SMS alert sent successfully');
+          console.log('✅ [Handoff] Host SMS alert sent successfully to', hostPhone);
         } else {
           const err = await response.text();
           console.warn('⚠️ [Handoff] Host SMS send failed:', response.status, err);
@@ -698,10 +701,12 @@ export class EnhancedConversationService {
     ].join('\n');
 
     const HOST_PHONE = '+13213406333';
+    const BUSINESS_PHONE = '+18333301032';
 
     try {
       const OPENPHONE_API_KEY = Deno.env.get('OPENPHONE_API_KEY');
       if (OPENPHONE_API_KEY) {
+        console.log(`📞 [Auto-Escalation] Sending host SMS to ${HOST_PHONE} from ${BUSINESS_PHONE}`);
         const response = await fetch('https://api.openphone.com/v1/messages', {
           method: 'POST',
           headers: {
@@ -711,6 +716,7 @@ export class EnhancedConversationService {
           body: JSON.stringify({
             content: hostMessage,
             to: [HOST_PHONE],
+            from: BUSINESS_PHONE,
           }),
         });
 
