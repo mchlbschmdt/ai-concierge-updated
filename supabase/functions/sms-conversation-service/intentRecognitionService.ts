@@ -427,6 +427,14 @@ export class IntentRecognitionService {
     ])) {
       return { intent: 'ask_garbage', confidence: 0.95 };
     }
+
+    // Towels / linens
+    if (this.matchesKeywords(message, [
+      'towel', 'towels', 'beach towel', 'beach towels', 'linen', 'linens',
+      'sheet', 'sheets', 'extra towels', 'bath towel'
+    ])) {
+      return { intent: 'ask_towels', confidence: 0.95 };
+    }
     
     // NEW: Resort amenities intent
     if (this.detectResortAmenitiesIntent(lowerMessage)) {
