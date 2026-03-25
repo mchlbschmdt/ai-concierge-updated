@@ -363,11 +363,10 @@ export class ConfirmedMessageOrchestrator {
       });
       triggerHandoff = true;
     }
-    // Generic request
+    // Generic request — DON'T auto-escalate, let it fall through to AI
     else {
-      response = ConciergeStyleService.getRequestResponse('generic');
-      setAwaitingConfirmation = true;
-      pendingTopic = 'their request';
+      console.log('🤝 [Orchestrator] Generic request — routing to AI instead of auto-escalation');
+      return null; // Fall through to FAQ/AI path
     }
 
     return {
@@ -576,15 +575,17 @@ export class ConfirmedMessageOrchestrator {
         'Keep responses SMS-friendly — 1-3 sentences, max 400 chars. Concise and conversational.',
         'For recommendations: give 2-3 specific places with names and a one-line reason each.',
         'Never invent property-specific facts. If unsure, provide a best-guess with a light hedge ("Typically..." or "Usually...").',
-        'Never say "property guide", "general_info", "I don\'t see that information", or "I\'ll check on that."',
+        'CRITICAL: NEVER say any of these phrases: "Let me check with the host", "I\'ll confirm with the host", "I\'ll reach out to the property manager", "Let me check on that", "property guide", "general_info", "I don\'t see that information".',
+        'CRITICAL: Answer the guest\'s question DIRECTLY. Use property context, location awareness, and common sense. Only mention the host for truly host-approval items (refunds, early check-in approval, damage).',
         'No numbered multi-part responses (1/2, 2/2). Single natural flow.',
         'Sound like a warm host texting — not a hotel front desk or chatbot.',
         'Use contractions naturally (it\'s, there\'s, you\'ll, we\'re).',
-        'For recommendations, NEVER say "I\'ll need to confirm with the host" — just give local suggestions.',
+        'For recommendations, ALWAYS provide specific suggestions — never defer to the host.',
+        'For property questions you\'re unsure about, give your best common-sense answer with "Typically..." or "Usually..." rather than escalating.',
         'TROUBLESHOOTING: If guest reports an issue, acknowledge it, provide 2-4 specific troubleshooting steps, and only escalate if unresolved.',
-        'PRIORITY: Try to answer from property data → best-guess → helpful alternatives → troubleshooting before escalating.',
+        'PRIORITY: Answer directly → best-guess → helpful alternatives → troubleshooting. Escalation is LAST RESORT for urgent/damage issues only.',
         'ANTI-REPETITION: Never repeat previously provided info unless asked. Prioritize the most recent question.',
-        'ESCALATION: When needed, explain WHY and confirm contacting Property Manager at +1 321-340-6333. Never use vague "I\'ll check on that."',
+        'ESCALATION RULES: Only escalate for urgent issues (leaks, damage, locked out) or things that genuinely require host approval (refunds, booking changes). For everything else — trash, amenities, restaurants, how-to — just answer.',
         'Handle ambiguous questions, general knowledge (distance, travel, tickets), and troubleshooting — not just recommendations.',
         activeThread?.turn_count && activeThread.turn_count > 0
           ? `This is a follow-up in the ${threadType} thread. Previous: "${activeThread.last_response_summary}". Do NOT repeat what was already said — refine, add new info, or rephrase.`
@@ -603,6 +604,29 @@ export class ConfirmedMessageOrchestrator {
     classification: UnifiedClassification,
     conversationContext: any
   ): OrchestratorResult {
+    // ── LOOP PREVENTION: Block consecutive escalations ──────────────
+    const lastResponseType = conversationContext?.last_response_type;
+    const isUrgent = classification.isIssue && classification.troubleshootingResult?.isUrgent;
+    
+    if (lastResponseType === 'escalation' && !isUrgent) {
+      console.log('🚫 [Orchestrator] BLOCKED consecutive escalation — providing smart default instead');
+      const smartDefault = this.getSmartDefault(message, property);
+      return {
+        response: smartDefault,
+        source: 'property_data',
+        shouldUpdateState: true,
+        routing: {
+          intent: classification.intent,
+          requestType: classification.requestType,
+          propertyDataUsed: false,
+          knowledgeBaseUsed: false,
+          aiUsed: false,
+          escalationTriggered: false,
+          repetitionPrevented: true,
+        },
+      };
+    }
+
     console.log('📞 [Orchestrator] Host escalation — no confident answer');
 
     const topic = extractTopicFromMessage(message, classification.intent);
@@ -627,6 +651,35 @@ export class ConfirmedMessageOrchestrator {
         repetitionPrevented: false,
       },
     };
+  }
+
+  /**
+   * Smart defaults for common questions when KB is missing info.
+   * Prevents escalation for routine queries.
+   */
+  static getSmartDefault(message: string, property: Property): string {
+    const lower = message.toLowerCase();
+
+    if (/\b(trash|garbage|basura|recycle)\b/.test(lower)) {
+      return "Trash and recycling are typically located near the building entrance or in a designated disposal area. If you have trouble finding it, just let me know! 👍";
+    }
+    if (/\b(bag|luggage|store|hold)\b/.test(lower) && /\b(early|before|arrive|arrival)\b/.test(lower)) {
+      return "If you arrive before check-in, you might want to check local luggage storage services like BagsAway or Hold My Bags. I can also suggest nearby spots to relax while the place is being prepared!";
+    }
+    if (/\b(grill|bbq|barbecue)\b/.test(lower)) {
+      return "Good question! Grills are usually available in the common area or patio. I can confirm the exact location if needed — just let me know!";
+    }
+    if (/\b(restaurant|food|eat|dining|hungry)\b/.test(lower)) {
+      return "I'd love to help with restaurant recommendations! What kind of cuisine are you in the mood for?";
+    }
+    if (/\b(pool|swim)\b/.test(lower)) {
+      return "The pool is typically accessible during daytime hours. Towels may be available at the unit — want me to confirm any specific details?";
+    }
+    if (/\b(towel|linen|sheet)\b/.test(lower)) {
+      return "Fresh towels and linens are provided with the unit. Extra towels are usually available in the linen closet or bathroom cabinets.";
+    }
+
+    return `Good question — here's what I can tell you: most properties in this area typically have that covered. Want me to get the specific details from your host?`;
   }
 
   /**
@@ -681,12 +734,15 @@ export class ConfirmedMessageOrchestrator {
       }
     }
 
-    // Track escalation state
-    if (orchestratorResult?.source === 'host_escalation' || orchestratorResult?.source === 'request_response') {
+    // Track escalation state — ONLY for actual host escalation, not generic requests
+    if (orchestratorResult?.source === 'host_escalation' || orchestratorResult?.triggerHostHandoff) {
       updated.awaiting_guest_confirmation_for_handoff = true;
       updated.pending_handoff_reason = orchestratorResult.handoffReason || classification.intent;
       updated.pending_handoff_topic = topic;
       updated.last_host_contact_offer_timestamp = new Date().toISOString();
+      updated.last_response_type = 'escalation';
+    } else {
+      updated.last_response_type = orchestratorResult?.source || 'answer';
     }
 
     if (orchestratorResult?.triggerHostHandoff) {
