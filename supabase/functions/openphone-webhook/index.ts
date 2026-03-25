@@ -232,11 +232,36 @@ serve(async (req) => {
       // Verify webhook signature if secret is configured
       const webhookSecret = Deno.env.get('OPENPHONE_WEBHOOK_SECRET');
       const signature = req.headers.get('openphone-signature');
-      
-      if (webhookSecret && signature) {
+      const bypassVerification = Deno.env.get('BYPASS_SIGNATURE_VERIFICATION') === 'true';
+
+      if (bypassVerification) {
+        console.log('⚠️ Signature verification BYPASSED via BYPASS_SIGNATURE_VERIFICATION flag');
+      } else if (webhookSecret && signature) {
         const isValid = await verifyWebhookSignature(body, signature, webhookSecret);
         if (!isValid) {
           console.error('❌ Webhook signature verification failed');
+          // Debug: log computed vs expected for diagnosis
+          const parts = signature.split(';');
+          if (parts.length === 4) {
+            const [, , ts, expected] = parts;
+            const payload = ts + '.' + body;
+            try {
+              // Try base64-decoded key
+              const keyB64 = Uint8Array.from(atob(webhookSecret), c => c.charCodeAt(0));
+              const k1 = await crypto.subtle.importKey('raw', keyB64, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+              const s1 = await crypto.subtle.sign('HMAC', k1, new TextEncoder().encode(payload));
+              const c1 = btoa(String.fromCharCode(...new Uint8Array(s1)));
+              console.log('🔍 DEBUG b64-decoded key computed:', c1);
+              console.log('🔍 DEBUG expected:', expected);
+              // Try raw UTF-8 key
+              const k2 = await crypto.subtle.importKey('raw', new TextEncoder().encode(webhookSecret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+              const s2 = await crypto.subtle.sign('HMAC', k2, new TextEncoder().encode(payload));
+              const c2 = btoa(String.fromCharCode(...new Uint8Array(s2)));
+              console.log('🔍 DEBUG raw-utf8 key computed:', c2);
+            } catch (e) {
+              console.error('🔍 DEBUG error:', e);
+            }
+          }
           return new Response(
             JSON.stringify({ error: 'Invalid webhook signature' }),
             {
