@@ -154,13 +154,10 @@ export class PropertyDataExtractor {
     return { content: '', hasData: false, dataType: 'general' };
   }
 
-  // NEW: Extract check-in info
+  // Extract check-in TIME only — do NOT bundle access/key/door info
   static extractCheckinInfo(property: any): PropertyDataResponse {
     if (property.check_in_time) {
-      let content = `🏠 Check-in time: ${property.check_in_time}`;
-      if (property.access_instructions) {
-        content += `\n\n🔑 Access: ${property.access_instructions}`;
-      }
+      const content = `Check-in is at ${property.check_in_time}.`;
       return {
         content,
         hasData: true,
@@ -168,6 +165,90 @@ export class PropertyDataExtractor {
       };
     }
     return { content: '', hasData: false, dataType: 'general' };
+  }
+
+  // Extract key fob / key pickup info
+  static extractKeyFobInfo(property: any): PropertyDataResponse {
+    const kb = property.knowledge_base || '';
+    const access = property.access_instructions || '';
+    const combined = `${kb}\n${access}`.toLowerCase();
+
+    // Look for key fob specific sentences
+    const fobPatterns = [
+      /[^.]*\bkey\s*fob\b[^.]*/gi,
+      /[^.]*\bkeyfob\b[^.]*/gi,
+      /[^.]*\bkey\s*card\b[^.]*/gi,
+      /[^.]*\bpick\s*up\s*(the\s+)?key\b[^.]*/gi,
+      /[^.]*\bcollect\s*(the\s+)?key\b[^.]*/gi,
+      /[^.]*\bfront\s*desk\b[^.]*\bkey\b[^.]*/gi,
+      /[^.]*\bkey\b[^.]*\bfront\s*desk\b[^.]*/gi,
+      /[^.]*\bsecurity\b[^.]*\bkey\b[^.]*/gi,
+    ];
+
+    const fullText = `${property.knowledge_base || ''}\n${property.access_instructions || ''}`;
+    for (const pattern of fobPatterns) {
+      const match = fullText.match(pattern);
+      if (match) {
+        return { content: match[0].trim(), hasData: true, dataType: 'access' };
+      }
+    }
+
+    // If no specific key fob info, check if access_instructions mention any key process
+    if (property.access_instructions && /key/i.test(property.access_instructions)) {
+      return { content: property.access_instructions, hasData: true, dataType: 'access' };
+    }
+
+    return { content: '', hasData: false, dataType: 'access' };
+  }
+
+  // Extract door/entry code info
+  static extractDoorCodeInfo(property: any): PropertyDataResponse {
+    const kb = property.knowledge_base || '';
+    const access = property.access_instructions || '';
+    const fullText = `${kb}\n${access}`;
+
+    const codePatterns = [
+      /[^.]*\b(door|entry|access|lock|keypad|gate|unit|security|pin)\s*code\b[^.]*/gi,
+      /[^.]*\bcode\s*(is|will be|:)\s*[^.]*/gi,
+      /[^.]*\bcombination\b[^.]*/gi,
+    ];
+
+    for (const pattern of codePatterns) {
+      const match = fullText.match(pattern);
+      if (match) {
+        return { content: match[0].trim(), hasData: true, dataType: 'access' };
+      }
+    }
+
+    return { content: '', hasData: false, dataType: 'access' };
+  }
+
+  // Extract building access info (lobby, entrance, etc.)
+  static extractBuildingAccessInfo(property: any): PropertyDataResponse {
+    const kb = property.knowledge_base || '';
+    const access = property.access_instructions || '';
+    const fullText = `${kb}\n${access}`;
+
+    const buildingPatterns = [
+      /[^.]*\bbuilding\s*(entrance|access|door|lobby)\b[^.]*/gi,
+      /[^.]*\b(main|front)\s*(entrance|door)\b[^.]*/gi,
+      /[^.]*\blobby\b[^.]*/gi,
+      /[^.]*\benter\s*the\s*building\b[^.]*/gi,
+    ];
+
+    for (const pattern of buildingPatterns) {
+      const match = fullText.match(pattern);
+      if (match) {
+        return { content: match[0].trim(), hasData: true, dataType: 'access' };
+      }
+    }
+
+    // Fall back to full access instructions if they mention building
+    if (property.access_instructions && /building/i.test(property.access_instructions)) {
+      return { content: property.access_instructions, hasData: true, dataType: 'access' };
+    }
+
+    return { content: '', hasData: false, dataType: 'access' };
   }
   
   static extractAmenityInfo(property: any, message: string): PropertyDataResponse {

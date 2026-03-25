@@ -146,7 +146,8 @@ export class ConfirmedMessageOrchestrator {
     const troubleshootingResult = TroubleshootingDetectionService.detectTroubleshootingIntent(message);
 
     const propertySpecificIntents = [
-      'ask_checkout_time', 'ask_checkin_time', 'ask_access',
+      'ask_checkout_time', 'ask_checkin_time', 'ask_early_checkin', 'ask_access',
+      'ask_key_fob', 'ask_door_code', 'ask_building_access',
       'ask_wifi', 'ask_parking', 'ask_amenity', 'ask_emergency_contact',
       'ask_property_specific', 'ask_additional_services', 'ask_resort_amenities',
       'ask_garbage', 'ask_grocery', 'ask_transportation_no_car', 'ask_grocery_transport',
