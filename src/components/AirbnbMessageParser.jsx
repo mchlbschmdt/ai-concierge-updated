@@ -26,6 +26,12 @@ export default function AirbnbMessageParser({ propertyId, onMessagesAdded }) {
         return;
       }
       
+      // Detect FAQ format and redirect user
+      if (messagesData.add_faqs || messagesData.faqs || messagesData.entries) {
+        showToast("This looks like FAQ data. Please use the Knowledge Base tab to import it.", "error");
+        return;
+      }
+
       let messages = Array.isArray(messagesData) ? messagesData : messagesData.messages;
       
       if (!Array.isArray(messages)) {
