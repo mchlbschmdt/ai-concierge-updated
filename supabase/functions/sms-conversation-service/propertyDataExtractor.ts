@@ -26,6 +26,12 @@ export class PropertyDataExtractor {
     switch (intent) {
       case 'ask_access':
         return this.extractAccessInfo(property);
+      case 'ask_key_fob':
+        return this.extractKeyFobInfo(property);
+      case 'ask_door_code':
+        return this.extractDoorCodeInfo(property);
+      case 'ask_building_access':
+        return this.extractBuildingAccessInfo(property);
       case 'ask_wifi':
         return this.extractWifiInfo(property);
       case 'ask_parking':
@@ -33,6 +39,8 @@ export class PropertyDataExtractor {
       case 'ask_checkout_time':
         return this.extractCheckoutInfo(property);
       case 'ask_checkin_time':
+        return this.extractCheckinInfo(property);
+      case 'ask_early_checkin':
         return this.extractCheckinInfo(property);
       case 'ask_emergency_contact':
         return this.extractEmergencyContact(property);

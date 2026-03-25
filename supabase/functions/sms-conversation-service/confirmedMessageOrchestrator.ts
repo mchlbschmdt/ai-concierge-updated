@@ -575,6 +575,12 @@ export class ConfirmedMessageOrchestrator {
       responseRules: [
         'You are a luxury vacation rental concierge — warm, polished, and knowledgeable like a trusted local friend.',
         'Keep responses SMS-friendly — 1-3 sentences, max 400 chars. Concise and conversational.',
+        'MINIMUM NECESSARY ANSWER RULE: Answer ONLY the specific question asked. Do NOT bundle related topics.',
+        '  - If guest asks "what time can I check in?" → respond ONLY with check-in time. Do NOT add building entrance, key fob, parking, or unit code info.',
+        '  - If guest asks about key fob → respond ONLY about how/where to get the key fob. Do NOT include check-in time, building access, or door codes.',
+        '  - If guest asks about door code → respond ONLY with door/entry code info.',
+        '  - If guest asks about building access → respond ONLY with building entrance instructions.',
+        '  - Only combine multiple topics if the guest explicitly asked multiple questions in one message.',
         'For recommendations: give 2-3 specific places with names and a one-line reason each.',
         'Never invent property-specific facts. If unsure, provide a best-guess with a light hedge ("Typically..." or "Usually...").',
         'CRITICAL: NEVER say any of these phrases: "Let me check with the host", "I\'ll confirm with the host", "I\'ll reach out to the property manager", "Let me check on that", "property guide", "general_info", "I don\'t see that information".',
@@ -589,6 +595,7 @@ export class ConfirmedMessageOrchestrator {
         'ANTI-REPETITION: Never repeat previously provided info unless asked. Prioritize the most recent question.',
         'ESCALATION RULES: Only escalate for urgent issues (leaks, damage, locked out) or things that genuinely require host approval (refunds, booking changes). For everything else — trash, amenities, restaurants, how-to — just answer.',
         'Handle ambiguous questions, general knowledge (distance, travel, tickets), and troubleshooting — not just recommendations.',
+        'RESPONSE PRUNING: Before finalizing, remove any sentences about topics the guest did NOT ask about. Keep only directly relevant info.',
         activeThread?.turn_count && activeThread.turn_count > 0
           ? `This is a follow-up in the ${threadType} thread. Previous: "${activeThread.last_response_summary}". Do NOT repeat what was already said — refine, add new info, or rephrase.`
           : '',
