@@ -1,53 +1,58 @@
 
 
-# Add Property Access Sharing (Assign Properties to Users)
+# Fix: SMS Messages Not Getting Responses
 
-## Current State
-Properties have a single `user_id` owner. There is no mechanism to share or assign property access to other users like Lauren without transferring full ownership.
+## Root Cause
 
-## Proposed Solution
-Add a **property_access** table (many-to-many) so multiple users can view/manage the same properties, plus an admin UI to assign properties to users.
+The `openphone-webhook` edge function is **rejecting every incoming SMS** with a 401 error because webhook signature verification always fails.
 
-## Architecture
+The bug is in `verifyWebhookSignature`: the OpenPhone webhook secret is a **base64-encoded** signing key, but the code uses it as a raw UTF-8 string. Per OpenPhone's docs (now Quo), step 3 is "Decode signing key from base64", then use the binary key for HMAC-SHA256. The current code skips this decode step, so no computed signature ever matches.
 
-```text
-properties (existing)
-  └── user_id = owner
+The secret length of 44 characters (visible in logs) confirms it's a base64-encoded 32-byte key.
 
-property_access (new)
-  ├── property_id (uuid → properties.id)
-  ├── user_id (uuid, the granted user)
-  ├── access_level ('viewer' | 'manager')
-  ├── granted_by (uuid)
-  └── created_at
+## Fix
+
+### 1. Fix signature verification in `openphone-webhook/index.ts`
+
+Replace the `verifyWebhookSignature` function to:
+- **Base64-decode the webhook secret** before using it as the HMAC key
+- Use the correct signed data format: `timestamp + "." + body`
+- Remove the verbose multi-approach guessing logic -- only the correct algorithm is needed
+- Keep one clean verification path
+
+```typescript
+async function verifyWebhookSignature(body: string, signature: string, secret: string): Promise<boolean> {
+  const parts = signature.split(';');
+  if (parts.length !== 4 || parts[0] !== 'hmac') return false;
+
+  const [, , timestamp, providedSignature] = parts;
+  const payload = timestamp + '.' + body;
+
+  // Key step: base64-decode the secret before using as HMAC key
+  const keyBytes = Uint8Array.from(atob(secret), c => c.charCodeAt(0));
+
+  const key = await crypto.subtle.importKey(
+    'raw', keyBytes,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false, ['sign']
+  );
+
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
+  const computed = btoa(String.fromCharCode(...new Uint8Array(sig)));
+
+  return computed === providedSignature;
+}
 ```
 
-## Changes
+### 2. Clean up excessive debug logging
 
-### 1. Database Migration
-- Create `property_access` table with RLS policies
-- Users can see properties they own OR have been granted access to
-- Update the RLS policy on `properties` to include shared access:
-  `auth.uid() = user_id OR EXISTS (SELECT 1 FROM property_access WHERE ...)`
-- Security definer function `has_property_access(user_id, property_id)` to avoid RLS recursion
+Remove the ~100 lines of verbose signature debug logging. Keep a single success/fail log line.
 
-### 2. Admin Panel -- New "Assign Properties" UI
-- Add a section in the Admin Panel (or a per-user expandable row) to:
-  - Search for a user by email/name
-  - See all properties in the system
-  - Check/uncheck properties to grant access
-  - Choose access level (viewer vs manager)
-- Super admins only
+### 3. Redeploy the edge function
 
-### 3. Update Property Queries
-- Update `useProperties` hook and `propertyService` to fetch properties where `user_id = auth.uid() OR property_access` exists
-- Shared properties show a badge indicating "Shared with you"
+Deploy the updated `openphone-webhook` function so real SMS messages from OpenPhone are accepted and processed.
 
-### 4. Update SMS Concierge RLS
-- The `sms_conversations` and `sms_conversation_messages` RLS policies reference `properties.user_id`. These need updating to also allow shared-access users to view conversations for properties they manage.
+## Expected Result
 
-## What This Enables
-- As a super admin, you go to Admin Panel > Users, find Lauren, and assign her specific properties
-- Lauren sees those properties in her dashboard alongside any she created herself
-- No data duplication -- same property record, shared access
+After this fix, incoming SMS messages will pass signature verification, be forwarded to `sms-conversation-service`, and generate responses back to the guest.
 
