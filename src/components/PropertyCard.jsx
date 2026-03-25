@@ -7,6 +7,7 @@ import PropertyEditForm from './PropertyEditForm';
 import PropertyDetails from './PropertyDetails';
 import PropertyFilesTab from './PropertyFilesTab';
 import PropertyMessagesTab from './PropertyMessagesTab';
+import PropertyFaqTab from './PropertyFaqTab';
 
 export default function PropertyCard({ 
   property, 
@@ -84,14 +85,19 @@ export default function PropertyCard({
       </div>
       
       <Tabs defaultValue="details" className="mt-6">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="details">Details</TabsTrigger>
+          <TabsTrigger value="faq">📚 Knowledge Base</TabsTrigger>
           <TabsTrigger value="files">Files</TabsTrigger>
           <TabsTrigger value="messages">Messages</TabsTrigger>
         </TabsList>
         
         <TabsContent value="details" className="space-y-4 mt-4">
           <PropertyDetails property={property} />
+        </TabsContent>
+
+        <TabsContent value="faq" className="space-y-4 mt-4">
+          <PropertyFaqTab property={property} />
         </TabsContent>
         
         <TabsContent value="files" className="space-y-4 mt-4">
