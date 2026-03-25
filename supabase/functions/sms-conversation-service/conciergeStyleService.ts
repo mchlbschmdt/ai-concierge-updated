@@ -22,18 +22,21 @@ export class ConciergeStyleService {
 
     // Replace robotic phrases with concierge language
     const replacements: [RegExp, string][] = [
-      [/I don't (see|have|find) that (information|info|in the property guide)/gi, "I'll need to double-check that for you"],
+      [/I don't (see|have|find) that (information|info|in the property guide)/gi, "Here's what I know"],
       [/property guide/gi, 'property details'],
       [/general_info/gi, ''],
-      [/I('ll| will) need to confirm (that |this )?with the host/gi, "Happy to double-check that for you"],
-      [/Want me to (reach out|contact the host)\??/gi, 'Want me to take care of that for you?'],
-      [/Want me to reach out to (your |the )?host\??/gi, 'Want me to take care of that for you?'],
+      [/I('ll| will) need to confirm (that |this )?with the host/gi, "Here's what I found"],
+      [/Let me check (on that |that |this )?(for you|with the host)\.?/gi, "Here's what I found 👇"],
+      [/I('ll| will) check (on that |that )?(with |for )?(the host|you)\.?/gi, "Good question — here's the info:"],
+      [/I('ll| will) reach out to (the |your )?(property manager|host|owner)\.?/gi, "Here's what I can tell you"],
+      [/Want me to (reach out|contact the host)\??/gi, 'Need anything else?'],
+      [/Want me to reach out to (your |the )?host\??/gi, 'Need anything else?'],
       [/I('m| am) going to notify your host/gi, "I've alerted your host"],
       [/There is no (\w+)/gi, "There isn't a $1"],
       [/There are no (\w+)/gi, "There aren't any $1"],
       [/What time were you hoping to arrive\??/gi, 'What time were you thinking of arriving?'],
       [/Check-in is at (\d)/gi, 'Check-in begins at $1'],
-      [/I don't have the specifics on/gi, "I'll want to confirm"],
+      [/I don't have the specifics on/gi, "Here's what I know about"],
     ];
 
     for (const [pattern, replacement] of replacements) {

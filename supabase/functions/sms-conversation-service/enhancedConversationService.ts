@@ -351,15 +351,11 @@ export class EnhancedConversationService {
         return { messages: MessageUtils.ensureSmsLimit(propertyResult.response), shouldUpdateState: false };
       }
 
-      // Property-specific question but no data → host escalation
-      if (!classification.shouldUseAI) {
-        const escalation = ConfirmedMessageOrchestrator.buildHostEscalation(message, property, classification, conversationContext);
-        await this.saveConversationMessage(phoneNumber, conversation.id, message, escalation.response);
-        const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, escalation.response, classification, escalation);
-        await this.conversationManager.updateConversationState(phoneNumber, { conversation_context: updatedCtx });
-        console.log('📊 [Routing]', escalation.routing);
-        return { messages: MessageUtils.ensureSmsLimit(escalation.response), shouldUpdateState: false };
-      }
+      // Property-specific question but no data → try FAQ + AI BEFORE escalating
+      // OLD: immediate escalation. NEW: fall through to FAQ (step 5.5) and AI (step 6)
+      console.log('⚠️ [Orchestrator] No property data found — falling through to FAQ/AI before escalation');
+      // Force shouldUseAI so it doesn't dead-end
+      classification = { ...classification, shouldUseAI: true };
     }
 
     // ── STEP 5.5: FAQ MATCHING — check structured FAQ before AI ────────────
