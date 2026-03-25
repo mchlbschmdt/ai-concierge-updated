@@ -152,6 +152,11 @@ export class ConfirmedMessageOrchestrator {
       'ask_property_specific', 'ask_additional_services', 'ask_resort_amenities',
       'ask_garbage', 'ask_grocery', 'ask_transportation_no_car', 'ask_grocery_transport',
       'ask_bag_drop', 'ask_towels', 'ask_late_checkout',
+      // Expanded property-specific intents — these MUST use KB/FAQ first
+      'ask_overnight_guests', 'ask_visitor_parking', 'ask_beach_chairs',
+      'ask_beach_towels', 'ask_beach_gear', 'ask_house_rules', 'ask_pet_policy',
+      'ask_smoking', 'ask_pool_access', 'ask_gym', 'ask_included_amenities',
+      'ask_building_policy', 'ask_unit_amenities',
     ];
 
     const isIssue = requestClassification.type === 'ISSUE' || troubleshootingResult.isTroubleshooting;
@@ -644,6 +649,8 @@ export class ConfirmedMessageOrchestrator {
       } : null,
       conversationHistory: recentHistory.slice(-10),
       memorySummary,
+      // Determine if AI should be in rewrite-only mode (property KB answer provided as context)
+      isRewriteOnly: classification.isPropertySpecific && !!propertySnippets.relevant_knowledge,
       responseRules: [
         'You are a luxury vacation rental concierge — warm, polished, and knowledgeable like a trusted local friend.',
         'Keep responses SMS-friendly — 1-3 sentences, max 400 chars. Concise and conversational.',
@@ -654,14 +661,18 @@ export class ConfirmedMessageOrchestrator {
         '  - If guest asks about building access → respond ONLY with building entrance instructions.',
         '  - Only combine multiple topics if the guest explicitly asked multiple questions in one message.',
         'For recommendations: give 2-3 specific places with names and a one-line reason each.',
-        'Never invent property-specific facts. If unsure, provide a best-guess with a light hedge ("Typically..." or "Usually...").',
-        'CRITICAL: NEVER say any of these phrases: "Let me check with the host", "I\'ll confirm with the host", "I\'ll reach out to the property manager", "Let me check on that", "property guide", "general_info", "I don\'t see that information".',
+        // KB SOURCE OF TRUTH RULES
+        'CRITICAL SOURCE OF TRUTH: If "relevant_knowledge" is provided in propertySnippets, that is the AUTHORITATIVE answer. You MUST use it as the factual basis. Do NOT override, contradict, or replace it with generic knowledge.',
+        'REWRITE-ONLY MODE: When relevant_knowledge is provided for a property-specific question, your ONLY job is to rephrase it in a warm SMS-friendly tone. Do NOT add new facts, distances, place names, or policies not in the source.',
+        'NEVER HALLUCINATE PROPERTY FACTS: Do not invent beach names, distances, parking rules, guest policies, trash locations, or amenity details. If the property data does not contain it, do not state it as fact.',
+        'If no property data answers the question AND it is property-specific, respond with: "I want to make sure I give you the right info — let me confirm that for you." Do NOT guess.',
+        'CURATED RECOMMENDATIONS FIRST: If the property data includes local_recommendations or curated places, use those FIRST before generating new suggestions.',
+        'CRITICAL: NEVER say any of these phrases: "property guide", "general_info", "I don\'t see that information".',
         'CRITICAL: Answer the guest\'s question DIRECTLY. Use property context, location awareness, and common sense. Only mention the host for truly host-approval items (refunds, early check-in approval, damage).',
         'No numbered multi-part responses (1/2, 2/2). Single natural flow.',
         'Sound like a warm host texting — not a hotel front desk or chatbot.',
         'Use contractions naturally (it\'s, there\'s, you\'ll, we\'re).',
         'For recommendations, ALWAYS provide specific suggestions — never defer to the host.',
-        'For property questions you\'re unsure about, give your best common-sense answer with "Typically..." or "Usually..." rather than escalating.',
         'TROUBLESHOOTING: If guest reports an issue, acknowledge it, provide 2-4 specific troubleshooting steps, and only escalate if unresolved.',
         'PRIORITY: Answer directly → best-guess → helpful alternatives → troubleshooting. Escalation is LAST RESORT for urgent/damage issues only.',
         'ANTI-REPETITION: Never repeat previously provided info unless asked. Prioritize the most recent question.',

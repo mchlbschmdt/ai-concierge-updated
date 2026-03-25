@@ -488,6 +488,61 @@ export class EnhancedConversationService {
     }
 
     // ── STEP 6: RECOMMENDATION / GENERAL KNOWLEDGE → AI ───────────────────
+    // For property-specific questions that reached here (no structured data / no FAQ match),
+    // enforce "confirm with host" instead of letting AI hallucinate property facts
+    if (classification.isPropertySpecific) {
+      console.log('🏠 [Orchestrator] Property-specific question reached AI step — checking KB one more time');
+      const kbLastCheck = EnhancedPropertyKnowledgeService.searchPropertyKnowledge(property, message);
+      if (kbLastCheck.found && kbLastCheck.confidence >= 0.3) {
+        // KB has something — use AI only to rewrite it
+        console.log('📚 [KB Lock] Found KB answer — AI will rewrite only');
+        try {
+          const history = await this.getConversationHistory(phoneNumber, conversation.id);
+          const { data, error } = await this.supabase.functions.invoke('ai-concierge', {
+            body: {
+              message: `Rephrase this property answer in a warm, concierge SMS tone (keep it short, 1-3 sentences). Do NOT add any new facts. Original answer: "${kbLastCheck.content}"`,
+              property,
+              conversationHistory: history.slice(-3),
+              guestName: (conversationContext?.guestName || conversationContext?.guest_name || null),
+            },
+          });
+          const aiPolished = data?.response || ConciergeStyleService.polish(kbLastCheck.content);
+          const validated = ConfirmedMessageOrchestrator.validateResponseForIntent(aiPolished, classification.intent);
+          await this.saveConversationMessage(phoneNumber, conversation.id, message, validated);
+          const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, validated, classification);
+          updatedCtx.last_response_text = validated;
+          await this.conversationManager.updateConversationState(phoneNumber, {
+            last_message_type: 'kb_ai_rewrite',
+            last_response: validated,
+            last_intent: classification.intent,
+            conversation_context: updatedCtx,
+          });
+          return { messages: MessageUtils.ensureSmsLimit(validated), shouldUpdateState: false };
+        } catch (rewriteErr) {
+          const fallback = ConciergeStyleService.polish(kbLastCheck.content);
+          await this.saveConversationMessage(phoneNumber, conversation.id, message, fallback);
+          return { messages: MessageUtils.ensureSmsLimit(fallback), shouldUpdateState: false };
+        }
+      }
+
+      // No KB data at all for property-specific question → safe fallback, don't hallucinate
+      console.log('⚠️ [KB Lock] No KB data for property-specific question — using safe confirmation fallback');
+      const safeFallback = "I want to make sure I give you the right info — let me confirm that for you.";
+      await this.saveConversationMessage(phoneNumber, conversation.id, message, safeFallback);
+      const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, safeFallback, classification);
+      updatedCtx.last_response_text = safeFallback;
+      updatedCtx.awaiting_host_response = true;
+      await this.conversationManager.updateConversationState(phoneNumber, {
+        last_message_type: 'host_confirmation_pending',
+        last_response: safeFallback,
+        last_intent: classification.intent,
+        conversation_context: updatedCtx,
+      });
+      // Send host alert for property-specific question we couldn't answer
+      await this.sendHostAlert(property, phoneNumber, conversationContext, `Unanswered property question: ${classification.intent}`, message);
+      return { messages: MessageUtils.ensureSmsLimit(safeFallback), shouldUpdateState: false };
+    }
+
     try {
       const history = await this.getConversationHistory(phoneNumber, conversation.id);
       const slimContext = ConfirmedMessageOrchestrator.buildSlimAIContext(message, property, conversation, classification, history, followUpThread || undefined);
@@ -577,7 +632,9 @@ export class EnhancedConversationService {
     // Try to send via OpenPhone API
     try {
       const OPENPHONE_API_KEY = Deno.env.get('OPENPHONE_API_KEY');
+      const BUSINESS_PHONE = '+18333301032';
       if (OPENPHONE_API_KEY) {
+        console.log(`📞 [Handoff] Sending host SMS to ${hostPhone} from ${BUSINESS_PHONE}`);
         const response = await fetch('https://api.openphone.com/v1/messages', {
           method: 'POST',
           headers: {
@@ -586,12 +643,13 @@ export class EnhancedConversationService {
           },
           body: JSON.stringify({
             content: alertMessage,
-            to: [hostPhone],
+            to: [hostPhone.startsWith('+') ? hostPhone : `+1${hostPhone.replace(/\D/g, '')}`],
+            from: BUSINESS_PHONE,
           }),
         });
 
         if (response.ok) {
-          console.log('✅ [Handoff] Host SMS alert sent successfully');
+          console.log('✅ [Handoff] Host SMS alert sent successfully to', hostPhone);
         } else {
           const err = await response.text();
           console.warn('⚠️ [Handoff] Host SMS send failed:', response.status, err);
@@ -698,10 +756,12 @@ export class EnhancedConversationService {
     ].join('\n');
 
     const HOST_PHONE = '+13213406333';
+    const BUSINESS_PHONE = '+18333301032';
 
     try {
       const OPENPHONE_API_KEY = Deno.env.get('OPENPHONE_API_KEY');
       if (OPENPHONE_API_KEY) {
+        console.log(`📞 [Auto-Escalation] Sending host SMS to ${HOST_PHONE} from ${BUSINESS_PHONE}`);
         const response = await fetch('https://api.openphone.com/v1/messages', {
           method: 'POST',
           headers: {
@@ -711,6 +771,7 @@ export class EnhancedConversationService {
           body: JSON.stringify({
             content: hostMessage,
             to: [HOST_PHONE],
+            from: BUSINESS_PHONE,
           }),
         });
 
@@ -812,7 +873,12 @@ export class EnhancedConversationService {
     if (/\b(grill|bbq|barbecue)\b/.test(msg)) return 'grill';
     if (/\b(direction|how to get|airport|driving)\b/.test(msg)) return 'directions';
     if (/\b(emergency|contact.*host|manager)\b/.test(msg)) return 'emergency';
-    if (/\b(attraction|things to do|sightseeing|tour|museum|beach|hik)\b/.test(msg)) return 'activities';
+    if (/\b(attraction|things to do|sightseeing|tour|museum|hik)\b/.test(msg)) return 'activities';
+    if (/\b(beach chair|beach umbrella|beach gear|beach equipment)\b/.test(msg)) return 'beach_gear';
+    if (/\b(beach)\b/.test(msg) && !/chair|umbrella|gear|equipment|towel/.test(msg)) return 'beach_recs';
+    if (/\b(overnight|extra guest|visitor|company|friend.*stay|family.*stay|guest.*stay)\b/.test(msg)) return 'overnight_guests';
+    if (/\b(house rule|rule|policy|policies|allowed|not allowed|smoking|smoke|pet|animal|dog|cat)\b/.test(msg)) return 'house_rules';
+    if (/\b(included|come with|provide|supply|supplies)\b/.test(msg)) return 'included_amenities';
     return null;
   }
 
@@ -827,6 +893,13 @@ export class EnhancedConversationService {
       'ask_amenity': 'pool', 'ask_directions': 'directions',
       'ask_emergency_contact': 'emergency', 'ask_attractions': 'activities',
       'ask_access': 'building_access',
+      'ask_overnight_guests': 'overnight_guests', 'ask_visitor_parking': 'parking',
+      'ask_beach_chairs': 'beach_gear', 'ask_beach_towels': 'towels',
+      'ask_beach_gear': 'beach_gear', 'ask_house_rules': 'house_rules',
+      'ask_pet_policy': 'house_rules', 'ask_smoking': 'house_rules',
+      'ask_pool_access': 'pool', 'ask_gym': 'pool',
+      'ask_included_amenities': 'included_amenities', 'ask_unit_amenities': 'included_amenities',
+      'ask_building_policy': 'house_rules',
     };
     return map[intent] || null;
   }
