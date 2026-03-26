@@ -1,21 +1,22 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const { message, property, conversationHistory, guestName, slimContext } = await req.json();
 
-    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
     if (!OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY is not configured');
+      throw new Error("OPENAI_API_KEY is not configured");
     }
 
     let systemPrompt: string;
@@ -25,31 +26,31 @@ serve(async (req) => {
       systemPrompt = buildPropertyContext(property, guestName);
     }
 
-    const messages: any[] = [
-      { role: 'system', content: systemPrompt },
-    ];
+    const messages: any[] = [{ role: "system", content: systemPrompt }];
 
     if (conversationHistory && Array.isArray(conversationHistory)) {
       for (const msg of conversationHistory.slice(-16)) {
         messages.push({
-          role: msg.role === 'user' ? 'user' : 'assistant',
+          role: msg.role === "user" ? "user" : "assistant",
           content: msg.content,
         });
       }
     }
 
-    messages.push({ role: 'user', content: message });
+    messages.push({ role: "user", content: message });
 
-    console.log(`🤖 AI Concierge for ${property?.property_name || slimContext?.propertyName}: "${message}" (${messages.length} msgs, slim: ${!!slimContext})`);
+    console.log(
+      `🤖 AI Concierge for ${property?.property_name || slimContext?.propertyName}: "${message}" (${messages.length} msgs, slim: ${!!slimContext})`,
+    );
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
       headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: "gpt-4o-mini",
         messages,
         max_tokens: 450,
         temperature: 0.7,
@@ -58,7 +59,7 @@ serve(async (req) => {
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error('OpenAI API error:', response.status, errText);
+      console.error("OpenAI API error:", response.status, errText);
       throw new Error(`OpenAI API error: ${response.status}`);
     }
 
@@ -66,30 +67,32 @@ serve(async (req) => {
     let aiResponse = data.choices?.[0]?.message?.content?.trim();
 
     if (!aiResponse) {
-      throw new Error('No response from AI');
+      throw new Error("No response from AI");
     }
 
     // Post-process: strip numbered parts and clean up
     aiResponse = aiResponse
-      .replace(/\s*\(?\d+\/\d+\)?\s*/g, ' ')
-      .replace(/^\d+\.\s+/gm, '• ')
+      .replace(/\s*\(?\d+\/\d+\)?\s*/g, " ")
+      .replace(/^\d+\.\s+/gm, "• ")
       .trim();
 
     console.log(`✅ AI response (${aiResponse.length} chars): "${aiResponse.substring(0, 100)}..."`);
 
     return new Response(JSON.stringify({ response: aiResponse }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-
   } catch (error) {
-    console.error('AI Concierge error:', error);
-    return new Response(JSON.stringify({ 
-      error: error.message,
-      response: "I'm having a moment — could you try asking again? If it's urgent, reach out to your host directly."
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    console.error("AI Concierge error:", error);
+    return new Response(
+      JSON.stringify({
+        error: error.message,
+        response: "I'm having a moment — could you try asking again? If it's urgent, reach out to your host directly.",
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   }
 });
 
@@ -98,15 +101,19 @@ function buildPropertyContext(property: any, guestName?: string): string {
     return `You are a luxury vacation rental concierge. You don't have specific property details right now, so give general helpful advice and suggest the guest contact their host for property-specific questions. Sound like a warm, knowledgeable friend — never robotic.`;
   }
 
-  const greeting = guestName ? `The guest's name is ${guestName}. Use their name occasionally to be personal.` : '';
+  const greeting = guestName ? `The guest's name is ${guestName}. Use their name occasionally to be personal.` : "";
 
-  const amenitiesList = property.amenities 
-    ? (Array.isArray(property.amenities) ? property.amenities.join(', ') : JSON.stringify(property.amenities))
-    : 'Not specified';
+  const amenitiesList = property.amenities
+    ? Array.isArray(property.amenities)
+      ? property.amenities.join(", ")
+      : JSON.stringify(property.amenities)
+    : "Not specified";
 
   const serviceFees = property.service_fees
-    ? Object.entries(property.service_fees).map(([k, v]: [string, any]) => `${k}: $${v.price || 'N/A'} ${v.unit || ''} - ${v.description || ''}`).join('\n')
-    : '';
+    ? Object.entries(property.service_fees)
+        .map(([k, v]: [string, any]) => `${k}: $${v.price || "N/A"} ${v.unit || ""} - ${v.description || ""}`)
+        .join("\n")
+    : "";
 
   return `You are the personal concierge for guests staying at "${property.property_name}" at ${property.address}.
 ${greeting}
@@ -120,24 +127,24 @@ You're a polished, warm luxury vacation rental concierge — like a trusted loca
 - Keep it SMS-friendly: 1-3 sentences default. Only expand for recommendations or instructions.
 
 ═══ PROPERTY DETAILS ═══
-• WiFi: ${property.wifi_name || 'Not provided'} / ${property.wifi_password || 'Not provided'}
-• Check-in: ${property.check_in_time || 'Not specified'}
-• Check-out: ${property.check_out_time || 'Not specified'}
-• Parking: ${property.parking_instructions || 'Not specified'}
-• Access: ${property.access_instructions || 'Not specified'}
-• Host Contact: ${property.emergency_contact || 'Not provided'}
-• Directions: ${property.directions_to_property || 'Not provided'}
-• House Rules: ${property.house_rules || 'None specified'}
+• WiFi: ${property.wifi_name || "Not provided"} / ${property.wifi_password || "Not provided"}
+• Check-in: ${property.check_in_time || "Not specified"}
+• Check-out: ${property.check_out_time || "Not specified"}
+• Parking: ${property.parking_instructions || "Not specified"}
+• Access: ${property.access_instructions || "Not specified"}
+• Host Contact: ${property.emergency_contact || "Not provided"}
+• Directions: ${property.directions_to_property || "Not provided"}
+• House Rules: ${property.house_rules || "None specified"}
 • Amenities: ${amenitiesList}
-${serviceFees ? `• Service Fees:\n${serviceFees}` : ''}
+${serviceFees ? `• Service Fees:\n${serviceFees}` : ""}
 
 ═══ KNOWLEDGE BASE ═══
-${property.knowledge_base || 'No additional knowledge.'}
+${property.knowledge_base || "No additional knowledge."}
 
 ═══ LOCAL RECOMMENDATIONS ═══
-${property.local_recommendations || 'None provided by host.'}
+${property.local_recommendations || "None provided by host."}
 
-${property.uploaded_files_content ? `═══ UPLOADED FILES ═══\n${property.uploaded_files_content}` : ''}
+${property.uploaded_files_content ? `═══ UPLOADED FILES ═══\n${property.uploaded_files_content}` : ""}
 
 ═══ PRIORITY RULE — SOLVE BEFORE ESCALATION ═══
 Before escalating to the host, you MUST attempt to:
@@ -194,16 +201,16 @@ Do NOT use vague phrases like "I'll check on that." Instead say: "I'll reach out
 function buildSlimPropertyContext(slimContext: any): string {
   const greeting = slimContext.guestName
     ? `The guest's name is ${slimContext.guestName}. Use their name occasionally.`
-    : '';
+    : "";
 
   const snippets = slimContext.propertySnippets || {};
-  const rules = (slimContext.responseRules || []).map((r: string, i: number) => `${i + 1}. ${r}`).join('\n');
-  const requestType = slimContext.requestType || 'unknown';
-  const activeThread = slimContext.activeThread || 'general';
+  const rules = (slimContext.responseRules || []).map((r: string, i: number) => `${i + 1}. ${r}`).join("\n");
+  const requestType = slimContext.requestType || "unknown";
+  const activeThread = slimContext.activeThread || "general";
   const threadContext = slimContext.threadContext;
 
   // Thread-specific instructions
-  let threadInstructions = '';
+  let threadInstructions = "";
   if (threadContext && threadContext.turnCount > 0) {
     threadInstructions = `\n═══ ACTIVE THREAD: ${activeThread} (turn ${threadContext.turnCount + 1}) ═══
 Previous response: "${threadContext.lastSummary}"
@@ -221,11 +228,11 @@ ${slimContext.memorySummary}
 ${threadInstructions}
 
 ═══ RELEVANT PROPERTY INFO ═══
-${snippets.relevant_knowledge ? `${snippets.relevant_knowledge}\n` : ''}
-${snippets.local_recommendations ? `Host's local recs:\n${snippets.local_recommendations}\n` : ''}
-${snippets.special_notes ? `Notes: ${snippets.special_notes}\n` : ''}
-${snippets.emergency_contact ? `Host: ${snippets.emergency_contact}` : ''}
-${slimContext.faqContext ? `\n═══ RELEVANT FAQ ENTRIES ═══\n${slimContext.faqContext}\nUse these as reference but respond naturally. Do NOT copy verbatim.` : ''}
+${snippets.relevant_knowledge ? `${snippets.relevant_knowledge}\n` : ""}
+${snippets.local_recommendations ? `Host's local recs:\n${snippets.local_recommendations}\n` : ""}
+${snippets.special_notes ? `Notes: ${snippets.special_notes}\n` : ""}
+${snippets.emergency_contact ? `Host: ${snippets.emergency_contact}` : ""}
+${slimContext.faqContext ? `\n═══ RELEVANT FAQ ENTRIES ═══\n${slimContext.faqContext}\nUse these as reference but respond naturally. Do NOT copy verbatim.` : ""}
 
 ═══ RULES ═══
 ${rules}
