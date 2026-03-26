@@ -30,7 +30,7 @@ serve(async (req) => {
     ];
 
     if (conversationHistory && Array.isArray(conversationHistory)) {
-      for (const msg of conversationHistory.slice(-10)) {
+      for (const msg of conversationHistory.slice(-16)) {
         messages.push({
           role: msg.role === 'user' ? 'user' : 'assistant',
           content: msg.content,
@@ -51,7 +51,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages,
-        max_tokens: 300,
+        max_tokens: 450,
         temperature: 0.7,
       }),
     });
