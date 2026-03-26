@@ -204,8 +204,7 @@ function buildSlimPropertyContext(slimContext: any): string {
     : "";
 
   const snippets = slimContext.propertySnippets || {};
-  const rules = (slimContext.responseRules || []).map((r: string, i: number) => `${i + 1}. ${r}`).join("\n");
-  const requestType = slimContext.requestType || "unknown";
+  const rules = (slimContext.responseRules || []).map((r: string, i: number) => `[${String.fromCharCode(65 + i)}] ${r}`)  const requestType = slimContext.requestType || "unknown";
   const activeThread = slimContext.activeThread || "general";
   const threadContext = slimContext.threadContext;
 
