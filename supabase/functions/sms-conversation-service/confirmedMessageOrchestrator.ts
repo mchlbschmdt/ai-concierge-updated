@@ -1,9 +1,9 @@
 /**
  * Confirmed Message Orchestrator v3
- * 
+ *
  * Single execution path for confirmed-guest messages.
  * Priority: "yes" confirmation → issue → request → repetition → property info → recommendation/AI → escalation
- * 
+ *
  * Now includes:
  * - "Yes" detection tied to previous host-contact offers
  * - Luxury concierge tone via ConciergeStyleService
@@ -11,16 +11,16 @@
  * - Host handoff state tracking
  */
 
-import { IntentRecognitionService } from './intentRecognitionService.ts';
-import { RequestTypeClassifier, RequestClassification } from './requestTypeClassifier.ts';
-import { TroubleshootingDetectionService, TroubleshootingResult } from './troubleshootingDetectionService.ts';
-import { PropertyDataExtractor } from './propertyDataExtractor.ts';
-import { EnhancedPropertyKnowledgeService } from './enhancedPropertyKnowledgeService.ts';
-import { ConversationMemoryManager, ThreadType } from './conversationMemoryManager.ts';
-import { HostContactService } from './hostContactService.ts';
-import { ConciergeStyleService } from './conciergeStyleService.ts';
-import { MessageUtils } from './messageUtils.ts';
-import { Property, Conversation } from './types.ts';
+import { IntentRecognitionService } from "./intentRecognitionService.ts";
+import { RequestTypeClassifier, RequestClassification } from "./requestTypeClassifier.ts";
+import { TroubleshootingDetectionService, TroubleshootingResult } from "./troubleshootingDetectionService.ts";
+import { PropertyDataExtractor } from "./propertyDataExtractor.ts";
+import { EnhancedPropertyKnowledgeService } from "./enhancedPropertyKnowledgeService.ts";
+import { ConversationMemoryManager, ThreadType } from "./conversationMemoryManager.ts";
+import { HostContactService } from "./hostContactService.ts";
+import { ConciergeStyleService } from "./conciergeStyleService.ts";
+import { MessageUtils } from "./messageUtils.ts";
+import { Property, Conversation } from "./types.ts";
 
 // ═══════════════════════════════════════════════════════
 // TYPES
@@ -28,7 +28,7 @@ import { Property, Conversation } from './types.ts';
 
 export interface UnifiedClassification {
   intent: string;
-  requestType: RequestClassification['type'];
+  requestType: RequestClassification["type"];
   isPropertySpecific: boolean;
   isGeneralKnowledge: boolean;
   isRecommendation: boolean;
@@ -45,7 +45,19 @@ export interface UnifiedClassification {
 
 export interface OrchestratorResult {
   response: string;
-  source: 'quick_lookup' | 'property_data' | 'knowledge_base' | 'troubleshooting' | 'ai_concierge' | 'host_escalation' | 'repetition_summary' | 'service_request' | 'issue_response' | 'request_response' | 'yes_confirmation' | 'issue_followup';
+  source:
+    | "quick_lookup"
+    | "property_data"
+    | "knowledge_base"
+    | "troubleshooting"
+    | "ai_concierge"
+    | "host_escalation"
+    | "repetition_summary"
+    | "service_request"
+    | "issue_response"
+    | "request_response"
+    | "yes_confirmation"
+    | "issue_followup";
   shouldUpdateState: boolean;
   triggerHostHandoff?: boolean;
   handoffReason?: string;
@@ -67,7 +79,6 @@ export interface OrchestratorResult {
 // ═══════════════════════════════════════════════════════
 
 export class ConfirmedMessageOrchestrator {
-
   /**
    * STEP 0: Detect follow-ups and re-route to correct thread.
    * Also handles "yes" confirmation tied to previous host-contact offers.
@@ -75,7 +86,7 @@ export class ConfirmedMessageOrchestrator {
   static handleFollowUpOrConfirmation(
     message: string,
     property: Property,
-    conversationContext: any
+    conversationContext: any,
   ): { followUpThread: ThreadType | null; yesResult: OrchestratorResult | null } {
     // Check "yes" confirmation first
     const yesResult = this.handleYesConfirmation(message, property, conversationContext);
@@ -95,18 +106,19 @@ export class ConfirmedMessageOrchestrator {
   static handleYesConfirmation(
     message: string,
     property: Property,
-    conversationContext: any
+    conversationContext: any,
   ): OrchestratorResult | null {
     const msg = message.toLowerCase().trim();
-    const isYes = /^(yes|yeah|yep|yea|sure|please|ok|okay|y|go ahead|do it|that would be great|yes please|please do)$/i.test(msg)
-      || /^(yes|yeah|sure|please),?\s*(that would|i'd|i would)/i.test(msg);
+    const isYes =
+      /^(yes|yeah|yep|yea|sure|please|ok|okay|y|go ahead|do it|that would be great|yes please|please do)$/i.test(msg) ||
+      /^(yes|yeah|sure|please),?\s*(that would|i'd|i would)/i.test(msg);
 
     if (!isYes) return null;
 
     const awaitingHandoff = conversationContext?.awaiting_guest_confirmation_for_handoff;
     const lastOffered = conversationContext?.last_host_contact_offer_timestamp;
-    const handoffReason = conversationContext?.pending_handoff_reason || 'guest request';
-    const handoffTopic = conversationContext?.pending_handoff_topic || 'their request';
+    const handoffReason = conversationContext?.pending_handoff_reason || "guest request";
+    const handoffTopic = conversationContext?.pending_handoff_topic || "their request";
 
     if (!awaitingHandoff && !lastOffered) return null;
 
@@ -119,14 +131,14 @@ export class ConfirmedMessageOrchestrator {
 
     return {
       response: ConciergeStyleService.getHandoffConfirmation(),
-      source: 'yes_confirmation',
+      source: "yes_confirmation",
       shouldUpdateState: true,
       triggerHostHandoff: true,
       handoffReason,
       handoffSummary: `Guest confirmed handoff for: ${handoffTopic}`,
       routing: {
-        intent: 'host_handoff_confirmed',
-        requestType: 'REQUEST',
+        intent: "host_handoff_confirmed",
+        requestType: "REQUEST",
         propertyDataUsed: false,
         knowledgeBaseUsed: false,
         aiUsed: false,
@@ -146,30 +158,58 @@ export class ConfirmedMessageOrchestrator {
     const troubleshootingResult = TroubleshootingDetectionService.detectTroubleshootingIntent(message);
 
     const propertySpecificIntents = [
-      'ask_checkout_time', 'ask_checkin_time', 'ask_early_checkin', 'ask_access',
-      'ask_key_fob', 'ask_door_code', 'ask_building_access',
-      'ask_wifi', 'ask_parking', 'ask_amenity', 'ask_emergency_contact',
-      'ask_property_specific', 'ask_additional_services', 'ask_resort_amenities',
-      'ask_garbage', 'ask_grocery', 'ask_transportation_no_car', 'ask_grocery_transport',
-      'ask_bag_drop', 'ask_towels', 'ask_late_checkout',
+      "ask_checkout_time",
+      "ask_checkin_time",
+      "ask_early_checkin",
+      "ask_access",
+      "ask_key_fob",
+      "ask_door_code",
+      "ask_building_access",
+      "ask_wifi",
+      "ask_parking",
+      "ask_amenity",
+      "ask_emergency_contact",
+      "ask_property_specific",
+      "ask_additional_services",
+      "ask_resort_amenities",
+      "ask_garbage",
+      "ask_grocery",
+      "ask_transportation_no_car",
+      "ask_grocery_transport",
+      "ask_bag_drop",
+      "ask_towels",
+      "ask_late_checkout",
       // Expanded property-specific intents — these MUST use KB/FAQ first
-      'ask_overnight_guests', 'ask_visitor_parking', 'ask_beach_chairs',
-      'ask_beach_towels', 'ask_beach_gear', 'ask_house_rules', 'ask_pet_policy',
-      'ask_smoking', 'ask_pool_access', 'ask_gym', 'ask_included_amenities',
-      'ask_building_policy', 'ask_unit_amenities',
+      "ask_overnight_guests",
+      "ask_visitor_parking",
+      "ask_beach_chairs",
+      "ask_beach_towels",
+      "ask_beach_gear",
+      "ask_house_rules",
+      "ask_pet_policy",
+      "ask_smoking",
+      "ask_pool_access",
+      "ask_gym",
+      "ask_included_amenities",
+      "ask_building_policy",
+      "ask_unit_amenities",
     ];
 
-    const isIssue = requestClassification.type === 'ISSUE' || troubleshootingResult.isTroubleshooting;
-    const isRequest = requestClassification.type === 'REQUEST';
-    const isRecommendation = requestClassification.type === 'RECOMMENDATION';
-    const isGeneralKnowledge = requestClassification.type === 'GENERAL_KNOWLEDGE';
-    const isPropertySpecific = !isIssue && !isRequest && !isRecommendation && !isGeneralKnowledge &&
-      (propertySpecificIntents.includes(intentResult.intent) || requestClassification.type === 'INFORMATIONAL');
+    const isIssue = requestClassification.type === "ISSUE" || troubleshootingResult.isTroubleshooting;
+    const isRequest = requestClassification.type === "REQUEST";
+    const isRecommendation = requestClassification.type === "RECOMMENDATION";
+    const isGeneralKnowledge = requestClassification.type === "GENERAL_KNOWLEDGE";
+    const isPropertySpecific =
+      !isIssue &&
+      !isRequest &&
+      !isRecommendation &&
+      !isGeneralKnowledge &&
+      (propertySpecificIntents.includes(intentResult.intent) || requestClassification.type === "INFORMATIONAL");
 
     const shouldUseAI = isRecommendation || isGeneralKnowledge || isIssue;
 
     const classification: UnifiedClassification = {
-      intent: isIssue ? `troubleshoot_${troubleshootingResult.category || 'general'}` : intentResult.intent,
+      intent: isIssue ? `troubleshoot_${troubleshootingResult.category || "general"}` : intentResult.intent,
       requestType: requestClassification.type,
       isPropertySpecific,
       isGeneralKnowledge,
@@ -185,10 +225,14 @@ export class ConfirmedMessageOrchestrator {
       hasKids: intentResult.hasKids,
     };
 
-    console.log('📋 [Orchestrator] Classification:', {
+    console.log("📋 [Orchestrator] Classification:", {
       intent: classification.intent,
       requestType: classification.requestType,
-      isIssue, isRequest, isRecommendation, isPropertySpecific, isGeneralKnowledge,
+      isIssue,
+      isRequest,
+      isRecommendation,
+      isPropertySpecific,
+      isGeneralKnowledge,
       shouldUseAI: classification.shouldUseAI,
       confidence: classification.confidence,
     });
@@ -205,28 +249,29 @@ export class ConfirmedMessageOrchestrator {
     message: string,
     property: Property,
     classification: UnifiedClassification,
-    conversationContext: any
+    conversationContext: any,
   ): OrchestratorResult | null {
     if (!classification.isIssue) return null;
 
-    const category = classification.troubleshootingResult?.category || 'general';
+    const category = classification.troubleshootingResult?.category || "general";
     const equipment = classification.troubleshootingResult?.equipmentType || category;
 
     // Check if this is a follow-up to an already-escalated issue
-    const recentEscalation = conversationContext?.host_handoff_sent &&
+    const recentEscalation =
+      conversationContext?.host_handoff_sent &&
       conversationContext?.unresolved_issue_type === category &&
       conversationContext?.host_handoff_timestamp &&
-      (Date.now() - new Date(conversationContext.host_handoff_timestamp).getTime()) < 1800000; // 30 min
+      Date.now() - new Date(conversationContext.host_handoff_timestamp).getTime() < 1800000; // 30 min
 
     if (recentEscalation) {
-      console.log('🔄 [Orchestrator] Follow-up to already-escalated issue:', category);
+      console.log("🔄 [Orchestrator] Follow-up to already-escalated issue:", category);
       return {
         response: ConciergeStyleService.getIssueFollowUp(),
-        source: 'issue_followup',
+        source: "issue_followup",
         shouldUpdateState: false,
         routing: {
           intent: classification.intent,
-          requestType: 'ISSUE',
+          requestType: "ISSUE",
           propertyDataUsed: false,
           knowledgeBaseUsed: false,
           aiUsed: false,
@@ -236,14 +281,18 @@ export class ConfirmedMessageOrchestrator {
       };
     }
 
-    console.log('🚨 [Orchestrator] ISSUE detected:', category);
+    console.log("🚨 [Orchestrator] ISSUE detected:", category);
 
     // Check knowledge base for troubleshooting steps
     const kbResult = EnhancedPropertyKnowledgeService.searchPropertyKnowledge(property, message);
 
     if (kbResult.found && kbResult.confidence >= 0.5) {
       // KB has steps — use them directly
-      let response = ConciergeStyleService.getIssueAcknowledgment(equipment, true, property.emergency_contact || undefined);
+      let response = ConciergeStyleService.getIssueAcknowledgment(
+        equipment,
+        true,
+        property.emergency_contact || undefined,
+      );
       response += `\n\n${kbResult.content}`;
       if (property.emergency_contact) {
         response += `\n\nIf that doesn't do the trick, I'll reach out to the property manager at +1 321-340-6333.`;
@@ -251,12 +300,12 @@ export class ConfirmedMessageOrchestrator {
 
       return {
         response,
-        source: 'issue_response',
+        source: "issue_response",
         shouldUpdateState: true,
         triggerHostHandoff: false,
         routing: {
           intent: classification.intent,
-          requestType: 'ISSUE',
+          requestType: "ISSUE",
           propertyDataUsed: true,
           knowledgeBaseUsed: true,
           aiUsed: false,
@@ -274,12 +323,12 @@ export class ConfirmedMessageOrchestrator {
 
       return {
         response,
-        source: 'issue_response',
+        source: "issue_response",
         shouldUpdateState: true,
         triggerHostHandoff: false,
         routing: {
           intent: classification.intent,
-          requestType: 'ISSUE',
+          requestType: "ISSUE",
           propertyDataUsed: false,
           knowledgeBaseUsed: false,
           aiUsed: false,
@@ -290,7 +339,7 @@ export class ConfirmedMessageOrchestrator {
     }
 
     // No built-in steps either → fall through to AI concierge for troubleshooting guidance
-    console.log('🤖 [Orchestrator] No KB or built-in steps for issue, routing to AI for troubleshooting');
+    console.log("🤖 [Orchestrator] No KB or built-in steps for issue, routing to AI for troubleshooting");
     return null;
   }
 
@@ -301,73 +350,88 @@ export class ConfirmedMessageOrchestrator {
    * HOST-APPROVAL-REQUIRED intents — NEVER approve without host confirmation.
    */
   static readonly HOST_APPROVAL_REQUIRED = [
-    'ask_early_checkin', 'ask_late_checkout', 'ask_bag_drop', 'ask_baggage_hold'
+    "ask_early_checkin",
+    "ask_late_checkout",
+    "ask_bag_drop",
+    "ask_baggage_hold",
   ];
 
   static handleRequest(
     message: string,
     property: Property,
     classification: UnifiedClassification,
-    conversationContext: any
+    conversationContext: any,
   ): OrchestratorResult | null {
     if (!classification.isRequest) return null;
 
-    console.log('🤝 [Orchestrator] REQUEST detected:', classification.intent);
+    console.log("🤝 [Orchestrator] REQUEST detected:", classification.intent);
 
     const msg = message.toLowerCase();
-    let response = '';
+    let response = "";
     let triggerHandoff = false;
     let setAwaitingConfirmation = false;
-    let pendingTopic = '';
+    let pendingTopic = "";
     let pendingApprovalType: string | null = null;
 
     // Early check-in — NEVER approve, always ask host
-    if (/\b(early|before)\b.*\b(check.?in|arrive|arrival)\b/.test(msg) || /\bcheck.?in\b.*\b(early|before|earlier)\b/.test(msg)) {
+    if (
+      /\b(early|before)\b.*\b(check.?in|arrive|arrival)\b/.test(msg) ||
+      /\bcheck.?in\b.*\b(early|before|earlier)\b/.test(msg)
+    ) {
       // Check if guest is providing a time (follow-up to earlier question)
       const timeMatch = msg.match(/\b(\d{1,2}(?::\d{2})?\s*(?:am|pm)?|noon|midday)\b/i);
-      if (timeMatch && conversationContext?.pending_approval_type === 'early_check_in') {
+      if (timeMatch && conversationContext?.pending_approval_type === "early_check_in") {
         // Guest gave a time — send host SMS and tell guest we're checking
         const requestedTime = timeMatch[0];
         response = `Thanks! I'm checking with the host now about a ${requestedTime} arrival and will let you know as soon as I hear back.`;
         triggerHandoff = true;
-        pendingApprovalType = 'early_check_in';
+        pendingApprovalType = "early_check_in";
         pendingTopic = `early check-in at ${requestedTime}`;
       } else {
-        response = "We'd be happy to check with the host to see if an early check-in may be possible. What time were you hoping to arrive?";
-        pendingApprovalType = 'early_check_in';
-        pendingTopic = 'early check-in';
+        response =
+          "We'd be happy to check with the host to see if an early check-in may be possible. What time were you hoping to arrive?";
+        pendingApprovalType = "early_check_in";
+        pendingTopic = "early check-in";
       }
       setAwaitingConfirmation = true;
     }
     // Late check-out — NEVER approve, always ask host
-    else if (/\b(late|after|later|extend)\b.*\b(check.?out|departure|leave|stay)\b/.test(msg) || /\bcheck.?out\b.*\b(late|later|extend)\b/.test(msg)) {
+    else if (
+      /\b(late|after|later|extend)\b.*\b(check.?out|departure|leave|stay)\b/.test(msg) ||
+      /\bcheck.?out\b.*\b(late|later|extend)\b/.test(msg)
+    ) {
       const timeMatch = msg.match(/\b(\d{1,2}(?::\d{2})?\s*(?:am|pm)?|noon|midday)\b/i);
-      if (timeMatch && conversationContext?.pending_approval_type === 'late_check_out') {
+      if (timeMatch && conversationContext?.pending_approval_type === "late_check_out") {
         const requestedTime = timeMatch[0];
         response = `Thanks! I'm checking with the host now about a ${requestedTime} checkout and will let you know as soon as I hear back.`;
         triggerHandoff = true;
-        pendingApprovalType = 'late_check_out';
+        pendingApprovalType = "late_check_out";
         pendingTopic = `late checkout at ${requestedTime}`;
       } else {
-        response = "We can check with the host to see whether a later checkout might be possible. What time were you hoping for?";
-        pendingApprovalType = 'late_check_out';
-        pendingTopic = 'late checkout';
+        response =
+          "We can check with the host to see whether a later checkout might be possible. What time were you hoping for?";
+        pendingApprovalType = "late_check_out";
+        pendingTopic = "late checkout";
       }
       setAwaitingConfirmation = true;
     }
     // Bag drop / baggage hold — NEVER guarantee, offer alternatives
-    else if (/\b(bag|luggage|baggage|drop.*bag|store.*bag|hold.*bag|leave.*bag|drop.*off)\b/.test(msg) && /\b(early|before|drop|hold|store|leave|off)\b/.test(msg)) {
+    else if (
+      /\b(bag|luggage|baggage|drop.*bag|store.*bag|hold.*bag|leave.*bag|drop.*off)\b/.test(msg) &&
+      /\b(early|before|drop|hold|store|leave|off)\b/.test(msg)
+    ) {
       const timeMatch = msg.match(/\b(\d{1,2}(?::\d{2})?\s*(?:am|pm)?|noon|midday)\b/i);
-      if (timeMatch && conversationContext?.pending_approval_type === 'bag_drop') {
+      if (timeMatch && conversationContext?.pending_approval_type === "bag_drop") {
         const requestedTime = timeMatch[0];
         response = `Thanks! I'm checking with the host now about bag drop around ${requestedTime} and will let you know as soon as I hear back.`;
         triggerHandoff = true;
-        pendingApprovalType = 'bag_drop';
+        pendingApprovalType = "bag_drop";
         pendingTopic = `bag drop around ${requestedTime}`;
       } else {
-        response = "We can check whether early bag drop may be possible — it depends on turnover and cleaner timing. In the meantime, nearby luggage storage services like BagsAway and Bounce are great options. Would you like me to check with the host?";
-        pendingApprovalType = 'bag_drop';
-        pendingTopic = 'bag drop';
+        response =
+          "We can check whether early bag drop may be possible — it depends on turnover and cleaner timing. In the meantime, nearby luggage storage services like BagsAway and Bounce are great options. Would you like me to check with the host?";
+        pendingApprovalType = "bag_drop";
+        pendingTopic = "bag drop";
       }
       setAwaitingConfirmation = true;
     }
@@ -380,16 +444,16 @@ export class ConfirmedMessageOrchestrator {
         }
       }
       if (!response) {
-        response = ConciergeStyleService.getRequestResponse('pets');
+        response = ConciergeStyleService.getRequestResponse("pets");
         setAwaitingConfirmation = true;
-        pendingTopic = 'pet policy';
+        pendingTopic = "pet policy";
       }
     }
     // Extra guests
     else if (/\b(extra|more|additional)\s+(guest|person|people|visitor)\b/.test(msg)) {
-      response = ConciergeStyleService.getRequestResponse('extra_guests');
+      response = ConciergeStyleService.getRequestResponse("extra_guests");
       setAwaitingConfirmation = true;
-      pendingTopic = 'additional guests';
+      pendingTopic = "additional guests";
     }
     // Amenity activation (pool heat, hot tub, etc.)
     else if (/\b(turn on|activate|heat|start)\s+(the\s+)?(pool|hot tub|jacuzzi|fireplace|grill)\b/.test(msg)) {
@@ -398,48 +462,54 @@ export class ConfirmedMessageOrchestrator {
         const poolFee = Object.entries(serviceFees).find(([k]) => /pool|heat|hot tub/i.test(k));
         if (poolFee) {
           const [name, fee] = poolFee;
-          response = `The ${name} is available — it's $${fee.price || 'TBD'} ${fee.unit || ''}. ${fee.description || ''} Want me to set that up for you?`;
+          response = `The ${name} is available — it's $${fee.price || "TBD"} ${fee.unit || ""}. ${fee.description || ""} Want me to set that up for you?`;
           setAwaitingConfirmation = true;
           pendingTopic = name;
         }
       }
       if (!response) {
-        response = ConciergeStyleService.getRequestResponse('generic');
+        response = ConciergeStyleService.getRequestResponse("generic");
         setAwaitingConfirmation = true;
-        pendingTopic = 'amenity activation';
+        pendingTopic = "amenity activation";
       }
     }
     // Explicit host request
     else if (/\b(speak|talk|contact|call|reach|text)\s*(with|to|the)?\s*(host|owner|manager|landlord)\b/.test(msg)) {
-      response = ConciergeStyleService.getEscalationResponse('explicit_host_request', {
+      response = ConciergeStyleService.getEscalationResponse("explicit_host_request", {
         hostContact: property.emergency_contact || undefined,
       });
       triggerHandoff = true;
     }
     // Generic request — DON'T auto-escalate, let it fall through to AI
     else {
-      console.log('🤝 [Orchestrator] Generic request — routing to AI instead of auto-escalation');
+      console.log("🤝 [Orchestrator] Generic request — routing to AI instead of auto-escalation");
       return null;
     }
 
     // Build host escalation message for approval-required intents
     let handoffSummary = triggerHandoff ? `Guest wants to speak with host: "${message}"` : undefined;
     if (triggerHandoff && pendingApprovalType) {
-      const guestName = conversationContext?.guestName || conversationContext?.guest_name || 'Guest';
+      const guestName = conversationContext?.guestName || conversationContext?.guest_name || "Guest";
       const propertyCode = property.code || property.property_name;
-      handoffSummary = this.buildApprovalHostMessage(pendingApprovalType, propertyCode, guestName, pendingTopic, message);
+      handoffSummary = this.buildApprovalHostMessage(
+        pendingApprovalType,
+        propertyCode,
+        guestName,
+        pendingTopic,
+        message,
+      );
     }
 
     return {
       response,
-      source: 'request_response',
+      source: "request_response",
       shouldUpdateState: true,
       triggerHostHandoff: triggerHandoff,
       handoffReason: triggerHandoff ? pendingTopic : undefined,
       handoffSummary,
       routing: {
         intent: classification.intent,
-        requestType: 'REQUEST',
+        requestType: "REQUEST",
         propertyDataUsed: false,
         knowledgeBaseUsed: false,
         aiUsed: false,
@@ -455,14 +525,20 @@ export class ConfirmedMessageOrchestrator {
   /**
    * Build structured host SMS for approval-required intents.
    */
-  static buildApprovalHostMessage(approvalType: string, propertyCode: string, guestName: string, topic: string, originalMessage: string): string {
+  static buildApprovalHostMessage(
+    approvalType: string,
+    propertyCode: string,
+    guestName: string,
+    topic: string,
+    originalMessage: string,
+  ): string {
     switch (approvalType) {
-      case 'early_check_in':
-        return `Guest at ${propertyCode} is requesting early check-in${topic.includes('at') ? ` for ${topic.replace('early check-in at ', '')}` : ''}. Would you like me to approve it?\nGuest: ${guestName}\nMessage: "${originalMessage.substring(0, 120)}"`;
-      case 'late_check_out':
-        return `Guest at ${propertyCode} is requesting late checkout${topic.includes('at') ? ` for ${topic.replace('late checkout at ', '')}` : ''}. Would you like me to approve it?\nGuest: ${guestName}\nMessage: "${originalMessage.substring(0, 120)}"`;
-      case 'bag_drop':
-        return `Guest at ${propertyCode} is asking if early bag drop / baggage hold is possible${topic.includes('around') ? ` ${topic.replace('bag drop ', '')}` : ''}. Would you like me to approve that?\nGuest: ${guestName}\nMessage: "${originalMessage.substring(0, 120)}"`;
+      case "early_check_in":
+        return `Guest at ${propertyCode} is requesting early check-in${topic.includes("at") ? ` for ${topic.replace("early check-in at ", "")}` : ""}. Would you like me to approve it?\nGuest: ${guestName}\nMessage: "${originalMessage.substring(0, 120)}"`;
+      case "late_check_out":
+        return `Guest at ${propertyCode} is requesting late checkout${topic.includes("at") ? ` for ${topic.replace("late checkout at ", "")}` : ""}. Would you like me to approve it?\nGuest: ${guestName}\nMessage: "${originalMessage.substring(0, 120)}"`;
+      case "bag_drop":
+        return `Guest at ${propertyCode} is asking if early bag drop / baggage hold is possible${topic.includes("around") ? ` ${topic.replace("bag drop ", "")}` : ""}. Would you like me to approve that?\nGuest: ${guestName}\nMessage: "${originalMessage.substring(0, 120)}"`;
       default:
         return `Guest at ${propertyCode} needs approval for: ${topic}\nGuest: ${guestName}\nMessage: "${originalMessage.substring(0, 120)}"`;
     }
@@ -476,23 +552,28 @@ export class ConfirmedMessageOrchestrator {
     message: string,
     classification: UnifiedClassification,
     conversationContext: any,
-    threadType?: ThreadType
+    threadType?: ThreadType,
   ): OrchestratorResult | null {
     if (classification.isIssue || classification.isRequest) return null;
 
-    const effectiveThread = threadType || ConversationMemoryManager.intentToThreadType(classification.intent, classification.requestType);
+    const effectiveThread =
+      threadType || ConversationMemoryManager.intentToThreadType(classification.intent, classification.requestType);
 
     // Thread-based repetition check
-    const threadRep = ConversationMemoryManager.hasThreadRepetition(conversationContext, effectiveThread, classification.intent);
+    const threadRep = ConversationMemoryManager.hasThreadRepetition(
+      conversationContext,
+      effectiveThread,
+      classification.intent,
+    );
     if (threadRep.repeated && threadRep.summary) {
       console.log(`♻️ [Orchestrator] Thread repetition in "${effectiveThread}": ${classification.intent}`);
       const rephrased = rephrasePreviousAnswer(
         extractTopicFromMessage(message, classification.intent),
-        threadRep.summary
+        threadRep.summary,
       );
       return {
         response: ConciergeStyleService.polish(rephrased),
-        source: 'repetition_summary',
+        source: "repetition_summary",
         shouldUpdateState: false,
         routing: {
           intent: classification.intent,
@@ -514,7 +595,7 @@ export class ConfirmedMessageOrchestrator {
       const rephrased = rephrasePreviousAnswer(topic, recentShare.summary);
       return {
         response: ConciergeStyleService.polish(rephrased),
-        source: 'repetition_summary',
+        source: "repetition_summary",
         shouldUpdateState: false,
         routing: {
           intent: classification.intent,
@@ -537,18 +618,18 @@ export class ConfirmedMessageOrchestrator {
   static handlePropertyRetrieval(
     message: string,
     property: Property,
-    classification: UnifiedClassification
+    classification: UnifiedClassification,
   ): OrchestratorResult | null {
     if (!classification.isPropertySpecific) return null;
 
-    console.log('🏠 [Orchestrator] Property retrieval for:', classification.intent);
+    console.log("🏠 [Orchestrator] Property retrieval for:", classification.intent);
 
     // 5a: Structured fields
     const structuredResult = PropertyDataExtractor.extractPropertyData(property, classification.intent, message);
     if (structuredResult.hasData && structuredResult.content) {
       return {
         response: ConciergeStyleService.polish(structuredResult.content),
-        source: 'property_data',
+        source: "property_data",
         shouldUpdateState: true,
         routing: {
           intent: classification.intent,
@@ -567,7 +648,7 @@ export class ConfirmedMessageOrchestrator {
     if (kbResult.found && kbResult.content) {
       return {
         response: ConciergeStyleService.polish(kbResult.content),
-        source: 'knowledge_base',
+        source: "knowledge_base",
         shouldUpdateState: true,
         routing: {
           intent: classification.intent,
@@ -581,7 +662,7 @@ export class ConfirmedMessageOrchestrator {
       };
     }
 
-    console.log('❌ [Orchestrator] No property data found');
+    console.log("❌ [Orchestrator] No property data found");
     return null;
   }
 
@@ -595,13 +676,15 @@ export class ConfirmedMessageOrchestrator {
     conversation: Conversation,
     classification: UnifiedClassification,
     recentHistory: Array<{ role: string; content: string }>,
-    activeThreadType?: ThreadType
+    activeThreadType?: ThreadType,
   ): Record<string, any> {
     const context = (conversation.conversation_context as any) || {};
     const guestName = context.guestName || context.guest_name || null;
 
     // Thread-aware memory summary
-    const threadType = activeThreadType || ConversationMemoryManager.intentToThreadType(classification.intent, classification.requestType);
+    const threadType =
+      activeThreadType ||
+      ConversationMemoryManager.intentToThreadType(classification.intent, classification.requestType);
     const activeThread = ConversationMemoryManager.getThread(context, threadType);
     const threads = context.threads || {};
 
@@ -612,9 +695,8 @@ export class ConfirmedMessageOrchestrator {
         threadSummaries.push(`${type}: ${thread.last_response_summary}`);
       }
     }
-    const memorySummary = threadSummaries.length > 0
-      ? `Active topics:\n${threadSummaries.join('\n')}`
-      : 'New conversation';
+    const memorySummary =
+      threadSummaries.length > 0 ? `Active topics:\n${threadSummaries.join("\n")}` : "New conversation";
 
     // If this is a follow-up in recommendation thread, include last recs
     const threadMeta = activeThread?.meta || {};
@@ -641,47 +723,49 @@ export class ConfirmedMessageOrchestrator {
       intent: classification.intent,
       requestType: classification.requestType,
       activeThread: threadType,
-      threadContext: activeThread ? {
-        lastIntent: activeThread.last_intent,
-        lastSummary: activeThread.last_response_summary,
-        turnCount: activeThread.turn_count,
-        meta: threadMeta,
-      } : null,
+      threadContext: activeThread
+        ? {
+            lastIntent: activeThread.last_intent,
+            lastSummary: activeThread.last_response_summary,
+            turnCount: activeThread.turn_count,
+            meta: threadMeta,
+          }
+        : null,
       conversationHistory: recentHistory.slice(-10),
       memorySummary,
       // Determine if AI should be in rewrite-only mode (property KB answer provided as context)
       isRewriteOnly: classification.isPropertySpecific && !!propertySnippets.relevant_knowledge,
       responseRules: [
-        'You are a luxury vacation rental concierge — warm, polished, and knowledgeable like a trusted local friend.',
-        'Keep responses SMS-friendly — 1-3 sentences, max 400 chars. Concise and conversational.',
-        'MINIMUM NECESSARY ANSWER RULE: Answer ONLY the specific question asked. Do NOT bundle related topics.',
+        "You are a luxury vacation rental concierge — warm, polished, and knowledgeable like a trusted local friend.",
+        "Keep responses SMS-friendly — 1-3 sentences, max 400 chars. Concise and conversational.",
+        "MINIMUM NECESSARY ANSWER RULE: Answer ONLY the specific question asked. Do NOT bundle related topics.",
         '  - If guest asks "what time can I check in?" → respond ONLY with check-in time. Do NOT add building entrance, key fob, parking, or unit code info.',
-        '  - If guest asks about key fob → respond ONLY about how/where to get the key fob. Do NOT include check-in time, building access, or door codes.',
-        '  - If guest asks about door code → respond ONLY with door/entry code info.',
-        '  - If guest asks about building access → respond ONLY with building entrance instructions.',
-        '  - Only combine multiple topics if the guest explicitly asked multiple questions in one message.',
-        'For recommendations: give 2-3 specific places with names and a one-line reason each.',
+        "  - If guest asks about key fob → respond ONLY about how/where to get the key fob. Do NOT include check-in time, building access, or door codes.",
+        "  - If guest asks about door code → respond ONLY with door/entry code info.",
+        "  - If guest asks about building access → respond ONLY with building entrance instructions.",
+        "  - Only combine multiple topics if the guest explicitly asked multiple questions in one message.",
+        "For recommendations: give 2-3 specific places with names and a one-line reason each.",
         // KB SOURCE OF TRUTH RULES
         'CRITICAL SOURCE OF TRUTH: If "relevant_knowledge" is provided in propertySnippets, that is the AUTHORITATIVE answer. You MUST use it as the factual basis. Do NOT override, contradict, or replace it with generic knowledge.',
-        'REWRITE-ONLY MODE: When relevant_knowledge is provided for a property-specific question, your ONLY job is to rephrase it in a warm SMS-friendly tone. Do NOT add new facts, distances, place names, or policies not in the source.',
-        'NEVER HALLUCINATE PROPERTY FACTS: Do not invent beach names, distances, parking rules, guest policies, trash locations, or amenity details. If the property data does not contain it, do not state it as fact.',
+        "REWRITE-ONLY MODE: When relevant_knowledge is provided for a property-specific question, your ONLY job is to rephrase it in a warm SMS-friendly tone. Do NOT add new facts, distances, place names, or policies not in the source.",
+        "NEVER HALLUCINATE PROPERTY FACTS: Do not invent beach names, distances, parking rules, guest policies, trash locations, or amenity details. If the property data does not contain it, do not state it as fact.",
         'If no property data answers the question AND it is property-specific, respond with: "I want to make sure I give you the right info — let me confirm that for you." Do NOT guess.',
-        'CURATED RECOMMENDATIONS FIRST: If the property data includes local_recommendations or curated places, use those FIRST before generating new suggestions.',
+        "CURATED RECOMMENDATIONS FIRST: If the property data includes local_recommendations or curated places, use those FIRST before generating new suggestions.",
         'CRITICAL: NEVER say any of these phrases: "property guide", "general_info", "I don\'t see that information".',
-        'CRITICAL: Answer the guest\'s question DIRECTLY. Use property context, location awareness, and common sense. Only mention the host for truly host-approval items (refunds, early check-in approval, damage).',
-        'No numbered multi-part responses (1/2, 2/2). Single natural flow.',
-        'Sound like a warm host texting — not a hotel front desk or chatbot.',
-        'Use contractions naturally (it\'s, there\'s, you\'ll, we\'re).',
-        'For recommendations, ALWAYS provide specific suggestions — never defer to the host.',
-        'TROUBLESHOOTING: If guest reports an issue, acknowledge it, provide 2-4 specific troubleshooting steps, and only escalate if unresolved.',
-        'PRIORITY: Answer directly → best-guess → helpful alternatives → troubleshooting. Escalation is LAST RESORT for urgent/damage issues only.',
-        'ANTI-REPETITION: Never repeat previously provided info unless asked. Prioritize the most recent question.',
-        'ESCALATION RULES: Only escalate for urgent issues (leaks, damage, locked out) or things that genuinely require host approval (refunds, booking changes). For everything else — trash, amenities, restaurants, how-to — just answer.',
-        'Handle ambiguous questions, general knowledge (distance, travel, tickets), and troubleshooting — not just recommendations.',
-        'RESPONSE PRUNING: Before finalizing, remove any sentences about topics the guest did NOT ask about. Keep only directly relevant info.',
+        "CRITICAL: Answer the guest's question DIRECTLY. Use property context, location awareness, and common sense. Only mention the host for truly host-approval items (refunds, early check-in approval, damage).",
+        "No numbered multi-part responses (1/2, 2/2). Single natural flow.",
+        "Sound like a warm host texting — not a hotel front desk or chatbot.",
+        "Use contractions naturally (it's, there's, you'll, we're).",
+        "For recommendations, ALWAYS provide specific suggestions — never defer to the host.",
+        "TROUBLESHOOTING: If guest reports an issue, acknowledge it, provide 2-4 specific troubleshooting steps, and only escalate if unresolved.",
+        "PRIORITY: Answer directly → best-guess → helpful alternatives → troubleshooting. Escalation is LAST RESORT for urgent/damage issues only.",
+        "ANTI-REPETITION: Never repeat previously provided info unless asked. Prioritize the most recent question.",
+        "ESCALATION RULES: Only escalate for urgent issues (leaks, damage, locked out) or things that genuinely require host approval (refunds, booking changes). For everything else — trash, amenities, restaurants, how-to — just answer.",
+        "Handle ambiguous questions, general knowledge (distance, travel, tickets), and troubleshooting — not just recommendations.",
+        "RESPONSE PRUNING: Before finalizing, remove any sentences about topics the guest did NOT ask about. Keep only directly relevant info.",
         activeThread?.turn_count && activeThread.turn_count > 0
           ? `This is a follow-up in the ${threadType} thread. Previous: "${activeThread.last_response_summary}". Do NOT repeat what was already said — refine, add new info, or rephrase.`
-          : '',
+          : "",
       ].filter(Boolean),
     };
   }
@@ -694,18 +778,18 @@ export class ConfirmedMessageOrchestrator {
     message: string,
     property: Property,
     classification: UnifiedClassification,
-    conversationContext: any
+    conversationContext: any,
   ): OrchestratorResult {
     // ── LOOP PREVENTION: Block consecutive escalations ──────────────
     const lastResponseType = conversationContext?.last_response_type;
     const isUrgent = classification.isIssue && classification.troubleshootingResult?.isUrgent;
-    
-    if (lastResponseType === 'escalation' && !isUrgent) {
-      console.log('🚫 [Orchestrator] BLOCKED consecutive escalation — providing smart default instead');
+
+    if (lastResponseType === "escalation" && !isUrgent) {
+      console.log("🚫 [Orchestrator] BLOCKED consecutive escalation — providing smart default instead");
       const smartDefault = this.getSmartDefault(message, property);
       return {
         response: smartDefault,
-        source: 'property_data',
+        source: "property_data",
         shouldUpdateState: true,
         routing: {
           intent: classification.intent,
@@ -719,19 +803,19 @@ export class ConfirmedMessageOrchestrator {
       };
     }
 
-    console.log('📞 [Orchestrator] Host escalation — no confident answer');
+    console.log("📞 [Orchestrator] Host escalation — no confident answer");
 
     const topic = extractTopicFromMessage(message, classification.intent);
     const topicPhrase = getTopicPhrase(topic);
 
-    const response = ConciergeStyleService.getEscalationResponse('unanswerable', {
+    const response = ConciergeStyleService.getEscalationResponse("unanswerable", {
       topic: topicPhrase,
       hostContact: property.emergency_contact || undefined,
     });
 
     return {
       response,
-      source: 'host_escalation',
+      source: "host_escalation",
       shouldUpdateState: true,
       routing: {
         intent: classification.intent,
@@ -755,10 +839,17 @@ export class ConfirmedMessageOrchestrator {
     if (/\b(trash|garbage|basura|recycle)\b/.test(lower)) {
       return "Trash and recycling are typically located near the building entrance or in a designated disposal area. If you have trouble finding it, just let me know! 👍";
     }
-    if (/\b(bag|luggage|store|hold|drop)\b/.test(lower) && /\b(early|before|arrive|arrival|check.?in|off)\b/.test(lower)) {
+    if (
+      /\b(bag|luggage|store|hold|drop)\b/.test(lower) &&
+      /\b(early|before|arrive|arrival|check.?in|off)\b/.test(lower)
+    ) {
       return "Great question! Early bag drop isn't always guaranteed, but we can sometimes work it out depending on cleaner timing. In the meantime, nearby luggage storage services like BagsAway and Bounce are solid options. I can also suggest nearby spots to explore while your place is being prepared! 🧳";
     }
-    if (/\b(bag drop|drop.*(my )?bags|luggage.*(hold|storage|store)|hold.*(my )?bags|store.*(my )?(luggage|bags)|baggage hold)\b/.test(lower)) {
+    if (
+      /\b(bag drop|drop.*(my )?bags|luggage.*(hold|storage|store)|hold.*(my )?bags|store.*(my )?(luggage|bags)|baggage hold)\b/.test(
+        lower,
+      )
+    ) {
       return "Great question! Early bag drop isn't always guaranteed, but we can sometimes work it out depending on cleaner timing. Nearby luggage storage services like BagsAway and Bounce are also great options. Want me to check if bag drop is possible for your arrival? 🧳";
     }
     if (/\b(grill|bbq|barbecue)\b/.test(lower)) {
@@ -789,16 +880,34 @@ export class ConfirmedMessageOrchestrator {
 
     // Define what should NOT appear for each narrow intent
     const blockedContentByIntent: Record<string, RegExp[]> = {
-      'ask_garbage': [/check.?in time/i, /check-in/i, /airport/i, /direction/i, /key fob/i, /door code/i, /avenue/i, /building entrance/i, /entry code/i],
-      'ask_checkin_time': [/parking/i, /key fob/i, /door code/i, /building entrance/i, /garbage/i, /trash/i, /direction.*airport/i],
-      'ask_checkout_time': [/parking/i, /key fob/i, /door code/i, /building entrance/i, /garbage/i, /trash/i],
-      'ask_key_fob': [/check.?in time/i, /check.?out time/i, /parking/i, /garbage/i, /trash/i, /direction.*airport/i],
-      'ask_door_code': [/check.?in time/i, /check.?out time/i, /parking/i, /garbage/i, /trash/i, /key fob/i],
-      'ask_building_access': [/check.?in time/i, /check.?out time/i, /garbage/i, /trash/i],
+      ask_garbage: [
+        /check.?in time/i,
+        /check-in/i,
+        /airport/i,
+        /direction/i,
+        /key fob/i,
+        /door code/i,
+        /avenue/i,
+        /building entrance/i,
+        /entry code/i,
+      ],
+      ask_checkin_time: [
+        /parking/i,
+        /key fob/i,
+        /door code/i,
+        /building entrance/i,
+        /garbage/i,
+        /trash/i,
+        /direction.*airport/i,
+      ],
+      ask_checkout_time: [/parking/i, /key fob/i, /door code/i, /building entrance/i, /garbage/i, /trash/i],
+      ask_key_fob: [/check.?in time/i, /check.?out time/i, /parking/i, /garbage/i, /trash/i, /direction.*airport/i],
+      ask_door_code: [/check.?in time/i, /check.?out time/i, /parking/i, /garbage/i, /trash/i, /key fob/i],
+      ask_building_access: [/check.?in time/i, /check.?out time/i, /garbage/i, /trash/i],
     };
 
     // Blocked approval phrases for restricted intents
-    const approvalBlockedIntents = ['ask_early_checkin', 'ask_late_checkout', 'ask_bag_drop', 'ask_baggage_hold'];
+    const approvalBlockedIntents = ["ask_early_checkin", "ask_late_checkout", "ask_bag_drop", "ask_baggage_hold"];
     if (approvalBlockedIntents.includes(intent)) {
       const approvalPhrases = [
         /\b(we'll aim for|we can accommodate|that should be fine|yes,? you can|you can definitely|definitely)\b/i,
@@ -808,7 +917,7 @@ export class ConfirmedMessageOrchestrator {
         if (phrase.test(response)) {
           console.log(`🚫 [Validation] BLOCKED approval language in ${intent}: "${response.substring(0, 80)}"`);
           // Replace with safe language
-          if (intent === 'ask_bag_drop') {
+          if (intent === "ask_bag_drop") {
             return "We can check whether early bag drop may be possible — it depends on turnover and cleaner timing. BagsAway and Bounce are also great nearby luggage storage options. Would you like me to check with the host?";
           }
           return "We'd be happy to check with the host on that. I'll let you know as soon as I hear back!";
@@ -820,18 +929,18 @@ export class ConfirmedMessageOrchestrator {
     if (!blockedPatterns) return response;
 
     // Check if response contains blocked content
-    const hasBlockedContent = blockedPatterns.some(p => p.test(response));
+    const hasBlockedContent = blockedPatterns.some((p) => p.test(response));
     if (!hasBlockedContent) return response;
 
     console.log(`🚫 [Validation] Cross-topic bleed detected for ${intent} — content will be pruned`);
     // Filter out sentences containing blocked content
     const sentences = response.split(/(?<=[.!?])\s+/);
-    const cleanSentences = sentences.filter(sentence => {
-      return !blockedPatterns.some(p => p.test(sentence));
+    const cleanSentences = sentences.filter((sentence) => {
+      return !blockedPatterns.some((p) => p.test(sentence));
     });
 
     if (cleanSentences.length === 0) return response; // Don't return empty
-    return cleanSentences.join(' ');
+    return cleanSentences.join(" ");
   }
 
   static trackResponseInMemory(
@@ -839,16 +948,16 @@ export class ConfirmedMessageOrchestrator {
     message: string,
     response: string,
     classification: UnifiedClassification,
-    orchestratorResult?: OrchestratorResult
+    orchestratorResult?: OrchestratorResult,
   ): any {
     const topic = extractTopicFromMessage(message, classification.intent);
-    const summary = response.length > 100 ? response.substring(0, 97) + '...' : response;
+    const summary = response.length > 100 ? response.substring(0, 97) + "..." : response;
 
     let updated = ConversationMemoryManager.updateMemory(
       conversationContext,
       classification.intent,
       classification.requestType,
-      { sharedContent: { topic, content: response, summary } }
+      { sharedContent: { topic, content: response, summary } },
     );
 
     // Track variation index
@@ -856,41 +965,47 @@ export class ConfirmedMessageOrchestrator {
 
     // ── Update thread ──────────────────────────────────────────────────
     const threadType = ConversationMemoryManager.intentToThreadType(classification.intent, classification.requestType);
-    const isResolved = orchestratorResult?.source === 'property_data'
-      || orchestratorResult?.source === 'quick_lookup'
-      || orchestratorResult?.source === 'knowledge_base';
+    const isResolved =
+      orchestratorResult?.source === "property_data" ||
+      orchestratorResult?.source === "quick_lookup" ||
+      orchestratorResult?.source === "knowledge_base";
     updated = ConversationMemoryManager.updateThread(
       updated,
       threadType,
       classification.intent,
       summary,
       undefined,
-      isResolved
+      isResolved,
     );
 
     // If switching to a new thread type, resolve the previous escalation thread
-    if (threadType !== 'escalation' && threadType !== 'issue' && updated.threads?.escalation && !updated.threads.escalation.resolved) {
+    if (
+      threadType !== "escalation" &&
+      threadType !== "issue" &&
+      updated.threads?.escalation &&
+      !updated.threads.escalation.resolved
+    ) {
       const escAge = Date.now() - new Date(updated.threads.escalation.last_updated).getTime();
       if (escAge > 60000) {
-        updated = ConversationMemoryManager.resolveThread(updated, 'escalation');
+        updated = ConversationMemoryManager.resolveThread(updated, "escalation");
       }
     }
-    if (threadType !== 'issue' && updated.threads?.issue && !updated.threads.issue.resolved) {
+    if (threadType !== "issue" && updated.threads?.issue && !updated.threads.issue.resolved) {
       const issueAge = Date.now() - new Date(updated.threads.issue.last_updated).getTime();
       if (issueAge > 120000) {
-        updated = ConversationMemoryManager.resolveThread(updated, 'issue');
+        updated = ConversationMemoryManager.resolveThread(updated, "issue");
       }
     }
 
     // Track escalation state — ONLY for actual host escalation, not generic requests
-    if (orchestratorResult?.source === 'host_escalation' || orchestratorResult?.triggerHostHandoff) {
+    if (orchestratorResult?.source === "host_escalation" || orchestratorResult?.triggerHostHandoff) {
       updated.awaiting_guest_confirmation_for_handoff = true;
       updated.pending_handoff_reason = (orchestratorResult as any).handoffReason || classification.intent;
       updated.pending_handoff_topic = topic;
       updated.last_host_contact_offer_timestamp = new Date().toISOString();
-      updated.last_response_type = 'escalation';
+      updated.last_response_type = "escalation";
     } else {
-      updated.last_response_type = orchestratorResult?.source || 'answer';
+      updated.last_response_type = orchestratorResult?.source || "answer";
     }
 
     // Store last response text for courtesy loop prevention
@@ -920,7 +1035,7 @@ export class ConfirmedMessageOrchestrator {
       updated.last_escalation_issue_type = classification.intent;
     }
 
-    if (orchestratorResult?.source === 'yes_confirmation') {
+    if (orchestratorResult?.source === "yes_confirmation") {
       updated.awaiting_guest_confirmation_for_handoff = false;
       updated.host_handoff_sent = true;
       updated.host_handoff_timestamp = new Date().toISOString();
@@ -936,77 +1051,79 @@ export class ConfirmedMessageOrchestrator {
 
 function extractTopicFromMessage(message: string, intent: string): string {
   const lower = message.toLowerCase();
-  if (lower.includes('wifi') || lower.includes('internet')) return 'wifi_info';
-  if (lower.includes('parking')) return 'parking_info';
-  if (lower.includes('pool')) return 'pool_info';
-  if (lower.includes('hot tub') || lower.includes('jacuzzi')) return 'hot_tub_info';
-  if (lower.includes('checkout') || lower.includes('check-out') || lower.includes('check out')) return 'checkout_info';
-  if (lower.includes('checkin') || lower.includes('check-in') || lower.includes('check in')) return 'checkin_info';
-  if (lower.includes('tv') || lower.includes('television')) return 'tv_info';
-  if (lower.includes('grill') || lower.includes('bbq')) return 'grill_info';
-  if (lower.includes('garbage') || lower.includes('trash')) return 'garbage_info';
-  if (lower.includes('towel') || lower.includes('linen') || lower.includes('sheet')) return 'towels_info';
-  if (lower.includes('grocery')) return 'grocery_info';
-  if (lower.includes('emergency') || lower.includes('contact host')) return 'emergency_contact';
-  if (lower.includes('key fob') || lower.includes('keyfob') || lower.includes('key card')) return 'key_fob_info';
-  if (lower.includes('door code') || lower.includes('entry code') || lower.includes('access code')) return 'door_code_info';
-  if (lower.includes('building') && (lower.includes('access') || lower.includes('entrance') || lower.includes('enter'))) return 'building_access_info';
-  if (lower.includes('bag') || lower.includes('luggage') || lower.includes('baggage')) return 'bag_drop_info';
-  if (lower.includes('access') || lower.includes('key') || lower.includes('door')) return 'access_info';
-  if (lower.includes('beach')) return 'beach_recs';
-  if (lower.includes('restaurant') || lower.includes('food') || lower.includes('eat')) return 'food_recs';
+  if (lower.includes("wifi") || lower.includes("internet")) return "wifi_info";
+  if (lower.includes("parking")) return "parking_info";
+  if (lower.includes("pool")) return "pool_info";
+  if (lower.includes("hot tub") || lower.includes("jacuzzi")) return "hot_tub_info";
+  if (lower.includes("checkout") || lower.includes("check-out") || lower.includes("check out")) return "checkout_info";
+  if (lower.includes("checkin") || lower.includes("check-in") || lower.includes("check in")) return "checkin_info";
+  if (lower.includes("tv") || lower.includes("television")) return "tv_info";
+  if (lower.includes("grill") || lower.includes("bbq")) return "grill_info";
+  if (lower.includes("garbage") || lower.includes("trash")) return "garbage_info";
+  if (lower.includes("towel") || lower.includes("linen") || lower.includes("sheet")) return "towels_info";
+  if (lower.includes("grocery")) return "grocery_info";
+  if (lower.includes("emergency") || lower.includes("contact host")) return "emergency_contact";
+  if (lower.includes("key fob") || lower.includes("keyfob") || lower.includes("key card")) return "key_fob_info";
+  if (lower.includes("door code") || lower.includes("entry code") || lower.includes("access code"))
+    return "door_code_info";
+  if (lower.includes("building") && (lower.includes("access") || lower.includes("entrance") || lower.includes("enter")))
+    return "building_access_info";
+  if (lower.includes("bag") || lower.includes("luggage") || lower.includes("baggage")) return "bag_drop_info";
+  if (lower.includes("access") || lower.includes("key") || lower.includes("door")) return "access_info";
+  if (lower.includes("beach")) return "beach_recs";
+  if (lower.includes("restaurant") || lower.includes("food") || lower.includes("eat")) return "food_recs";
 
   const intentMap: Record<string, string> = {
-    'ask_wifi': 'wifi_info',
-    'ask_parking': 'parking_info',
-    'ask_amenity': 'amenity_info',
-    'ask_checkout_time': 'checkout_info',
-    'ask_checkin_time': 'checkin_info',
-    'ask_early_checkin': 'early_checkin_info',
-    'ask_late_checkout': 'late_checkout_info',
-    'ask_access': 'access_info',
-    'ask_key_fob': 'key_fob_info',
-    'ask_door_code': 'door_code_info',
-    'ask_building_access': 'building_access_info',
-    'ask_emergency_contact': 'emergency_contact',
-    'ask_food_recommendations': 'food_recs',
-    'ask_coffee_recommendations': 'coffee_recs',
-    'ask_attractions': 'attraction_recs',
-    'ask_bag_drop': 'bag_drop_info',
-    'ask_towels': 'towels_info',
-    'ask_garbage': 'garbage_info',
+    ask_wifi: "wifi_info",
+    ask_parking: "parking_info",
+    ask_amenity: "amenity_info",
+    ask_checkout_time: "checkout_info",
+    ask_checkin_time: "checkin_info",
+    ask_early_checkin: "early_checkin_info",
+    ask_late_checkout: "late_checkout_info",
+    ask_access: "access_info",
+    ask_key_fob: "key_fob_info",
+    ask_door_code: "door_code_info",
+    ask_building_access: "building_access_info",
+    ask_emergency_contact: "emergency_contact",
+    ask_food_recommendations: "food_recs",
+    ask_coffee_recommendations: "coffee_recs",
+    ask_attractions: "attraction_recs",
+    ask_bag_drop: "bag_drop_info",
+    ask_towels: "towels_info",
+    ask_garbage: "garbage_info",
   };
 
-  return intentMap[intent] || 'general_info';
+  return intentMap[intent] || "general_info";
 }
 
 function getTopicPhrase(topic: string): string {
   const phrases: Record<string, string> = {
-    'wifi_info': 'the WiFi details',
-    'checkout_info': 'checkout time',
-    'checkin_info': 'check-in details',
-    'early_checkin_info': 'early check-in',
-    'parking_info': 'parking',
-    'amenity_info': 'that amenity',
-    'access_info': 'access instructions',
-    'key_fob_info': 'the key fob',
-    'door_code_info': 'the door code',
-    'building_access_info': 'building access',
-    'pool_info': 'pool info',
-    'hot_tub_info': 'hot tub details',
-    'garbage_info': 'trash pickup',
-    'grocery_info': 'nearby stores',
-    'emergency_contact': 'host contact info',
-    'bag_drop_info': 'bag drop',
-    'general_info': 'that',
+    wifi_info: "the WiFi details",
+    checkout_info: "checkout time",
+    checkin_info: "check-in details",
+    early_checkin_info: "early check-in",
+    parking_info: "parking",
+    amenity_info: "the amenity amenity",
+    access_info: "access instructions",
+    key_fob_info: "the key fob",
+    door_code_info: "the door code",
+    building_access_info: "building access",
+    pool_info: "pool info",
+    hot_tub_info: "hot tub details",
+    garbage_info: "trash pickup",
+    grocery_info: "nearby stores",
+    emergency_contact: "host contact info",
+    bag_drop_info: "bag drop",
+    general_info: "general property info",
   };
-  return phrases[topic] || 'that';
+  return phrases[topic] || "that";
 }
 
 function rephrasePreviousAnswer(topic: string, previousSummary: string): string {
   const topicPhrase = getTopicPhrase(topic);
 
-  if (topic === 'checkout_info') {
+  if (topic === "checkout_info") {
     const timeMatch = previousSummary.match(/\d{1,2}(:\d{2})?\s*(am|pm|AM|PM)?/);
     if (timeMatch) {
       const variations = [
@@ -1016,22 +1133,22 @@ function rephrasePreviousAnswer(topic: string, previousSummary: string): string 
       return variations[Math.floor(Math.random() * variations.length)];
     }
   }
-  if (topic === 'checkin_info') {
+  if (topic === "checkin_info") {
     const timeMatch = previousSummary.match(/\d{1,2}(:\d{2})?\s*(am|pm|AM|PM)?/);
     if (timeMatch) {
       return `Check-in is at ${timeMatch[0]}. Need any other details about getting in?`;
     }
   }
-  if (topic === 'wifi_info') {
+  if (topic === "wifi_info") {
     return `I shared the WiFi info just a bit ago — scroll up to grab it! Need anything else?`;
   }
 
   // Never use "As I mentioned" — just rephrase naturally
   if (previousSummary && previousSummary.length < 120) {
     const starters = [
-      `Just to confirm: ${previousSummary.toLowerCase().replace(/^(as i mentioned[,:]\s*|just to remind you[,:]\s*)/i, '')}`,
-      `Quick reminder: ${previousSummary.toLowerCase().replace(/^(as i mentioned[,:]\s*)/i, '')}`,
-      previousSummary.replace(/^(As I mentioned[,:]\s*)/i, ''),
+      `Just to confirm: ${previousSummary.toLowerCase().replace(/^(as i mentioned[,:]\s*|just to remind you[,:]\s*)/i, "")}`,
+      `Quick reminder: ${previousSummary.toLowerCase().replace(/^(as i mentioned[,:]\s*)/i, "")}`,
+      previousSummary.replace(/^(As I mentioned[,:]\s*)/i, ""),
     ];
     return `${starters[Math.floor(Math.random() * starters.length)]} — anything else I can help with?`;
   }
