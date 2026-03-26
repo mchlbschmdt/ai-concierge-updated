@@ -1,15 +1,14 @@
-
-import React, { useState, useEffect, useRef } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { MessageSquare, Send, User, Bot, Loader2 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/components/ui/use-toast';
+import React, { useState, useEffect, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { MessageSquare, Send, User, Bot, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/components/ui/use-toast";
 
 export default function HostAiChat() {
   const [messages, setMessages] = useState([]);
-  const [currentMessage, setCurrentMessage] = useState('');
+  const [currentMessage, setCurrentMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [conversationHistory, setConversationHistory] = useState([]);
   const messagesEndRef = useRef(null);
@@ -30,44 +29,44 @@ export default function HostAiChat() {
   const loadConversationHistory = async () => {
     try {
       const { data, error } = await supabase
-        .from('host_ai_conversations')
-        .select('*')
-        .order('created_at', { ascending: false })
+        .from("host_ai_conversations")
+        .select("*")
+        .order("created_at", { ascending: false })
         .limit(10);
 
       if (error) throw error;
       setConversationHistory(data || []);
     } catch (error) {
-      console.error('Error loading conversation history:', error);
+      console.error("Error loading conversation history:", error);
     }
   };
 
   const sendMessage = async () => {
     if (!currentMessage.trim()) return;
 
-    const userMessage = { role: 'user', content: currentMessage };
-    setMessages(prev => [...prev, userMessage]);
-    setCurrentMessage('');
+    const userMessage = { role: "user", content: currentMessage };
+    setMessages((prev) => [...prev, userMessage]);
+    setCurrentMessage("");
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke('host-ai-assistant', {
-        body: { message: currentMessage }
+      const { data, error } = await supabase.functions.invoke("host-ai-assistant", {
+        body: { message: currentMessage, conversationHistory: messages.slice(-8) },
       });
 
       if (error) throw error;
 
-      const aiMessage = { role: 'assistant', content: data.response };
-      setMessages(prev => [...prev, aiMessage]);
-      
+      const aiMessage = { role: "assistant", content: data.response };
+      setMessages((prev) => [...prev, aiMessage]);
+
       // Reload conversation history to show the new conversation
       loadConversationHistory();
     } catch (error) {
-      console.error('Error sending message:', error);
+      console.error("Error sending message:", error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to send message. Please try again."
+        description: "Failed to send message. Please try again.",
       });
     } finally {
       setIsLoading(false);
@@ -75,7 +74,7 @@ export default function HostAiChat() {
   };
 
   const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
     }
@@ -86,7 +85,7 @@ export default function HostAiChat() {
     "Which properties get the most inquiries?",
     "What recommendations do guests ask for most?",
     "Any recent guest feedback trends?",
-    "Help me improve my property descriptions"
+    "Help me improve my property descriptions",
   ];
 
   return (
@@ -109,24 +108,24 @@ export default function HostAiChat() {
                   <p>Ask me anything about your properties or guests!</p>
                 </div>
               )}
-              
+
               {messages.map((message, index) => (
-                <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`flex items-start gap-2 max-w-[80%] ${message.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                    <div className={`p-2 rounded-full ${message.role === 'user' ? 'bg-blue-500' : 'bg-gray-300'}`}>
-                      {message.role === 'user' ? (
-                        <User className="h-3 w-3 text-white" />
-                      ) : (
-                        <Bot className="h-3 w-3" />
-                      )}
+                <div key={index} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div
+                    className={`flex items-start gap-2 max-w-[80%] ${message.role === "user" ? "flex-row-reverse" : ""}`}
+                  >
+                    <div className={`p-2 rounded-full ${message.role === "user" ? "bg-blue-500" : "bg-gray-300"}`}>
+                      {message.role === "user" ? <User className="h-3 w-3 text-white" /> : <Bot className="h-3 w-3" />}
                     </div>
-                    <div className={`p-3 rounded-lg ${message.role === 'user' ? 'bg-blue-500 text-white' : 'bg-white border'}`}>
+                    <div
+                      className={`p-3 rounded-lg ${message.role === "user" ? "bg-blue-500 text-white" : "bg-white border"}`}
+                    >
                       <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                     </div>
                   </div>
                 </div>
               ))}
-              
+
               {isLoading && (
                 <div className="flex justify-start">
                   <div className="flex items-center gap-2">
@@ -190,14 +189,10 @@ export default function HostAiChat() {
             {conversationHistory.slice(0, 5).map((conv) => (
               <div key={conv.id} className="p-2 bg-gray-50 rounded text-xs">
                 <p className="font-medium truncate">{conv.message}</p>
-                <p className="text-gray-500 text-xs mt-1">
-                  {new Date(conv.created_at).toLocaleDateString()}
-                </p>
+                <p className="text-gray-500 text-xs mt-1">{new Date(conv.created_at).toLocaleDateString()}</p>
               </div>
             ))}
-            {conversationHistory.length === 0 && (
-              <p className="text-gray-500 text-xs">No conversations yet</p>
-            )}
+            {conversationHistory.length === 0 && <p className="text-gray-500 text-xs">No conversations yet</p>}
           </CardContent>
         </Card>
       </div>
