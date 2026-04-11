@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Layout from "../components/Layout";
 import { supabase } from "../integrations/supabase/client";
 import { MessageSquare, Loader2, RotateCcw, ThumbsUp, ThumbsDown, Check, Zap } from "lucide-react";
@@ -18,6 +18,7 @@ export default function UserSmsTest() {
   const [conversationHistory, setConversationHistory] = useState([]);
   const [ratedMessages, setRatedMessages] = useState(new Set());
   const [ratingStats, setRatingStats] = useState({ total: 0, positive: 0 });
+  const chatEndRef = useRef(null);
   const { showToast } = useToast();
   const { status, usageCount, trialUsesRemaining, incrementUsage } = useProductAccess("ai_concierge");
 
@@ -35,6 +36,10 @@ export default function UserSmsTest() {
     loadUserProperties();
     loadRatingStats();
   }, []);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [conversationHistory]);
 
   useEffect(() => {
     setConversationReady(false);
@@ -317,7 +322,7 @@ export default function UserSmsTest() {
         {conversationHistory.length > 0 && (
           <div className="bg-card rounded-lg shadow-card p-6 mb-6">
             <h3 className="text-lg font-semibold text-heading mb-4">Conversation History</h3>
-            <div className="space-y-3 max-h-96 overflow-y-auto">
+            <div className="space-y-3 max-h-[600px] overflow-y-auto">
               {conversationHistory.map((entry, i) => (
                 <div key={i} className={`flex ${entry.role === "user" ? "justify-end" : "justify-start"}`}>
                   <div className="max-w-[80%]">
@@ -361,6 +366,7 @@ export default function UserSmsTest() {
                   </div>
                 </div>
               ))}
+              <div ref={chatEndRef} />
             </div>
           </div>
         )}
