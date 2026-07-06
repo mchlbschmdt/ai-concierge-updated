@@ -482,6 +482,7 @@ export default function SmsConversationsAdmin() {
                           const fb = hasUnhelpfulFallback(conv);
                           const ha = hasHallucinatedAmenity(conv);
                           const cv = hasClosedVenueMention(conv);
+                          const gv = isGoogleVerified(conv);
                           const anyFlag = nr || st || dd || leak || raa || fb || ha || cv;
 
 
