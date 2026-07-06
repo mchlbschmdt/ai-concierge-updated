@@ -552,6 +552,11 @@ export default function SmsConversationsAdmin() {
                                       Closed venue
                                     </Badge>
                                   )}
+                                  {gv && (
+                                    <Badge variant="outline" className="bg-emerald-500/15 text-emerald-700 border-emerald-500/40 text-xs dark:text-emerald-300">
+                                      Google-verified
+                                    </Badge>
+                                  )}
 
 
 
