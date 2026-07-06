@@ -9,11 +9,14 @@ export class PropertyDataExtractorEnhanced {
     let response = '';
     let hasData = false;
     
-    // Check if we've already shared TV info recently
+    // Only skip re-answering when the guest asked the SAME topic recently.
+    // Previously we returned a canned "As I mentioned…" reply here, which
+    // caused unrelated intents to receive stale summaries. Falling through
+    // lets the fresh answer generate below.
     const recentShare = ConversationMemoryManager.wasTopicRecentlyShared(conversationContext, 'tv_info');
-    if (recentShare.shared) {
+    if (recentShare.shared && (lowerMessage.includes('tv') || lowerMessage.includes('television'))) {
       return {
-        response: `As I mentioned, ${recentShare.summary}. Is there something specific about the TV you'd like to know more about?`,
+        response: `Just a heads-up — I shared the TV info a moment ago. Anything specific about the TV you still need help with?`,
         hasData: true
       };
     }
@@ -57,11 +60,12 @@ export class PropertyDataExtractorEnhanced {
     let response = '';
     let hasData = false;
     
-    // Check if we've already provided troubleshooting for this equipment
+    // Only replay troubleshooting steps if the guest is still on the same
+    // equipment topic. Otherwise fall through and answer the new question.
     const recentShare = ConversationMemoryManager.wasTopicRecentlyShared(conversationContext, `troubleshoot_${equipmentType}`);
-    if (recentShare.shared) {
+    if (recentShare.shared && message.toLowerCase().includes(equipmentType.toLowerCase())) {
       return {
-        response: `I shared troubleshooting steps earlier. ${recentShare.summary}. Is it still not working?`,
+        response: `I shared some troubleshooting steps for the ${equipmentType} a moment ago. Is it still not working?`,
         hasData: true
       };
     }
@@ -94,11 +98,12 @@ export class PropertyDataExtractorEnhanced {
     let response = '';
     let hasData = false;
     
-    // Check if we've already shared services info
+    // Only replay services info if the guest is still asking about services.
     const recentShare = ConversationMemoryManager.wasTopicRecentlyShared(conversationContext, 'additional_services');
-    if (recentShare.shared) {
+    const servicesKeywords = ['service', 'laundry', 'housekeeping', 'cleaning', 'towel', 'concierge'];
+    if (recentShare.shared && servicesKeywords.some(k => lowerMessage.includes(k))) {
       return {
-        response: `As I mentioned, ${recentShare.summary}. Would you like more details?`,
+        response: `I covered the property's services a moment ago — want more detail on any specific one (housekeeping, towels, laundry)?`,
         hasData: true
       };
     }
@@ -136,11 +141,12 @@ export class PropertyDataExtractorEnhanced {
     let response = '';
     let hasData = false;
     
-    // Check if we've already shared resort info
+    // Only replay resort-amenity info if the guest is still on that topic.
     const recentShare = ConversationMemoryManager.wasTopicRecentlyShared(conversationContext, 'resort_amenities');
-    if (recentShare.shared) {
+    const amenityKeywords = ['amenity', 'amenities', 'pool', 'gym', 'resort', 'facility'];
+    if (recentShare.shared && amenityKeywords.some(k => lowerMessage.includes(k))) {
       return {
-        response: `As I mentioned, ${recentShare.summary}. Would you like details about a specific amenity?`,
+        response: `I shared the resort/amenity info a moment ago — want details on a specific amenity?`,
         hasData: true
       };
     }
@@ -196,11 +202,12 @@ export class PropertyDataExtractorEnhanced {
     let response = '';
     let hasData = false;
     
-    // Check if we've already shared weather info recently
+    // Only replay weather info if the guest is still asking about weather.
     const recentShare = ConversationMemoryManager.wasTopicRecentlyShared(conversationContext, 'weather_info');
-    if (recentShare.shared) {
+    const weatherKeywords = ['weather', 'temperature', 'rain', 'forecast', 'climate', 'hot', 'humid', 'cold'];
+    if (recentShare.shared && weatherKeywords.some(k => lowerMessage.includes(k))) {
       return {
-        response: `As I mentioned earlier, ${recentShare.summary}. Is there something specific about the weather you'd like to know?`,
+        response: `I shared the weather notes a moment ago — anything specific you still want to know?`,
         hasData: true
       };
     }
@@ -429,11 +436,12 @@ export class PropertyDataExtractorEnhanced {
     let response = '';
     let hasData = false;
     
-    // Check for recent shares
+    // Only replay park-timing info if the guest is still asking about parks.
     const recentShare = ConversationMemoryManager.wasTopicRecentlyShared(conversationContext, 'best_time_visit');
-    if (recentShare.shared) {
+    const parkKeywords = ['park', 'disney', 'universal', 'magic kingdom', 'epcot', 'hollywood', 'animal kingdom', 'crowd', 'busy'];
+    if (recentShare.shared && parkKeywords.some(k => lowerMessage.includes(k))) {
       return {
-        response: `As I mentioned, ${recentShare.summary}. Need details about a specific park?`,
+        response: `I shared park-timing tips a moment ago — want details for a specific park?`,
         hasData: true
       };
     }
