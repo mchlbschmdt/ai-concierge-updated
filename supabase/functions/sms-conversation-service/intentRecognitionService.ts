@@ -1005,7 +1005,45 @@ export class IntentRecognitionService {
     return generalPatterns.some(pattern => pattern.test(lowerMessage));
   }
 
+  /**
+   * Guest reporting an item they found or left behind. Always routes to host
+   * handoff — the AI has no way to know whose sock/charger/wallet it is.
+   */
+  private static isLostItemReport(message: string): boolean {
+    // Question form ("where can I buy socks?") is NOT a report.
+    if (message.includes('?') || /\b(where|how|when|do you sell|can i buy|can we buy)\b/.test(message)) {
+      return false;
+    }
+    const foundPatterns = [
+      /\b(i|we|my (kid|son|daughter|wife|husband|partner)) (found|discovered|noticed)\b/,
+      /\bthere('?s| is| are) (a|an|some) .+ (under|behind|on top of|in the|on the) /,
+      /\b(found|left|forgot|missing|lost|misplaced) (a|an|the|my|our) /,
+      /\b(sock|socks|earring|earrings|ring|bracelet|necklace|wallet|passport|id card|charger|phone|laptop|watch|glasses|sunglasses|hat|shoe|shoes|toy|book|bag|backpack|jewelry|keys) (under|behind|on|in|is|are|was) /,
+      /\bunder the (bed|couch|sofa|table|dresser|nightstand|pillow)\b/,
+      /\bleft behind\b/,
+      /\b(previous|prior|last) guest('?s)? (item|stuff|things|clothes)\b/,
+    ];
+    return foundPatterns.some((p) => p.test(message));
+  }
+
+  /**
+   * Housekeeping / maintenance concern that the AI cannot resolve on its own
+   * (stains, damage, missing supplies, cleanliness). Routes to host handoff.
+   */
+  private static isHousekeepingReport(message: string): boolean {
+    if (/\b(where can i buy|how do i order|can we order)\b/.test(message)) return false;
+    const patterns = [
+      /\b(stain|stains|smell|smells|odor|mold|mildew|bug|bugs|insect|roach|ant|ants|spider)\b/,
+      /\b(sheet|sheets|pillow|pillows|towel|towels) (are|is|smell|dirty|stained|missing)\b/,
+      /\b(broken|cracked|torn|ripped|damaged|leaking|leak|flood|flooded|dripping)\b/,
+      /\b(dirty|filthy|not clean|wasn'?t cleaned|hasn'?t been cleaned)\b/,
+      /\b(no|out of|ran out of|need more|need extra) (toilet paper|tp|paper towels?|soap|shampoo|conditioner|detergent|dish soap|coffee|trash bags?|garbage bags?)\b/,
+    ];
+    return patterns.some((p) => p.test(message));
+  }
+
   private static matchesKeywords(message: string, keywords: string[]): boolean {
+
     return keywords.some(keyword => {
       // Handle multi-word keywords
       if (keyword.includes(' ')) {
