@@ -486,6 +486,13 @@ export default function SmsConversationsAdmin() {
                                       Auto-approved
                                     </Badge>
                                   )}
+                                  {fb && (
+                                    <Badge variant="outline" className="bg-warning/20 text-warning border-warning/40 text-xs">
+                                      <AlertTriangle className="mr-1 h-3 w-3" />
+                                      Fallback loop
+                                    </Badge>
+                                  )}
+
                                   {st && (
                                     <Badge variant="outline" className="bg-warning/15 text-warning border-warning/30 text-xs">
                                       Stale
