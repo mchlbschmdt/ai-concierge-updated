@@ -36,21 +36,24 @@ export class PerplexityRecommendationService {
       console.log('📝 [PERPLEXITY] Built prompt:', prompt.substring(0, 150) + '...');
       
       const requestBody = {
-        model: 'llama-3.1-sonar-small-128k-online',
+        model: 'sonar',
         messages: [
           {
             role: 'system',
-            content: 'You are a local concierge providing specific, actionable recommendations. Be concise and include practical details like distance and why locals love each place.'
+            content: 'You are a local concierge providing specific, actionable recommendations. Only return businesses that are CURRENTLY OPERATING right now — exclude any place that Google/Yelp lists as "Permanently closed", "Temporarily closed", "Closed for renovation", or that has no reviews/activity in the last 90 days. When uncertain, exclude the place. Be concise and include practical details like approximate distance and one specific reason to go.'
           },
           {
             role: 'user',
             content: prompt
           }
         ],
-        temperature: 0.3,
-        max_tokens: 300,
+        temperature: 0.2,
+        max_tokens: 350,
         return_related_questions: false,
+        search_recency_filter: 'month',
+        search_domain_filter: ['google.com', 'maps.google.com', 'yelp.com', 'tripadvisor.com', 'opentable.com'],
       };
+
       
       console.log('🚀 [PERPLEXITY] Making API request...');
       const response = await fetch(this.PERPLEXITY_API_URL, {
