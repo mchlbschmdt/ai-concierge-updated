@@ -460,7 +460,13 @@ export class RecommendationService {
               
               enhancedLines.push(enhancedLine);
             } else {
-              enhancedLines.push(line);
+              // No verified distance — strip any fabricated "X min walk/drive"
+              // phrasing so we don't tell the guest a 30-min walk is "5 min".
+              const scrubbed = line
+                .replace(/~?\s*\d+\s*(?:min|minute|minutes)\s*(?:walk|walking|drive|driving)/gi, 'approx distance')
+                .replace(/🚶[^,)\n]*/g, '')
+                .replace(/🚗\s*~?\s*\d+\s*(?:min|minute|minutes)/gi, '🚗 approx');
+              enhancedLines.push(scrubbed);
             }
           } else {
             enhancedLines.push(line);
