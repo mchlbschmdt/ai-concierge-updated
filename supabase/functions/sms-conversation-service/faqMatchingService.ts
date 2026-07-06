@@ -138,3 +138,36 @@ function getBigrams(str: string): Set<string> {
   }
   return bigrams;
 }
+
+// Synonym / alias expansion so guests using informal words still match curated FAQs.
+// Keys are canonical tokens found in FAQ questions/tags; values are aliases guests use.
+const SYNONYMS: Record<string, string[]> = {
+  trash: ['garbage', 'rubbish', 'waste', 'bin', 'dumpster', 'throw out', 'throw away', 'take out'],
+  wifi: ['wi-fi', 'wi fi', 'internet', 'network', 'password', 'ssid'],
+  parking: ['park', 'car', 'vehicle', 'valet', 'garage', 'lot', 'spot'],
+  tv: ['television', 'cable', 'remote', 'roku', 'firestick', 'streaming'],
+  laundry: ['washer', 'dryer', 'wash', 'clothes'],
+  ac: ['air conditioning', 'air conditioner', 'a/c', 'cooling', 'thermostat'],
+  pool: ['swim', 'swimming'],
+  checkin: ['check in', 'check-in', 'arrival', 'arrive'],
+  checkout: ['check out', 'check-out', 'departure', 'leave'],
+  coffee: ['espresso', 'latte', 'cappuccino', 'cafe', 'café'],
+  breakfast: ['brunch', 'morning food'],
+  gym: ['fitness', 'workout', 'exercise'],
+  beach: ['ocean', 'sand', 'shore'],
+  restaurant: ['dinner', 'food', 'eat', 'dining'],
+};
+
+function expandSynonyms(text: string): string {
+  let out = ' ' + text + ' ';
+  for (const [canonical, aliases] of Object.entries(SYNONYMS)) {
+    for (const alias of aliases) {
+      // If the alias appears in the text, append the canonical token so it can match.
+      const re = new RegExp(`\\b${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+      if (re.test(out) && !new RegExp(`\\b${canonical}\\b`, 'i').test(out)) {
+        out += ' ' + canonical;
+      }
+    }
+  }
+  return out.trim();
+}
