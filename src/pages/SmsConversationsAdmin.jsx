@@ -295,6 +295,7 @@ export default function SmsConversationsAdmin() {
           hasLeakage(conv) ? "cross_property_leak" : null,
           isRestrictedAutoApproved(conv) ? "restricted_auto_approved" : null,
           hasUnhelpfulFallback(conv) ? "fallback_loop" : null,
+          hasHallucinatedAmenity(conv) ? "hallucinated_amenity" : null,
         ]
           .filter(Boolean)
           .join("|") || "ok",
