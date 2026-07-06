@@ -109,6 +109,18 @@ function isRestrictedAutoApproved(conv) {
   return APPROVAL_PHRASES.test(conv.last_response);
 }
 
+// Fallback loop: the AI hedged ("let me confirm") without actually escalating.
+// We look for the hedging phrasing and require that no handoff-ack language
+// is present (which would indicate a real host escalation).
+const FALLBACK_HEDGE = /want to make sure i give you the right info|let me confirm that for you/i;
+const HANDOFF_ACK = /messaged your host|looped in your host|passed (this|it) along to your host|checking with (the )?host|reach out to the (host|property manager)|follow up (shortly|as soon)/i;
+function hasUnhelpfulFallback(conv) {
+  if (!conv.last_response) return false;
+  if (!FALLBACK_HEDGE.test(conv.last_response)) return false;
+  return !HANDOFF_ACK.test(conv.last_response);
+}
+
+
 export default function SmsConversationsAdmin() {
   const { currentUser } = useAuth();
   const { showToast } = useToast();
