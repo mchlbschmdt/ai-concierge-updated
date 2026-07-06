@@ -117,9 +117,11 @@ export default function ConversationFilters({ filters, onFiltersChange }) {
             <span className="text-xs font-medium text-muted-foreground">State:</span>
             {STATE_OPTIONS.map((opt) => (
               <label key={opt.value} className="flex items-center gap-1.5 text-xs cursor-pointer">
-                <Checkbox
+                <input
+                  type="checkbox"
                   checked={filters.states.includes(opt.value)}
-                  onCheckedChange={() => toggleState(opt.value)}
+                  onChange={() => toggleState(opt.value)}
+                  className="h-3.5 w-3.5 rounded border-border accent-primary"
                 />
                 {opt.label}
               </label>
