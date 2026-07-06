@@ -1191,6 +1191,17 @@ function rephrasePreviousAnswer(topic: string, previousSummary: string): string 
   }
 
   // Never use "As I mentioned" — just rephrase naturally
+  // Deny-list: never replay hedging/fallback summaries — they were never real answers.
+  const isFallbackSummary =
+    !previousSummary ||
+    /want to make sure|let me confirm that for you|don't have that on file|looped in your host|passed (this|it) along to your host|checking with (the )?host/i.test(
+      previousSummary,
+    );
+
+  if (isFallbackSummary) {
+    return `I asked your host about ${topicPhrase} and I'll follow up as soon as I hear back. Anything else I can help with in the meantime?`;
+  }
+
   if (previousSummary && previousSummary.length < 120) {
     const starters = [
       `Just to confirm: ${previousSummary.toLowerCase().replace(/^(as i mentioned[,:]\s*|just to remind you[,:]\s*)/i, "")}`,
@@ -1202,3 +1213,4 @@ function rephrasePreviousAnswer(topic: string, previousSummary: string): string 
 
   return `I shared ${topicPhrase} just a moment ago. Want me to look into something else?`;
 }
+
