@@ -2333,9 +2333,23 @@ export class EnhancedConversationService {
     if (message) {
       const lowerMessage = message.toLowerCase();
       
-      // If they're asking about something we should know, offer to check with property
+      // If they're asking about something we should know, check the property's amenity
+      // list before assuming it exists — do NOT hedge with generic "let me check".
       if (lowerMessage.includes('pool') || lowerMessage.includes('hot tub') || lowerMessage.includes('amenity')) {
-        return `${namePrefix}Let me check the property details for you. What specific amenity information do you need?`;
+        const amenitiesRaw = (property as any)?.amenities;
+        const amenityList: string[] = Array.isArray(amenitiesRaw)
+          ? amenitiesRaw
+          : typeof amenitiesRaw === 'string'
+            ? amenitiesRaw.split(/[,;\n]/).map((s: string) => s.trim())
+            : [];
+        const has = (kw: string) => amenityList.some((a) => new RegExp(kw, 'i').test(a));
+        if (lowerMessage.includes('pool') && !has('pool')) {
+          return `${namePrefix}This unit doesn't have a pool on-site. Want me to suggest the nearest public or resort pool?`;
+        }
+        if (lowerMessage.includes('hot tub') && !has('hot tub')) {
+          return `${namePrefix}This unit doesn't have a hot tub on-site. Want me to suggest nearby spas?`;
+        }
+        return `${namePrefix}I've messaged your host to double-check that amenity detail — I'll follow up as soon as they reply.`;
       }
       
       if (lowerMessage.includes('direction') || lowerMessage.includes('location') || lowerMessage.includes('address')) {

@@ -60,14 +60,16 @@ Want me to recommend what groceries to pick up for a cookout?`;
             return `🔥 No grill at this property, but I can recommend great BBQ restaurants nearby if you're craving grilled food! 🍖`;
           }
           
-        case 'pool':
-          if (amenities.includes('Pool')) {
-            return `🏊‍♀️ Yes! There's a pool for you to enjoy! ${propertyData.special_notes?.includes('pool') ? 'Check your welcome guide for any pool-specific instructions.' : ''}
-
-Perfect for cooling off! 🌊`;
-          } else {
-            return `🏊‍♀️ No pool at this property, but I can find nearby pools or water parks if you'd like! 🌊`;
+        case 'pool': {
+          const hasPool = Array.isArray(amenities)
+            ? amenities.some((a: string) => /^pool$/i.test(String(a).trim()) || /\bpool\b/i.test(String(a)))
+            : false;
+          // Ignore special_notes for the yes/no gate — "no pool" also contains "pool".
+          if (hasPool) {
+            return `🏊‍♀️ Yes! There's a pool for you to enjoy!\n\nPerfect for cooling off! 🌊`;
           }
+          return `🏊‍♀️ No pool at this property, but I can find nearby pools or water parks if you'd like! 🌊`;
+        }
           
         case 'hot_tub':
           if (amenities.includes('Hot Tub')) {
