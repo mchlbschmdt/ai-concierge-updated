@@ -1000,12 +1000,22 @@ export class ConfirmedMessageOrchestrator {
     const topic = extractTopicFromMessage(message, classification.intent);
     const summary = response.length > 100 ? response.substring(0, 97) + "..." : response;
 
+    // Don't record hedging/fallback/handoff-ack responses as "shared information" —
+    // otherwise the anti-repetition engine will replay them on the next turn.
+    const isFallbackOrHandoffAck =
+      orchestratorResult?.source === "host_escalation" ||
+      orchestratorResult?.source === "issue_followup" ||
+      /want to make sure|let me confirm that for you|don't have that on file|looped in your host|passed (this|it) along to your host|checking with (the )?host|i'?ll (reach out|follow up)/i.test(
+        response,
+      );
+
     let updated = ConversationMemoryManager.updateMemory(
       conversationContext,
       classification.intent,
       classification.requestType,
-      { sharedContent: { topic, content: response, summary } },
+      isFallbackOrHandoffAck ? {} : { sharedContent: { topic, content: response, summary } },
     );
+
 
     // Track variation index
     updated = ConciergeStyleService.incrementVariationIndex(updated, classification.intent);
