@@ -274,10 +274,12 @@ export default function SmsConversationsAdmin() {
           isDataDumpy(conv.last_response, conv.last_intent) ? "data_dumpy" : null,
           hasLeakage(conv) ? "cross_property_leak" : null,
           isRestrictedAutoApproved(conv) ? "restricted_auto_approved" : null,
+          hasUnhelpfulFallback(conv) ? "fallback_loop" : null,
         ]
           .filter(Boolean)
           .join("|") || "ok",
       ]),
+
     ]
       .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
       .join("\n");
