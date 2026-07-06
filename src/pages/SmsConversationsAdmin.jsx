@@ -307,6 +307,8 @@ export default function SmsConversationsAdmin() {
           isRestrictedAutoApproved(conv) ? "restricted_auto_approved" : null,
           hasUnhelpfulFallback(conv) ? "fallback_loop" : null,
           hasHallucinatedAmenity(conv) ? "hallucinated_amenity" : null,
+          hasClosedVenueMention(conv) ? "closed_venue" : null,
+
         ]
           .filter(Boolean)
           .join("|") || "ok",
