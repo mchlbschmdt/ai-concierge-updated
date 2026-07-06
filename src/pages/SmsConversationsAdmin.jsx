@@ -538,6 +538,13 @@ export default function SmsConversationsAdmin() {
                                       Hallucinated amenity
                                     </Badge>
                                   )}
+                                  {cv && (
+                                    <Badge variant="outline" className="bg-destructive/20 text-destructive border-destructive/50 text-xs">
+                                      <AlertTriangle className="mr-1 h-3 w-3" />
+                                      Closed venue
+                                    </Badge>
+                                  )}
+
 
 
 
