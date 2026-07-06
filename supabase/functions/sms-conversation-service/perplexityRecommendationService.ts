@@ -96,37 +96,45 @@ export class PerplexityRecommendationService {
     requestType: string,
     rejectedOptions: string[]
   ): string {
-    const baseLocation = property.address || property.property_name || 'the area';
-    
-    let prompt = `Find current, specific ${requestType} recommendations near ${baseLocation}. `;
-    
-    // Add rejection filters
-    if (rejectedOptions.length > 0) {
-      prompt += `Do NOT suggest: ${rejectedOptions.join(', ')}. `;
+    // GROUNDING GUARD: never fabricate. Require a real address so results are
+    // anchored to the property's actual city, not a hardcoded region.
+    if (!property.address || property.address.trim().length < 5) {
+      throw new Error('Missing property address — refusing to generate ungrounded recommendations.');
     }
-    
-    // Customize by request type
+    const baseLocation = property.address;
+
+    let prompt = `You are recommending real, currently-open places within a short distance of this exact address: "${baseLocation}".\n\n`;
+    prompt += `Guest asked: "${query}" (category: ${requestType}).\n\n`;
+    prompt += `HARD RULES:\n`;
+    prompt += `- Only suggest places that actually exist near that address. Do NOT invent names.\n`;
+    prompt += `- Do NOT suggest places from other cities, states, or resorts.\n`;
+    prompt += `- If you cannot verify at least one nearby real option, reply exactly: NO_VERIFIED_RESULTS.\n`;
+    prompt += `- Include name, approximate distance from the address, and one specific reason to go.\n`;
+
+    if (rejectedOptions.length > 0) {
+      prompt += `- Do NOT suggest: ${rejectedOptions.join(', ')}.\n`;
+    }
+
+    // Category hints — kept neutral, no hardcoded region flavor.
     switch (requestType.toLowerCase()) {
       case 'dinner':
       case 'restaurant':
       case 'food':
-        prompt += `Focus on dinner restaurants with local Florida flavors, highly-rated places locals actually go to. Include name, distance, and why it's special.`;
+        prompt += `- Focus on dinner-service restaurants (4★+, real local favorites).\n`;
         break;
       case 'coffee':
       case 'cafe':
-        prompt += `Find specific coffee shops and cafes, not chain stores unless exceptional. Include name, distance, and what makes them unique.`;
+        prompt += `- Focus on independent coffee shops / cafés (avoid chains unless exceptional).\n`;
         break;
       case 'attractions':
       case 'activities':
       case 'things to do':
-        prompt += `Suggest specific attractions and activities. Include name, distance, and brief description.`;
+        prompt += `- Focus on attractions, parks, museums, or scenic spots.\n`;
         break;
-      default:
-        prompt += `Provide specific recommendations with names, distances, and key details.`;
     }
-    
-    prompt += ` Keep response under 160 characters for SMS. Format: \\"Name is X.X mi away - reason locals love it!\\"`;
-    
+
+    prompt += `\nKeep total response under 160 characters. Format each pick as: "Name (X.X mi) — reason".`;
+
     return prompt;
   }
 
