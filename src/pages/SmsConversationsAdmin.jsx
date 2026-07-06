@@ -109,6 +109,18 @@ function isRestrictedAutoApproved(conv) {
   return APPROVAL_PHRASES.test(conv.last_response);
 }
 
+// Fallback loop: the AI hedged ("let me confirm") without actually escalating.
+// We look for the hedging phrasing and require that no handoff-ack language
+// is present (which would indicate a real host escalation).
+const FALLBACK_HEDGE = /want to make sure i give you the right info|let me confirm that for you/i;
+const HANDOFF_ACK = /messaged your host|looped in your host|passed (this|it) along to your host|checking with (the )?host|reach out to the (host|property manager)|follow up (shortly|as soon)/i;
+function hasUnhelpfulFallback(conv) {
+  if (!conv.last_response) return false;
+  if (!FALLBACK_HEDGE.test(conv.last_response)) return false;
+  return !HANDOFF_ACK.test(conv.last_response);
+}
+
+
 export default function SmsConversationsAdmin() {
   const { currentUser } = useAuth();
   const { showToast } = useToast();
@@ -262,10 +274,12 @@ export default function SmsConversationsAdmin() {
           isDataDumpy(conv.last_response, conv.last_intent) ? "data_dumpy" : null,
           hasLeakage(conv) ? "cross_property_leak" : null,
           isRestrictedAutoApproved(conv) ? "restricted_auto_approved" : null,
+          hasUnhelpfulFallback(conv) ? "fallback_loop" : null,
         ]
           .filter(Boolean)
           .join("|") || "ok",
       ]),
+
     ]
       .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
       .join("\n");
@@ -299,10 +313,12 @@ export default function SmsConversationsAdmin() {
           isStale(c) ||
           isDataDumpy(c.last_response, c.last_intent) ||
           hasLeakage(c) ||
-          isRestrictedAutoApproved(c)
+          isRestrictedAutoApproved(c) ||
+          hasUnhelpfulFallback(c)
       ).length,
     [conversations]
   );
+
 
   return (
     <Layout>
@@ -419,7 +435,9 @@ export default function SmsConversationsAdmin() {
                           const dd = isDataDumpy(conv.last_response, conv.last_intent);
                           const leak = hasLeakage(conv);
                           const raa = isRestrictedAutoApproved(conv);
-                          const anyFlag = nr || st || dd || leak || raa;
+                          const fb = hasUnhelpfulFallback(conv);
+                          const anyFlag = nr || st || dd || leak || raa || fb;
+
                           return (
                             <tr
                               key={conv.id}
@@ -468,6 +486,13 @@ export default function SmsConversationsAdmin() {
                                       Auto-approved
                                     </Badge>
                                   )}
+                                  {fb && (
+                                    <Badge variant="outline" className="bg-warning/20 text-warning border-warning/40 text-xs">
+                                      <AlertTriangle className="mr-1 h-3 w-3" />
+                                      Fallback loop
+                                    </Badge>
+                                  )}
+
                                   {st && (
                                     <Badge variant="outline" className="bg-warning/15 text-warning border-warning/30 text-xs">
                                       Stale

@@ -525,11 +525,20 @@ export class EnhancedConversationService {
         }
       }
 
-      // No KB data at all for property-specific question → safe fallback, don't hallucinate
-      console.log('⚠️ [KB Lock] No KB data for property-specific question — using safe confirmation fallback');
-      const safeFallback = "I want to make sure I give you the right info — let me confirm that for you.";
+      // No KB data at all for property-specific question → honest handoff, don't hallucinate.
+      console.log('⚠️ [KB Lock] No KB data for property-specific question — sending honest host-handoff ack');
+      const propName = property.property_name ? ` for ${property.property_name}` : '';
+      const safeFallback = `I don't have that on file${propName} — I've just messaged your host to double-check and they'll follow up shortly. Anything else I can help with in the meantime?`;
       await this.saveConversationMessage(phoneNumber, conversation.id, message, safeFallback);
-      const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(conversationContext, message, safeFallback, classification);
+      // Send host alert FIRST so the guest ack is truthful.
+      await this.sendHostAlert(property, phoneNumber, conversationContext, `Unanswered property question: ${classification.intent}`, message);
+      const updatedCtx = ConfirmedMessageOrchestrator.trackResponseInMemory(
+        conversationContext,
+        message,
+        safeFallback,
+        classification,
+        { source: 'host_escalation', triggerHostHandoff: true, handoffReason: `Unanswered property question: ${classification.intent}` } as any,
+      );
       updatedCtx.last_response_text = safeFallback;
       updatedCtx.awaiting_host_response = true;
       await this.conversationManager.updateConversationState(phoneNumber, {
@@ -538,10 +547,9 @@ export class EnhancedConversationService {
         last_intent: classification.intent,
         conversation_context: updatedCtx,
       });
-      // Send host alert for property-specific question we couldn't answer
-      await this.sendHostAlert(property, phoneNumber, conversationContext, `Unanswered property question: ${classification.intent}`, message);
       return { messages: MessageUtils.ensureSmsLimit(safeFallback), shouldUpdateState: false };
     }
+
 
     try {
       const history = await this.getConversationHistory(phoneNumber, conversation.id);

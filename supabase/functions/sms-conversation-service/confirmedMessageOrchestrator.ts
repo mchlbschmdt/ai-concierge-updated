@@ -195,22 +195,28 @@ export class ConfirmedMessageOrchestrator {
       "ask_unit_amenities",
     ];
 
+    const isReport =
+      intentResult.intent === "report_lost_item" ||
+      intentResult.intent === "report_housekeeping_issue";
+
     const isIssue = requestClassification.type === "ISSUE" || troubleshootingResult.isTroubleshooting;
-    const isRequest = requestClassification.type === "REQUEST";
-    const isRecommendation = requestClassification.type === "RECOMMENDATION";
-    const isGeneralKnowledge = requestClassification.type === "GENERAL_KNOWLEDGE";
+    const isRequest = isReport || requestClassification.type === "REQUEST";
+    const isRecommendation = !isReport && requestClassification.type === "RECOMMENDATION";
+    const isGeneralKnowledge = !isReport && requestClassification.type === "GENERAL_KNOWLEDGE";
     const isPropertySpecific =
+      !isReport &&
       !isIssue &&
       !isRequest &&
       !isRecommendation &&
       !isGeneralKnowledge &&
       (propertySpecificIntents.includes(intentResult.intent) || requestClassification.type === "INFORMATIONAL");
 
-    const shouldUseAI = isRecommendation || isGeneralKnowledge || isIssue;
+    const shouldUseAI = !isReport && (isRecommendation || isGeneralKnowledge || isIssue);
+
 
     const classification: UnifiedClassification = {
       intent: isIssue ? `troubleshoot_${troubleshootingResult.category || "general"}` : intentResult.intent,
-      requestType: requestClassification.type,
+      requestType: isReport ? "REQUEST" : requestClassification.type,
       isPropertySpecific,
       isGeneralKnowledge,
       isRecommendation,
@@ -218,12 +224,13 @@ export class ConfirmedMessageOrchestrator {
       isRequest,
       isTroubleshooting: isIssue,
       troubleshootingResult: isIssue ? troubleshootingResult : null,
-      requiresHostContact: requestClassification.requiresHostContact,
+      requiresHostContact: isReport ? true : requestClassification.requiresHostContact,
       shouldUseAI,
       confidence: Math.max(intentResult.confidence, requestClassification.confidence),
       subIntents: intentResult.subIntents,
       hasKids: intentResult.hasKids,
     };
+
 
     console.log("📋 [Orchestrator] Classification:", {
       intent: classification.intent,
@@ -366,12 +373,52 @@ export class ConfirmedMessageOrchestrator {
 
     console.log("🤝 [Orchestrator] REQUEST detected:", classification.intent);
 
+    // Lost item / housekeeping report → always host handoff with clear ack
+    if (
+      classification.intent === "report_lost_item" ||
+      classification.intent === "report_housekeeping_issue"
+    ) {
+      const isLostItem = classification.intent === "report_lost_item";
+      const reportKind = isLostItem ? "found/left item" : "housekeeping concern";
+      const ackResponse = isLostItem
+        ? "Thanks for flagging that — I've let your host and the housekeeping team know so they can take care of it. Anything else I can help with?"
+        : "Thanks for letting me know — I've passed this along to your host and housekeeping so they can look into it. Anything else you need in the meantime?";
+
+      const guestName = conversationContext?.guestName || conversationContext?.guest_name || "Guest";
+      const propertyCode = property.code || property.property_name;
+      const handoffSummary = [
+        `${isLostItem ? "Lost/found item" : "Housekeeping report"} at ${propertyCode}`,
+        `Guest: ${guestName}`,
+        `Reported: "${message.substring(0, 240)}"`,
+      ].join("\n");
+
+      return {
+        response: ackResponse,
+        source: "host_escalation",
+        shouldUpdateState: true,
+        triggerHostHandoff: true,
+        handoffReason: reportKind,
+        handoffSummary,
+        routing: {
+          intent: classification.intent,
+          requestType: "REQUEST",
+          propertyDataUsed: false,
+          knowledgeBaseUsed: false,
+          aiUsed: false,
+          escalationTriggered: true,
+          repetitionPrevented: false,
+          hostHandoffTriggered: true,
+        },
+      };
+    }
+
     const msg = message.toLowerCase();
     let response = "";
     let triggerHandoff = false;
     let setAwaitingConfirmation = false;
     let pendingTopic = "";
     let pendingApprovalType: string | null = null;
+
 
     // Early check-in — NEVER approve, always ask host
     if (
@@ -749,7 +796,7 @@ export class ConfirmedMessageOrchestrator {
         'CRITICAL SOURCE OF TRUTH: If "relevant_knowledge" is provided in propertySnippets, that is the AUTHORITATIVE answer. You MUST use it as the factual basis. Do NOT override, contradict, or replace it with generic knowledge.',
         "REWRITE-ONLY MODE: When relevant_knowledge is provided for a property-specific question, your ONLY job is to rephrase it in a warm SMS-friendly tone. Do NOT add new facts, distances, place names, or policies not in the source.",
         "NEVER HALLUCINATE PROPERTY FACTS: Do not invent beach names, distances, parking rules, guest policies, trash locations, or amenity details. If the property data does not contain it, do not state it as fact.",
-        'If no property data answers the question AND it is property-specific, respond with: "I want to make sure I give you the right info — let me confirm that for you." Do NOT guess.',
+        'If no property data answers the question AND it is property-specific, respond with something like: "I don\'t have that on file — I\'ve just messaged your host to double-check and they\'ll follow up shortly." Do NOT guess and do NOT say "let me confirm that for you" without also making it clear the host has been contacted.',
         "CURATED RECOMMENDATIONS FIRST: If the property data includes local_recommendations or curated places, use those FIRST before generating new suggestions.",
         'CRITICAL: NEVER say any of these phrases: "property guide", "general_info", "I don\'t see that information".',
         "CRITICAL: Answer the guest's question DIRECTLY. Use property context, location awareness, and common sense. Only mention the host for truly host-approval items (refunds, early check-in approval, damage).",
@@ -953,12 +1000,22 @@ export class ConfirmedMessageOrchestrator {
     const topic = extractTopicFromMessage(message, classification.intent);
     const summary = response.length > 100 ? response.substring(0, 97) + "..." : response;
 
+    // Don't record hedging/fallback/handoff-ack responses as "shared information" —
+    // otherwise the anti-repetition engine will replay them on the next turn.
+    const isFallbackOrHandoffAck =
+      orchestratorResult?.source === "host_escalation" ||
+      orchestratorResult?.source === "issue_followup" ||
+      /want to make sure|let me confirm that for you|don't have that on file|looped in your host|passed (this|it) along to your host|checking with (the )?host|i'?ll (reach out|follow up)/i.test(
+        response,
+      );
+
     let updated = ConversationMemoryManager.updateMemory(
       conversationContext,
       classification.intent,
       classification.requestType,
-      { sharedContent: { topic, content: response, summary } },
+      isFallbackOrHandoffAck ? {} : { sharedContent: { topic, content: response, summary } },
     );
+
 
     // Track variation index
     updated = ConciergeStyleService.incrementVariationIndex(updated, classification.intent);
@@ -1144,6 +1201,17 @@ function rephrasePreviousAnswer(topic: string, previousSummary: string): string 
   }
 
   // Never use "As I mentioned" — just rephrase naturally
+  // Deny-list: never replay hedging/fallback summaries — they were never real answers.
+  const isFallbackSummary =
+    !previousSummary ||
+    /want to make sure|let me confirm that for you|don't have that on file|looped in your host|passed (this|it) along to your host|checking with (the )?host/i.test(
+      previousSummary,
+    );
+
+  if (isFallbackSummary) {
+    return `I asked your host about ${topicPhrase} and I'll follow up as soon as I hear back. Anything else I can help with in the meantime?`;
+  }
+
   if (previousSummary && previousSummary.length < 120) {
     const starters = [
       `Just to confirm: ${previousSummary.toLowerCase().replace(/^(as i mentioned[,:]\s*|just to remind you[,:]\s*)/i, "")}`,
@@ -1155,3 +1223,4 @@ function rephrasePreviousAnswer(topic: string, previousSummary: string): string 
 
   return `I shared ${topicPhrase} just a moment ago. Want me to look into something else?`;
 }
+
