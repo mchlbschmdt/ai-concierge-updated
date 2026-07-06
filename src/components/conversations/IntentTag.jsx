@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 export default function IntentTag({ intent }) {
   if (!intent) {
     return (
-      <Badge variant="outline" className="bg-gray-soft text-gray-dark">
+      <Badge variant="outline" className="bg-muted text-muted-foreground border-border">
         <HelpCircle className="mr-1 h-3 w-3" />
         No intent
       </Badge>
@@ -12,46 +12,29 @@ export default function IntentTag({ intent }) {
   }
 
   const getIntentConfig = (intent) => {
-    const intentLower = intent.toLowerCase();
-
-    if (intentLower.includes("wifi") || intentLower.includes("password") || intentLower.includes("network")) {
-      return { icon: Wifi, label: "WiFi", color: "bg-secondary text-white" };
-    }
-    if (intentLower.includes("parking") || intentLower.includes("car")) {
-      return { icon: Car, label: "Parking", color: "bg-primary text-white" };
-    }
-    if (intentLower.includes("checkin") || intentLower.includes("checkout") || intentLower.includes("time")) {
-      return { icon: Clock, label: "Check-in/out", color: "bg-accent text-white" };
-    }
-    if (intentLower.includes("direction") || intentLower.includes("location") || intentLower.includes("address")) {
-      return { icon: MapPin, label: "Directions", color: "bg-primary text-white" };
-    }
-    if (
-      intentLower.includes("restaurant") ||
-      intentLower.includes("food") ||
-      intentLower.includes("coffee") ||
-      intentLower.includes("dining") ||
-      intentLower.includes("breakfast") ||
-      intentLower.includes("lunch") ||
-      intentLower.includes("dinner")
-    ) {
-      return { icon: Utensils, label: "Recommendations", color: "bg-success text-white" };
-    }
-    if (intentLower.includes("amenity") || intentLower.includes("amenities") || intentLower.includes("facilities")) {
-      return { icon: Home, label: "Amenities", color: "bg-secondary text-white" };
-    }
-    if (intentLower.includes("general") || intentLower.includes("info")) {
-      return { icon: Info, label: "General Info", color: "bg-gray-dark text-white" };
-    }
-
-    return { icon: HelpCircle, label: intent.substring(0, 20), color: "bg-gray-soft text-gray-dark" };
+    const l = intent.toLowerCase();
+    if (l.includes("wifi") || l.includes("password") || l.includes("network"))
+      return { icon: Wifi, label: "WiFi", tone: "bg-secondary/15 text-secondary-foreground border-secondary/30" };
+    if (l.includes("parking") || l.includes("car"))
+      return { icon: Car, label: "Parking", tone: "bg-primary/10 text-primary border-primary/30" };
+    if (l.includes("checkin") || l.includes("checkout") || l.includes("time"))
+      return { icon: Clock, label: "Check-in/out", tone: "bg-accent/15 text-accent-foreground border-accent/30" };
+    if (l.includes("direction") || l.includes("location") || l.includes("address"))
+      return { icon: MapPin, label: "Directions", tone: "bg-primary/10 text-primary border-primary/30" };
+    if (l.includes("restaurant") || l.includes("food") || l.includes("coffee") || l.includes("dining") || l.includes("breakfast") || l.includes("lunch") || l.includes("dinner"))
+      return { icon: Utensils, label: "Recommendations", tone: "bg-success/15 text-success border-success/30" };
+    if (l.includes("amenity") || l.includes("amenities") || l.includes("facilities"))
+      return { icon: Home, label: "Amenities", tone: "bg-secondary/15 text-secondary-foreground border-secondary/30" };
+    if (l.includes("general") || l.includes("info"))
+      return { icon: Info, label: "General Info", tone: "bg-muted text-muted-foreground border-border" };
+    return { icon: HelpCircle, label: intent.substring(0, 20), tone: "bg-muted text-muted-foreground border-border" };
   };
 
   const config = getIntentConfig(intent);
   const Icon = config.icon;
 
   return (
-    <Badge variant="outline" className={config.color}>
+    <Badge variant="outline" className={config.tone}>
       <Icon className="mr-1 h-3 w-3" />
       {config.label}
     </Badge>

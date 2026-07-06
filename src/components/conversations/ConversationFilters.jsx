@@ -10,27 +10,48 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+
+const STATE_OPTIONS = [
+  { value: "confirmed", label: "Confirmed" },
+  { value: "awaiting_property_id", label: "Awaiting Property ID" },
+  { value: "awaiting_confirmation", label: "Awaiting Confirmation" },
+];
+
+const REVIEW_OPTIONS = [
+  { value: "all", label: "All conversations" },
+  { value: "needs_review", label: "Needs review only" },
+  { value: "stale", label: "Stale (awaiting > 10m)" },
+];
+
 export default function ConversationFilters({ filters, onFiltersChange }) {
   const [properties, setProperties] = useState([]);
   const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
-    loadProperties();
+    (async () => {
+      const { data, error } = await supabase
+        .from("properties")
+        .select("id, property_name, code")
+        .order("property_name");
+      if (!error && data) setProperties(data);
+    })();
   }, []);
 
-  const loadProperties = async () => {
-    const { data, error } = await supabase
-      .from("properties")
-      .select("id, property_name, code")
-      .order("property_name");
-
-    if (!error && data) {
-      setProperties(data);
-    }
+  const toggleState = (value) => {
+    const next = filters.states.includes(value)
+      ? filters.states.filter((s) => s !== value)
+      : [...filters.states, value];
+    onFiltersChange({ ...filters, states: next });
   };
 
+  const isDirty =
+    filters.propertyId ||
+    filters.dateRange !== "7days" ||
+    filters.states.length > 0 ||
+    (filters.reviewFilter && filters.reviewFilter !== "all");
+
   return (
-    <div className="flex gap-2 items-center">
+    <div className="flex flex-wrap gap-2 items-center">
       <Button
         variant="outline"
         onClick={() => setShowFilters(!showFilters)}
@@ -44,9 +65,7 @@ export default function ConversationFilters({ filters, onFiltersChange }) {
         <>
           <Select
             value={filters.dateRange}
-            onValueChange={(value) =>
-              onFiltersChange({ ...filters, dateRange: value })
-            }
+            onValueChange={(value) => onFiltersChange({ ...filters, dateRange: value })}
           >
             <SelectTrigger className="w-40">
               <SelectValue placeholder="Date range" />
@@ -62,10 +81,7 @@ export default function ConversationFilters({ filters, onFiltersChange }) {
           <Select
             value={filters.propertyId || "all"}
             onValueChange={(value) =>
-              onFiltersChange({
-                ...filters,
-                propertyId: value === "all" ? null : value,
-              })
+              onFiltersChange({ ...filters, propertyId: value === "all" ? null : value })
             }
           >
             <SelectTrigger className="w-48">
@@ -73,15 +89,46 @@ export default function ConversationFilters({ filters, onFiltersChange }) {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All properties</SelectItem>
-              {properties.map((property) => (
-                <SelectItem key={property.id} value={property.code}>
-                  {property.property_name}
+              {properties.map((p) => (
+                <SelectItem key={p.id} value={p.code}>
+                  {p.property_name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
 
-          {(filters.propertyId || filters.dateRange !== "7days") && (
+          <Select
+            value={filters.reviewFilter || "all"}
+            onValueChange={(value) => onFiltersChange({ ...filters, reviewFilter: value })}
+          >
+            <SelectTrigger className="w-52">
+              <SelectValue placeholder="Review status" />
+            </SelectTrigger>
+            <SelectContent>
+              {REVIEW_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <div className="flex items-center gap-3 border border-border rounded-md px-3 py-2">
+            <span className="text-xs font-medium text-muted-foreground">State:</span>
+            {STATE_OPTIONS.map((opt) => (
+              <label key={opt.value} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={filters.states.includes(opt.value)}
+                  onChange={() => toggleState(opt.value)}
+                  className="h-3.5 w-3.5 rounded border-border accent-primary"
+                />
+                {opt.label}
+              </label>
+            ))}
+          </div>
+
+          {isDirty && (
             <Button
               variant="ghost"
               onClick={() =>
@@ -90,6 +137,7 @@ export default function ConversationFilters({ filters, onFiltersChange }) {
                   propertyId: null,
                   states: [],
                   intentTypes: [],
+                  reviewFilter: "all",
                 })
               }
             >

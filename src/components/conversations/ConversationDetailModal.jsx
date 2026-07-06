@@ -130,26 +130,29 @@ export default function ConversationDetailModal({ conversation, onClose, onRefre
                 <p className="text-sm text-gray-dark text-center py-8">No messages found</p>
               ) : (
                 <div className="space-y-3">
-                  {messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`rounded-lg p-3 ${
-                        message.role === "user"
-                          ? "bg-secondary text-white ml-8"
-                          : "bg-muted text-gray-dark mr-8"
-                      }`}
-                    >
-                      <div className="flex justify-between items-start mb-1">
-                        <span className="text-xs font-semibold">
-                          {message.role === "user" ? "Guest" : "AI Assistant"}
-                        </span>
-                        <span className="text-xs opacity-75">
-                          {formatDistanceToNow(new Date(message.timestamp), { addSuffix: true })}
-                        </span>
+                  {messages.map((message) => {
+                    const isUser = message.role === "user";
+                    return (
+                      <div
+                        key={message.id}
+                        className={`rounded-lg p-3 border ${
+                          isUser
+                            ? "bg-primary text-primary-foreground border-primary/30 ml-8"
+                            : "bg-muted text-foreground border-border mr-8"
+                        }`}
+                      >
+                        <div className="flex justify-between items-start mb-1">
+                          <span className="text-xs font-semibold">
+                            {isUser ? "Guest" : "AI Assistant"}
+                          </span>
+                          <span className="text-xs opacity-75">
+                            {formatDistanceToNow(new Date(message.timestamp), { addSuffix: true })}
+                          </span>
+                        </div>
+                        <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                       </div>
-                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

@@ -1,54 +1,38 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Users, MessageSquare, CheckCircle, Clock } from "lucide-react";
 
-export default function ConversationStats({ conversations }) {
-  const totalConversations = conversations.length;
-  const confirmedConversations = conversations.filter(
-    (c) => c.conversation_state === "confirmed"
-  ).length;
-  const activeToday = conversations.filter((c) => {
-    if (!c.last_interaction_timestamp) return false;
-    const lastInteraction = new Date(c.last_interaction_timestamp);
-    const today = new Date();
-    return lastInteraction.toDateString() === today.toDateString();
-  }).length;
-
-  const intentCounts = {};
-  conversations.forEach((conv) => {
-    if (conv.last_intent) {
-      intentCounts[conv.last_intent] = (intentCounts[conv.last_intent] || 0) + 1;
-    }
-  });
-  const topIntent = Object.entries(intentCounts).sort((a, b) => b[1] - a[1])[0];
+export default function ConversationStats({ aggregates }) {
+  const {
+    total = 0,
+    confirmed = 0,
+    activeToday = 0,
+    topIntent = null,
+  } = aggregates || {};
 
   const stats = [
     {
       title: "Total Conversations",
-      value: totalConversations,
+      value: total,
       icon: MessageSquare,
-      color: "text-primary",
-      bg: "bg-blue-50",
+      tone: "bg-primary/10 text-primary",
     },
     {
       title: "Confirmed Properties",
-      value: confirmedConversations,
+      value: confirmed,
       icon: CheckCircle,
-      color: "text-success",
-      bg: "bg-green-50",
+      tone: "bg-success/15 text-success",
     },
     {
       title: "Active Today",
       value: activeToday,
       icon: Clock,
-      color: "text-warning",
-      bg: "bg-yellow-50",
+      tone: "bg-warning/15 text-warning",
     },
     {
       title: "Top Intent",
-      value: topIntent ? topIntent[0].substring(0, 15) : "N/A",
+      value: topIntent ? topIntent.substring(0, 18) : "N/A",
       icon: Users,
-      color: "text-secondary",
-      bg: "bg-purple-50",
+      tone: "bg-secondary/15 text-secondary-foreground",
     },
   ];
 
@@ -61,11 +45,11 @@ export default function ConversationStats({ conversations }) {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-dark font-medium">{stat.title}</p>
+                  <p className="text-sm text-muted-foreground font-medium">{stat.title}</p>
                   <p className="text-2xl font-bold text-heading mt-2">{stat.value}</p>
                 </div>
-                <div className={`${stat.bg} p-3 rounded-lg`}>
-                  <Icon className={`h-6 w-6 ${stat.color}`} />
+                <div className={`${stat.tone} p-3 rounded-lg`}>
+                  <Icon className="h-6 w-6" />
                 </div>
               </div>
             </CardContent>
