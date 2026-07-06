@@ -5,6 +5,31 @@ import { MessageUtils } from './messageUtils.ts';
 import { LocationService } from './locationService.ts';
 import { ConversationMemoryManager } from './conversationMemoryManager.ts';
 import { PropertyLocationAnalyzer } from './propertyLocationAnalyzer.ts';
+import { PerplexityRecommendationService } from './perplexityRecommendationService.ts';
+
+// Categories that must be resolved against live, real-world listings. For
+// these we call Perplexity first (live web search + open-status guardrails)
+// and only fall back to the OpenAI generator if Perplexity can't verify a pick.
+const LIVE_LOOKUP_CATEGORIES = new Set([
+  'dinner', 'restaurant', 'food', 'breakfast', 'lunch', 'brunch',
+  'coffee', 'cafe', 'café',
+  'attractions', 'activities', 'things to do',
+  'bar', 'bars', 'nightlife', 'drinks',
+]);
+
+// Response scrub: if the model cites a closed business, don't send it to the guest.
+const CLOSED_VENUE_RE = /\b(permanently closed|temporarily closed|closed for renovation|closed down|out of business|no longer (open|operating|in business))\b/i;
+function scrubClosedVenues(text: string): string {
+  if (!text || !CLOSED_VENUE_RE.test(text)) return text;
+  const kept = text
+    .split(/\n+/)
+    .filter((line) => !CLOSED_VENUE_RE.test(line));
+  if (kept.length === 0) {
+    return "I couldn't verify any open options nearby right now — want me to text your host for a fresh pick?";
+  }
+  return kept.join('\n');
+}
+
 
 export class RecommendationService {
   constructor(private supabase: any, private conversationManager: any) {}
