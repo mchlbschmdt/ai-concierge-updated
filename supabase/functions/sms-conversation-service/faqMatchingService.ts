@@ -35,13 +35,18 @@ export class FaqMatchingService {
         return { matched: false, faqId: null, answer: null, question: null, confidence: 0, level: 'NONE', topMatches: [] };
       }
 
-      const msgLower = guestMessage.toLowerCase();
+      const msgLower = expandSynonyms(guestMessage.toLowerCase());
       const msgWords = tokenize(msgLower);
 
-      const scored = faqs.map((faq: any) => ({
-        ...faq,
-        score: computeScore(msgLower, msgWords, faq),
-      }));
+      const scored = faqs.map((faq: any) => {
+        // Expand FAQ side too so aliases on either side match.
+        const expandedFaq = {
+          ...faq,
+          question: expandSynonyms((faq.question || '').toLowerCase()),
+          tags: (faq.tags || []).map((t: string) => expandSynonyms(t.toLowerCase())),
+        };
+        return { ...faq, score: computeScore(msgLower, msgWords, expandedFaq) };
+      });
 
       scored.sort((a: any, b: any) => b.score - a.score);
 
@@ -132,4 +137,37 @@ function getBigrams(str: string): Set<string> {
     bigrams.add(clean.substring(i, i + 2));
   }
   return bigrams;
+}
+
+// Synonym / alias expansion so guests using informal words still match curated FAQs.
+// Keys are canonical tokens found in FAQ questions/tags; values are aliases guests use.
+const SYNONYMS: Record<string, string[]> = {
+  trash: ['garbage', 'rubbish', 'waste', 'bin', 'dumpster', 'throw out', 'throw away', 'take out'],
+  wifi: ['wi-fi', 'wi fi', 'internet', 'network', 'password', 'ssid'],
+  parking: ['park', 'car', 'vehicle', 'valet', 'garage', 'lot', 'spot'],
+  tv: ['television', 'cable', 'remote', 'roku', 'firestick', 'streaming'],
+  laundry: ['washer', 'dryer', 'wash', 'clothes'],
+  ac: ['air conditioning', 'air conditioner', 'a/c', 'cooling', 'thermostat'],
+  pool: ['swim', 'swimming'],
+  checkin: ['check in', 'check-in', 'arrival', 'arrive'],
+  checkout: ['check out', 'check-out', 'departure', 'leave'],
+  coffee: ['espresso', 'latte', 'cappuccino', 'cafe', 'café'],
+  breakfast: ['brunch', 'morning food'],
+  gym: ['fitness', 'workout', 'exercise'],
+  beach: ['ocean', 'sand', 'shore'],
+  restaurant: ['dinner', 'food', 'eat', 'dining'],
+};
+
+function expandSynonyms(text: string): string {
+  let out = ' ' + text + ' ';
+  for (const [canonical, aliases] of Object.entries(SYNONYMS)) {
+    for (const alias of aliases) {
+      // If the alias appears in the text, append the canonical token so it can match.
+      const re = new RegExp(`\\b${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+      if (re.test(out) && !new RegExp(`\\b${canonical}\\b`, 'i').test(out)) {
+        out += ' ' + canonical;
+      }
+    }
+  }
+  return out.trim();
 }
