@@ -116,52 +116,138 @@ export class RecommendationService {
 
       console.log('🔄 [OPENAI] Enhanced payload being sent:', JSON.stringify(enhancedPayload).substring(0, 200));
 
-      // LIVE LOOKUP FIRST: for real-world places, ask Perplexity (live web search
-      // + operating-status filter) before hitting the generative OpenAI path.
-      // Only fall back to OpenAI when Perplexity throws or returns no verified
-      // results. This is the fix for the "closed / far away" recommendations.
+      // LIVE LOOKUP: for real-world places we verify against Google Maps
+      // Platform first (business_status = OPERATIONAL + real travel distance).
+      // Perplexity is only a fallback if the Google call fails outright.
       const isLiveLookup = LIVE_LOOKUP_CATEGORIES.has((requestType || '').toLowerCase());
-      if (isLiveLookup && Deno.env.get('PERPLEXITY_API_KEY')) {
+      const wantsQuick = /\b(quick|fast|grab|takeout|to[- ]?go|in a hurry|in a rush|close|closest|near(by| me)?|walk(able|ing)?)\b/.test(originalMessage.toLowerCase());
+
+      if (isLiveLookup) {
+        let googleErrored = false;
+        let verified: VerifiedPlace[] = [];
         try {
-          console.log('🌐 [RECS] Trying Perplexity first for category:', requestType);
-          const perplexityRaw = await PerplexityRecommendationService.getLocalRecommendations(
-            property,
+          const result = await findVerifiedNearbyPlaces({
+            propertyAddress,
+            category: requestType,
             originalMessage,
-            conversation,
-            requestType,
-            rejectedRestaurants
+            wantsQuick,
+          });
+          verified = result.places.filter(
+            (p) => !rejectedRestaurants.some((r) => p.name.toLowerCase().includes(r.toLowerCase())),
           );
-          const scrubbed = scrubClosedVenues(perplexityRaw);
-          if (scrubbed && !/NO_VERIFIED_RESULTS/i.test(scrubbed)) {
-            console.log('✅ [RECS] Using Perplexity result');
-            const restaurantNames = this.extractRestaurantNames(scrubbed);
-            const updatedContext: any = {
-              ...context,
-              lastRecommendationType: requestType,
-              lastGuestContext: guestContext,
-              last_food_preferences: foodFilters.length ? foodFilters : (context.last_food_preferences || []),
-              last_request_category: requestType,
-            };
-            if (restaurantNames.length > 0) {
-              updatedContext.last_recommended_restaurant = restaurantNames[0];
-              updatedContext.last_restaurant_context = originalMessage.toLowerCase();
+          console.log(`🗺️ [GMAPS] Verified ${verified.length} operational places`);
+        } catch (gmapsErr) {
+          googleErrored = true;
+          console.error('❌ [GMAPS] Failed:', (gmapsErr as Error).message);
+        }
+
+        if (verified.length > 0) {
+          // Hand verified places to OpenAI as ground truth — no invention.
+          const verifiedBlock = formatPlacesForPrompt(verified.slice(0, 3));
+          const gPayload = {
+            ...enhancedPayload,
+            prompt:
+              `${originalMessage}\n\n` +
+              `VERIFIED OPEN VENUES (Google Maps, ranked by real travel time from ${propertyName}):\n` +
+              `${verifiedBlock}\n\n` +
+              `STRICT RULES:\n` +
+              `- Recommend ONLY from the list above. Do NOT invent or substitute other venues.\n` +
+              `- Use the distance/time exactly as shown in parentheses — do not restate or estimate.\n` +
+              `- Pick the top 1–2 that best match the guest's ask ("${originalMessage}").\n` +
+              `- Keep it warm and conversational, under 320 chars total.\n`,
+            verifiedPlaces: verified.slice(0, 3),
+            googleVerified: true,
+          };
+          const gRes = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            },
+            body: JSON.stringify(gPayload),
+          });
+          if (gRes.ok) {
+            const gData = await gRes.json();
+            let gText = gData.recommendation || gData.response || '';
+            gText = scrubClosedVenues(gText);
+            if (gText) {
+              console.log('✅ [GMAPS] Sending Google-verified recommendation');
+              const restaurantNames = this.extractRestaurantNames(gText);
+              const updatedContext: any = {
+                ...context,
+                lastRecommendationType: requestType,
+                lastGuestContext: guestContext,
+                last_food_preferences: foodFilters.length ? foodFilters : (context.last_food_preferences || []),
+                last_request_category: requestType,
+                last_google_verified: true,
+              };
+              if (restaurantNames.length > 0) {
+                updatedContext.last_recommended_restaurant = restaurantNames[0];
+                updatedContext.last_restaurant_context = originalMessage.toLowerCase();
+              }
+              await this.storeTravelRecommendation(propertyAddress, requestType, gText);
+              await this.conversationManager.updateConversationState(conversation.phone_number, {
+                last_recommendations: gText,
+                conversation_context: updatedContext,
+              });
+              return {
+                response: MessageUtils.ensureSmsLimit(gText).join('\n'),
+                shouldUpdateState: false,
+                requestCategory: requestType,
+                googleVerified: true,
+              };
             }
-            await this.storeTravelRecommendation(propertyAddress, requestType, scrubbed);
-            await this.conversationManager.updateConversationState(conversation.phone_number, {
-              last_recommendations: scrubbed,
-              conversation_context: updatedContext,
-            });
-            return {
-              response: MessageUtils.ensureSmsLimit(scrubbed).join('\n'),
-              shouldUpdateState: false,
-              requestCategory: requestType,
-            };
           }
-          console.log('⚠️ [RECS] Perplexity had no verified results — falling back to OpenAI');
-        } catch (perplexityErr) {
-          console.log('⚠️ [RECS] Perplexity failed, falling back to OpenAI:', (perplexityErr as Error).message);
+        } else if (!googleErrored) {
+          // Google reached but had zero verified nearby options — be honest.
+          console.log('ℹ️ [GMAPS] No verified nearby options — returning graceful fallback');
+          const namePrefix = guestName ? `${guestName}, ` : '';
+          const msg = `${namePrefix}I couldn't verify any open ${requestType || 'options'} close by right now. Want me to text your host for a fresh local pick?`;
+          return {
+            response: MessageUtils.ensureSmsLimit(msg).join('\n'),
+            shouldUpdateState: false,
+            requestCategory: requestType,
+          };
+        }
+
+        // Google errored — try Perplexity as fallback (existing path).
+        if (googleErrored && Deno.env.get('PERPLEXITY_API_KEY')) {
+          try {
+            console.log('🌐 [RECS] Falling back to Perplexity after Google error');
+            const perplexityRaw = await PerplexityRecommendationService.getLocalRecommendations(
+              property, originalMessage, conversation, requestType, rejectedRestaurants,
+            );
+            const scrubbed = scrubClosedVenues(perplexityRaw);
+            if (scrubbed && !/NO_VERIFIED_RESULTS/i.test(scrubbed)) {
+              const restaurantNames = this.extractRestaurantNames(scrubbed);
+              const updatedContext: any = {
+                ...context,
+                lastRecommendationType: requestType,
+                lastGuestContext: guestContext,
+                last_food_preferences: foodFilters.length ? foodFilters : (context.last_food_preferences || []),
+                last_request_category: requestType,
+              };
+              if (restaurantNames.length > 0) {
+                updatedContext.last_recommended_restaurant = restaurantNames[0];
+                updatedContext.last_restaurant_context = originalMessage.toLowerCase();
+              }
+              await this.storeTravelRecommendation(propertyAddress, requestType, scrubbed);
+              await this.conversationManager.updateConversationState(conversation.phone_number, {
+                last_recommendations: scrubbed,
+                conversation_context: updatedContext,
+              });
+              return {
+                response: MessageUtils.ensureSmsLimit(scrubbed).join('\n'),
+                shouldUpdateState: false,
+                requestCategory: requestType,
+              };
+            }
+          } catch (perplexityErr) {
+            console.log('⚠️ [RECS] Perplexity fallback also failed:', (perplexityErr as Error).message);
+          }
         }
       }
+
 
 
 
