@@ -611,10 +611,18 @@ export class RecommendationService {
       const familyNote = intentResult?.hasKids ? 'Guest is traveling with kids - prioritize family-friendly options. ' : '';
       const checkoutNote = intentResult?.isCheckoutSoon ? 'Guest is checking out soon - prioritize quick/nearby options. ' : '';
 
+      // Detect quick/close modifiers so the model doesn't return a sit-down spot 30 min away.
+      const lowerType = (type || '').toLowerCase();
+      const wantsQuick = /\b(quick|fast|grab|takeout|to[- ]?go|in a hurry|in a rush)\b/.test(lowerType);
+      const wantsClose = /\b(close|closest|nearby|near ?me|walk(able|ing)?|short walk|around the corner)\b/.test(lowerType);
+      const quickCloseRules = (wantsQuick || wantsClose)
+        ? `\nSTRICT RULES:\n${wantsQuick ? '- Fast-casual / counter-service / takeout ONLY (no sit-down, no fine dining).\n' : ''}${wantsClose ? '- Must be within ~1.0 mi walk or ~5 min drive of the property.\n' : ''}- Must be a real named restaurant, NOT a district / plaza / area name.\n- Do NOT invent walk or drive times. If uncertain, say "approx" and use conservative estimates.\n- If nothing truly qualifies, say so honestly instead of padding with far-away options.\n`
+        : '';
+
       const prompt = `You are a local concierge. Guest at ${propertyName}, ${propertyAddress}. ${guestNameNote}${contextNote}${avoidRepetition}${familyNote}${checkoutNote}Request: ${type}
 
 CRITICAL PROXIMITY FOCUS: Only recommend places within 5 miles of ${propertyAddress}. Prioritize closest options.
-
+${quickCloseRules}
 Response must be under 160 characters for SMS. Be warm and conversational. Give 3 fresh recommendations with distances and star ratings using format: "Name (X.X mi, ⭐️ X.X) — Description"
 
 ${contextNote ? 'Reference previous interests naturally if relevant.' : ''}
