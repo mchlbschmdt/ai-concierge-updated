@@ -314,6 +314,7 @@ export default function SmsConversationsAdmin() {
           hasUnhelpfulFallback(conv) ? "fallback_loop" : null,
           hasHallucinatedAmenity(conv) ? "hallucinated_amenity" : null,
           hasClosedVenueMention(conv) ? "closed_venue" : null,
+          isGoogleVerified(conv) ? "google_verified" : null,
 
         ]
           .filter(Boolean)
