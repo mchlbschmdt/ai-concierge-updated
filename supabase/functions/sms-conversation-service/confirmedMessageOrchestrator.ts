@@ -373,12 +373,52 @@ export class ConfirmedMessageOrchestrator {
 
     console.log("🤝 [Orchestrator] REQUEST detected:", classification.intent);
 
+    // Lost item / housekeeping report → always host handoff with clear ack
+    if (
+      classification.intent === "report_lost_item" ||
+      classification.intent === "report_housekeeping_issue"
+    ) {
+      const isLostItem = classification.intent === "report_lost_item";
+      const reportKind = isLostItem ? "found/left item" : "housekeeping concern";
+      const ackResponse = isLostItem
+        ? "Thanks for flagging that — I've let your host and the housekeeping team know so they can take care of it. Anything else I can help with?"
+        : "Thanks for letting me know — I've passed this along to your host and housekeeping so they can look into it. Anything else you need in the meantime?";
+
+      const guestName = conversationContext?.guestName || conversationContext?.guest_name || "Guest";
+      const propertyCode = property.code || property.property_name;
+      const handoffSummary = [
+        `${isLostItem ? "Lost/found item" : "Housekeeping report"} at ${propertyCode}`,
+        `Guest: ${guestName}`,
+        `Reported: "${message.substring(0, 240)}"`,
+      ].join("\n");
+
+      return {
+        response: ackResponse,
+        source: "host_escalation",
+        shouldUpdateState: true,
+        triggerHostHandoff: true,
+        handoffReason: reportKind,
+        handoffSummary,
+        routing: {
+          intent: classification.intent,
+          requestType: "REQUEST",
+          propertyDataUsed: false,
+          knowledgeBaseUsed: false,
+          aiUsed: false,
+          escalationTriggered: true,
+          repetitionPrevented: false,
+          hostHandoffTriggered: true,
+        },
+      };
+    }
+
     const msg = message.toLowerCase();
     let response = "";
     let triggerHandoff = false;
     let setAwaitingConfirmation = false;
     let pendingTopic = "";
     let pendingApprovalType: string | null = null;
+
 
     // Early check-in — NEVER approve, always ask host
     if (
