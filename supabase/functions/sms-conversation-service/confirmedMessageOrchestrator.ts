@@ -796,7 +796,7 @@ export class ConfirmedMessageOrchestrator {
         'CRITICAL SOURCE OF TRUTH: If "relevant_knowledge" is provided in propertySnippets, that is the AUTHORITATIVE answer. You MUST use it as the factual basis. Do NOT override, contradict, or replace it with generic knowledge.',
         "REWRITE-ONLY MODE: When relevant_knowledge is provided for a property-specific question, your ONLY job is to rephrase it in a warm SMS-friendly tone. Do NOT add new facts, distances, place names, or policies not in the source.",
         "NEVER HALLUCINATE PROPERTY FACTS: Do not invent beach names, distances, parking rules, guest policies, trash locations, or amenity details. If the property data does not contain it, do not state it as fact.",
-        'If no property data answers the question AND it is property-specific, respond with: "I want to make sure I give you the right info — let me confirm that for you." Do NOT guess.',
+        'If no property data answers the question AND it is property-specific, respond with something like: "I don\'t have that on file — I\'ve just messaged your host to double-check and they\'ll follow up shortly." Do NOT guess and do NOT say "let me confirm that for you" without also making it clear the host has been contacted.',
         "CURATED RECOMMENDATIONS FIRST: If the property data includes local_recommendations or curated places, use those FIRST before generating new suggestions.",
         'CRITICAL: NEVER say any of these phrases: "property guide", "general_info", "I don\'t see that information".',
         "CRITICAL: Answer the guest's question DIRECTLY. Use property context, location awareness, and common sense. Only mention the host for truly host-approval items (refunds, early check-in approval, damage).",
