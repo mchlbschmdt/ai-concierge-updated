@@ -313,10 +313,12 @@ export default function SmsConversationsAdmin() {
           isStale(c) ||
           isDataDumpy(c.last_response, c.last_intent) ||
           hasLeakage(c) ||
-          isRestrictedAutoApproved(c)
+          isRestrictedAutoApproved(c) ||
+          hasUnhelpfulFallback(c)
       ).length,
     [conversations]
   );
+
 
   return (
     <Layout>
