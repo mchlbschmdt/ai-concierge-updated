@@ -109,12 +109,24 @@ export class PerplexityRecommendationService {
     }
     const baseLocation = property.address;
 
+    const lowerQ = (query || '').toLowerCase();
+    const wantsQuick = /\b(quick|fast|grab|takeout|to[- ]?go|in a hurry|in a rush)\b/.test(lowerQ);
+    const wantsClose = /\b(close|closest|nearby|near ?me|walk(able|ing)?|short walk|around the corner)\b/.test(lowerQ);
+
     let prompt = `You are recommending real, currently-open places within a short distance of this exact address: "${baseLocation}".\n\n`;
     prompt += `Guest asked: "${query}" (category: ${requestType}).\n\n`;
     prompt += `HARD RULES:\n`;
     prompt += `- Only suggest places that actually exist near that address. Do NOT invent names.\n`;
     prompt += `- Do NOT suggest places from other cities, states, or resorts.\n`;
-    prompt += `- If you cannot verify at least one nearby real option, reply exactly: NO_VERIFIED_RESULTS.\n`;
+    prompt += `- Each pick MUST be a real named restaurant/venue with an active Google or Yelp listing — NOT a district, plaza, or neighborhood name.\n`;
+    if (wantsQuick) {
+      prompt += `- Guest wants FAST service: fast-casual / counter / takeout only. NO sit-down or fine-dining.\n`;
+    }
+    if (wantsClose) {
+      prompt += `- Guest wants CLOSE: prioritize ≤ 1.0 mi walk or ≤ 5 min drive from the address.\n`;
+    }
+    prompt += `- Do NOT invent walk/drive times. Use conservative approximate distances only.\n`;
+    prompt += `- If you cannot verify at least one nearby real option that matches these rules, reply exactly: NO_VERIFIED_RESULTS.\n`;
     prompt += `- Include name, approximate distance from the address, and one specific reason to go.\n`;
 
     if (rejectedOptions.length > 0) {

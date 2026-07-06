@@ -120,6 +120,26 @@ function hasUnhelpfulFallback(conv) {
   return !HANDOFF_ACK.test(conv.last_response);
 }
 
+// Hallucinated amenity: response affirms an amenity that the property record
+// doesn't list. We only flag positive claims ("yes...pool", "there's a pool")
+// so honest negatives ("no pool at this property") don't trigger it.
+const AMENITY_POSITIVE = /(?:yes[^.]{0,40}|there(?:'s| is)[^.]{0,20}|has[^.]{0,20})\b(pool|hot tub|jacuzzi|grill|bbq)\b/i;
+function hasHallucinatedAmenity(conv) {
+  if (!conv.last_response) return false;
+  const m = conv.last_response.match(AMENITY_POSITIVE);
+  if (!m) return false;
+  const claimed = m[1].toLowerCase();
+  const raw = conv.properties?.amenities;
+  const list = Array.isArray(raw)
+    ? raw
+    : typeof raw === "string"
+      ? raw.split(/[,;\n]/).map((s) => s.trim())
+      : [];
+  if (list.length === 0) return false; // unknown — don't flag
+  const key = claimed === "bbq" ? "grill" : claimed === "jacuzzi" ? "hot tub" : claimed;
+  return !list.some((a) => new RegExp(key, "i").test(String(a)));
+}
+
 
 export default function SmsConversationsAdmin() {
   const { currentUser } = useAuth();
@@ -275,6 +295,7 @@ export default function SmsConversationsAdmin() {
           hasLeakage(conv) ? "cross_property_leak" : null,
           isRestrictedAutoApproved(conv) ? "restricted_auto_approved" : null,
           hasUnhelpfulFallback(conv) ? "fallback_loop" : null,
+          hasHallucinatedAmenity(conv) ? "hallucinated_amenity" : null,
         ]
           .filter(Boolean)
           .join("|") || "ok",
@@ -314,7 +335,8 @@ export default function SmsConversationsAdmin() {
           isDataDumpy(c.last_response, c.last_intent) ||
           hasLeakage(c) ||
           isRestrictedAutoApproved(c) ||
-          hasUnhelpfulFallback(c)
+          hasUnhelpfulFallback(c) ||
+          hasHallucinatedAmenity(c)
       ).length,
     [conversations]
   );
@@ -436,7 +458,8 @@ export default function SmsConversationsAdmin() {
                           const leak = hasLeakage(conv);
                           const raa = isRestrictedAutoApproved(conv);
                           const fb = hasUnhelpfulFallback(conv);
-                          const anyFlag = nr || st || dd || leak || raa || fb;
+                          const ha = hasHallucinatedAmenity(conv);
+                          const anyFlag = nr || st || dd || leak || raa || fb || ha;
 
                           return (
                             <tr
@@ -492,6 +515,14 @@ export default function SmsConversationsAdmin() {
                                       Fallback loop
                                     </Badge>
                                   )}
+                                  {ha && (
+                                    <Badge variant="outline" className="bg-destructive/15 text-destructive border-destructive/40 text-xs">
+                                      <AlertTriangle className="mr-1 h-3 w-3" />
+                                      Hallucinated amenity
+                                    </Badge>
+                                  )}
+
+
 
                                   {st && (
                                     <Badge variant="outline" className="bg-warning/15 text-warning border-warning/30 text-xs">

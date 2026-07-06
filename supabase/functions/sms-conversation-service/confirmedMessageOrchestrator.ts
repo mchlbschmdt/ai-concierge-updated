@@ -906,7 +906,18 @@ export class ConfirmedMessageOrchestrator {
       return "I'd love to help with restaurant recommendations! What kind of cuisine are you in the mood for?";
     }
     if (/\b(pool|swim)\b/.test(lower)) {
-      return "The pool is typically accessible during daytime hours. Towels may be available at the unit — want me to confirm any specific details?";
+      // Only claim a pool exists if the property record actually lists one.
+      const amenitiesRaw = (property as any)?.amenities;
+      const amenityList: string[] = Array.isArray(amenitiesRaw)
+        ? amenitiesRaw
+        : typeof amenitiesRaw === 'string'
+          ? amenitiesRaw.split(/[,;\n]/).map((s: string) => s.trim())
+          : [];
+      const hasPool = amenityList.some((a) => /pool/i.test(a));
+      if (hasPool) {
+        return "The pool is typically accessible during daytime hours. Want me to confirm hours or any pool-specific details with your host?";
+      }
+      return "This unit doesn't have a pool on-site. Want me to point you to the nearest public or resort pool?";
     }
     if (/\b(towel|linen|sheet)\b/.test(lower)) {
       return "Fresh towels and linens are provided with the unit. Extra towels are usually available in the linen closet or bathroom cabinets.";

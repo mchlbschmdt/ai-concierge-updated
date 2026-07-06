@@ -309,6 +309,22 @@ export class RecommendationService {
     // CRITICAL: Detect meal type and add explicit instructions
     const lowerMessage = originalMessage.toLowerCase();
     const mealType = this.detectMealType(lowerMessage);
+
+    // NEW: Detect "quick / close / walkable" modifiers and constrain the model.
+    const wantsQuick = /\b(quick|fast|grab|grab-?and-?go|takeout|to[- ]?go|in a hurry|in a rush)\b/.test(lowerMessage);
+    const wantsClose = /\b(close|closest|nearby|near ?me|walk(able|ing)?|short walk|around the corner|down the (street|block))\b/.test(lowerMessage);
+    if (wantsQuick || wantsClose) {
+      prompt += `CRITICAL PROXIMITY & SERVICE-STYLE RULES:\n`;
+      if (wantsQuick) {
+        prompt += `- Guest wants FAST service: fast-casual, counter-service, takeout, or grab-and-go ONLY. Do NOT recommend sit-down or fine-dining restaurants.\n`;
+      }
+      if (wantsClose) {
+        prompt += `- Guest wants CLOSE options: prioritize actual walking distance ≤ 1.0 mi OR ≤ 5 min drive from "${propertyAddress}".\n`;
+      }
+      prompt += `- Each recommendation MUST be a real, named restaurant with an active listing — NOT a district, plaza, resort, neighborhood, or generic area name.\n`;
+      prompt += `- Do NOT invent walk/drive times. If you don't know a real distance, say "approx" and keep the units. Never claim "5 min walk" for a place that is over a mile away.\n`;
+      prompt += `- If nothing truly qualifies within the radius, respond honestly: "Nothing truly quick within walking distance — closest fast option is [name] at ~X mi." Do NOT pad with far-away sit-down places.\n\n`;
+    }
     
     if (mealType === 'breakfast') {
       prompt += `CRITICAL INSTRUCTION: Guest wants BREAKFAST RESTAURANTS with FULL BREAKFAST MENUS (eggs, pancakes, French toast, omelets, etc.).\n`;
@@ -322,6 +338,7 @@ export class RecommendationService {
     } else if (mealType === 'dinner') {
       prompt += `CRITICAL INSTRUCTION: Guest wants DINNER restaurants suitable for evening dining.\n\n`;
     }
+
     
     // NEW: Kid-friendly enhancement
     if (kidAges && kidAges.length > 0) {
@@ -443,7 +460,13 @@ export class RecommendationService {
               
               enhancedLines.push(enhancedLine);
             } else {
-              enhancedLines.push(line);
+              // No verified distance — strip any fabricated "X min walk/drive"
+              // phrasing so we don't tell the guest a 30-min walk is "5 min".
+              const scrubbed = line
+                .replace(/~?\s*\d+\s*(?:min|minute|minutes)\s*(?:walk|walking|drive|driving)/gi, 'approx distance')
+                .replace(/🚶[^,)\n]*/g, '')
+                .replace(/🚗\s*~?\s*\d+\s*(?:min|minute|minutes)/gi, '🚗 approx');
+              enhancedLines.push(scrubbed);
             }
           } else {
             enhancedLines.push(line);
@@ -594,10 +617,18 @@ export class RecommendationService {
       const familyNote = intentResult?.hasKids ? 'Guest is traveling with kids - prioritize family-friendly options. ' : '';
       const checkoutNote = intentResult?.isCheckoutSoon ? 'Guest is checking out soon - prioritize quick/nearby options. ' : '';
 
+      // Detect quick/close modifiers so the model doesn't return a sit-down spot 30 min away.
+      const lowerType = (type || '').toLowerCase();
+      const wantsQuick = /\b(quick|fast|grab|takeout|to[- ]?go|in a hurry|in a rush)\b/.test(lowerType);
+      const wantsClose = /\b(close|closest|nearby|near ?me|walk(able|ing)?|short walk|around the corner)\b/.test(lowerType);
+      const quickCloseRules = (wantsQuick || wantsClose)
+        ? `\nSTRICT RULES:\n${wantsQuick ? '- Fast-casual / counter-service / takeout ONLY (no sit-down, no fine dining).\n' : ''}${wantsClose ? '- Must be within ~1.0 mi walk or ~5 min drive of the property.\n' : ''}- Must be a real named restaurant, NOT a district / plaza / area name.\n- Do NOT invent walk or drive times. If uncertain, say "approx" and use conservative estimates.\n- If nothing truly qualifies, say so honestly instead of padding with far-away options.\n`
+        : '';
+
       const prompt = `You are a local concierge. Guest at ${propertyName}, ${propertyAddress}. ${guestNameNote}${contextNote}${avoidRepetition}${familyNote}${checkoutNote}Request: ${type}
 
 CRITICAL PROXIMITY FOCUS: Only recommend places within 5 miles of ${propertyAddress}. Prioritize closest options.
-
+${quickCloseRules}
 Response must be under 160 characters for SMS. Be warm and conversational. Give 3 fresh recommendations with distances and star ratings using format: "Name (X.X mi, ⭐️ X.X) — Description"
 
 ${contextNote ? 'Reference previous interests naturally if relevant.' : ''}
