@@ -474,7 +474,9 @@ export default function SmsConversationsAdmin() {
                           const raa = isRestrictedAutoApproved(conv);
                           const fb = hasUnhelpfulFallback(conv);
                           const ha = hasHallucinatedAmenity(conv);
-                          const anyFlag = nr || st || dd || leak || raa || fb || ha;
+                          const cv = hasClosedVenueMention(conv);
+                          const anyFlag = nr || st || dd || leak || raa || fb || ha || cv;
+
 
                           return (
                             <tr
