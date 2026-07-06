@@ -35,13 +35,18 @@ export class FaqMatchingService {
         return { matched: false, faqId: null, answer: null, question: null, confidence: 0, level: 'NONE', topMatches: [] };
       }
 
-      const msgLower = guestMessage.toLowerCase();
+      const msgLower = expandSynonyms(guestMessage.toLowerCase());
       const msgWords = tokenize(msgLower);
 
-      const scored = faqs.map((faq: any) => ({
-        ...faq,
-        score: computeScore(msgLower, msgWords, faq),
-      }));
+      const scored = faqs.map((faq: any) => {
+        // Expand FAQ side too so aliases on either side match.
+        const expandedFaq = {
+          ...faq,
+          question: expandSynonyms((faq.question || '').toLowerCase()),
+          tags: (faq.tags || []).map((t: string) => expandSynonyms(t.toLowerCase())),
+        };
+        return { ...faq, score: computeScore(msgLower, msgWords, expandedFaq) };
+      });
 
       scored.sort((a: any, b: any) => b.score - a.score);
 
