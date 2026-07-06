@@ -195,18 +195,24 @@ export class ConfirmedMessageOrchestrator {
       "ask_unit_amenities",
     ];
 
+    const isReport =
+      intentResult.intent === "report_lost_item" ||
+      intentResult.intent === "report_housekeeping_issue";
+
     const isIssue = requestClassification.type === "ISSUE" || troubleshootingResult.isTroubleshooting;
-    const isRequest = requestClassification.type === "REQUEST";
-    const isRecommendation = requestClassification.type === "RECOMMENDATION";
-    const isGeneralKnowledge = requestClassification.type === "GENERAL_KNOWLEDGE";
+    const isRequest = isReport || requestClassification.type === "REQUEST";
+    const isRecommendation = !isReport && requestClassification.type === "RECOMMENDATION";
+    const isGeneralKnowledge = !isReport && requestClassification.type === "GENERAL_KNOWLEDGE";
     const isPropertySpecific =
+      !isReport &&
       !isIssue &&
       !isRequest &&
       !isRecommendation &&
       !isGeneralKnowledge &&
       (propertySpecificIntents.includes(intentResult.intent) || requestClassification.type === "INFORMATIONAL");
 
-    const shouldUseAI = isRecommendation || isGeneralKnowledge || isIssue;
+    const shouldUseAI = !isReport && (isRecommendation || isGeneralKnowledge || isIssue);
+
 
     const classification: UnifiedClassification = {
       intent: isIssue ? `troubleshoot_${troubleshootingResult.category || "general"}` : intentResult.intent,
