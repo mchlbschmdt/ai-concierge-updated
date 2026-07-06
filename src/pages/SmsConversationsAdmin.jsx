@@ -349,10 +349,12 @@ export default function SmsConversationsAdmin() {
           hasLeakage(c) ||
           isRestrictedAutoApproved(c) ||
           hasUnhelpfulFallback(c) ||
-          hasHallucinatedAmenity(c)
+          hasHallucinatedAmenity(c) ||
+          hasClosedVenueMention(c)
       ).length,
     [conversations]
   );
+
 
 
   return (
