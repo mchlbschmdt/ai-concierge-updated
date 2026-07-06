@@ -149,6 +149,12 @@ function hasClosedVenueMention(conv) {
   return CLOSED_VENUE.test(conv.last_response);
 }
 
+// Positive signal: last recommendation was verified against Google Maps
+// (business_status = OPERATIONAL + real travel distance from the property).
+function isGoogleVerified(conv) {
+  return !!conv?.conversation_context?.last_google_verified;
+}
+
 
 
 
@@ -308,6 +314,7 @@ export default function SmsConversationsAdmin() {
           hasUnhelpfulFallback(conv) ? "fallback_loop" : null,
           hasHallucinatedAmenity(conv) ? "hallucinated_amenity" : null,
           hasClosedVenueMention(conv) ? "closed_venue" : null,
+          isGoogleVerified(conv) ? "google_verified" : null,
 
         ]
           .filter(Boolean)
@@ -475,6 +482,7 @@ export default function SmsConversationsAdmin() {
                           const fb = hasUnhelpfulFallback(conv);
                           const ha = hasHallucinatedAmenity(conv);
                           const cv = hasClosedVenueMention(conv);
+                          const gv = isGoogleVerified(conv);
                           const anyFlag = nr || st || dd || leak || raa || fb || ha || cv;
 
 
@@ -542,6 +550,11 @@ export default function SmsConversationsAdmin() {
                                     <Badge variant="outline" className="bg-destructive/20 text-destructive border-destructive/50 text-xs">
                                       <AlertTriangle className="mr-1 h-3 w-3" />
                                       Closed venue
+                                    </Badge>
+                                  )}
+                                  {gv && (
+                                    <Badge variant="outline" className="bg-emerald-500/15 text-emerald-700 border-emerald-500/40 text-xs dark:text-emerald-300">
+                                      Google-verified
                                     </Badge>
                                   )}
 
