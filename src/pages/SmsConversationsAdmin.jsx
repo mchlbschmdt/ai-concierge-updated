@@ -335,7 +335,8 @@ export default function SmsConversationsAdmin() {
           isDataDumpy(c.last_response, c.last_intent) ||
           hasLeakage(c) ||
           isRestrictedAutoApproved(c) ||
-          hasUnhelpfulFallback(c)
+          hasUnhelpfulFallback(c) ||
+          hasHallucinatedAmenity(c)
       ).length,
     [conversations]
   );
