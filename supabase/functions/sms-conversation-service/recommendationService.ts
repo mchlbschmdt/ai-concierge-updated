@@ -276,9 +276,13 @@ export class RecommendationService {
             );
           }
         }
-        
+
+        // Scrub any closed-venue mentions before we send this to the guest.
+        finalRecommendation = scrubClosedVenues(finalRecommendation);
+
         // Extract restaurant names for menu context
         const restaurantNames = this.extractRestaurantNames(finalRecommendation);
+
         
         // PHASE 2: Enhanced restaurant memory with category tracking
         let updatedContext = {
