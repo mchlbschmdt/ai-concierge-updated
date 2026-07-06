@@ -1,77 +1,46 @@
-# Fix issues found in unit 0404 test log
+## Problems observed in 0404 test log
 
-## What went wrong
-
-From `sms-conversation-service` logs (guest +15555555555 at Plentiful Views Atlantis):
-
-1. **"is there any more laundry detergent?"** → responded with `"I want to make sure I give you the right info — let me confirm that for you."`
-   - Log: `⚠️ [KB Lock] No KB data for property-specific question — using safe confirmation fallback`
-   - Host handoff SMS was sent to the property manager, but the guest was never told. The reply implies the AI is about to answer, then never does.
-
-2. **"I found a sock under the bed"** → responded with `"Just to confirm: i want to make sure i give you the right info — let me confirm that for you. — anything else I can help with?"`
-   - Log: `♻️ [Orchestrator] Repetition for "general_info" (0m ago)`
-   - Two failures compounded: (a) the previous fallback got stored as "shared information" and (b) the anti-repetition engine replayed it verbatim with a "Just to confirm:" prefix. Result: garbled, useless response.
-   - Also: a lost item report was classified as `general_inquiry` with `intent: general_inquiry, confidence: 0.5`. It should be routed as a housekeeping/lost-and-found report, not a KB lookup.
-
-3. **Handoff opacity**: whenever the orchestrator escalates to the host it should tell the guest, not stay silent behind a "let me confirm" line.
+1. **Distance/type inaccuracy for "quick & close" food requests** — AI recommends a sit‑down restaurant and lists an area name (not a real venue) with a fake "~5 min" walk that's actually ~30 min. Root cause: the model is free to invent distances/venue types because we prompt for GPS distance but don't provide it, and we don't constrain by service style when the guest asks for "quick".
+2. **Repetition and mixed‑up responses mid‑conversation** — Anti‑repetition/memory still replays partial content and mashes it into new answers.
+3. **Fabricated pool amenity for 0404** — Orchestrator has a hard‑coded "The pool is typically accessible during daytime hours…" reply for any pool/swim keyword, regardless of whether the property has a pool. `amenityService` also emits a positive pool response too eagerly.
 
 ## Fixes
 
-### A. Rewrite the KB-empty fallback so it is honest and actionable
-File: `supabase/functions/sms-conversation-service/confirmedMessageOrchestrator.ts` (the `[KB Lock] … safe confirmation fallback` branch)
+### A. Recommendation grounding (accuracy for "quick & close")
+- **`recommendationService.ts` prompt** — When the guest's message contains quick/fast/close/walk/nearby modifiers, inject explicit constraints:
+  - Service style must be **fast‑casual / counter‑service / takeout** (no sit‑down fine dining).
+  - Must be an **actual named restaurant** (not a district, plaza, or neighborhood name).
+  - Max radius: **1.0 mi walk** or **5 min drive**; if nothing qualifies, respond honestly ("Nothing truly quick within walking distance — closest fast options are X mi away") instead of inventing a walk time.
+  - Forbid claiming walk/drive times unless a real distance was supplied by `LocationService`.
+- **`perplexityRecommendationService.ts`** — Same "quick modifier" rules; require Perplexity to cite the venue's own listing (Google/Yelp) and return `NO_VERIFIED_RESULTS` when it can't.
+- **Post‑processor** — Strip/replace any AI‑authored "X min walk / drive" phrase when `LocationService.getAccurateDistance()` returns null; replace with "distance not verified — want me to check with your host?" rather than a fabricated number.
 
-- Replace the current text with something like:
-  > "I don't have that on file for {property_name} — I just messaged your host to double-check and they'll follow up shortly. Anything else I can help with in the meantime?"
-- Only send this when we are *actually* triggering the host handoff for the same turn, so the guest's message matches the SMS the manager receives.
-- Mark this response internally as `response_type: 'handoff_ack'` so downstream logic knows it is not real data.
+### B. Pool hallucination for properties without a pool
+- **`confirmedMessageOrchestrator.ts` (lines ~908‑909)** — Remove the generic "The pool is typically accessible…" fallback. Replace with a lookup against `property.amenities`; if pool is absent, respond "This unit doesn't have a pool on‑site — want me to point you to the nearest public/resort pool?" If unknown, escalate via handoff (same pattern already added for KB gaps).
+- **`amenityService.ts`** — Only return the affirmative pool string when `amenities` explicitly includes "pool". Otherwise return the negative branch. Remove reliance on `special_notes` containing the word "pool" (that matches "no pool" too).
+- **`enhancedConversationService.ts` amenity branch (~2005, ~2337)** — Route through the same amenities check before generating any pool copy. No hardcoded pool sentences.
 
-### B. Stop anti-repetition from replaying fallback / handoff responses
-Files: `conversationMemoryManager.ts`, `confirmedMessageOrchestrator.ts`
+### C. Repetition / mixed responses
+- Extend the fallback‑skip filter already added last turn to also cover:
+  - Any response containing a pool/amenity sentence when the amenity check was inconclusive (don't store it as "shared fact").
+  - Responses whose intent was `general_inquiry` with confidence < 0.6 — do not store as canonical answer for that topic bucket.
+- **`conversationalResponseGenerator.ts`** — When the new user message's intent differs from the previous stored intent bucket, clear the "last summary" prefix so it can't be prepended to an unrelated topic (fixes the "responses start getting mixed up").
+- **`conversationMemoryManager.ts`** — Cap `shared_information` per topic to the last 2 entries and drop entries older than the last 6 turns to prevent stale content bleeding into new answers.
 
-- When storing `shared_information` / `last_response_summary`, skip entries whose `response_type` is `handoff_ack`, `fallback`, or `clarify`. Only real data-bearing answers become "shared".
-- In the repetition guard, if the only prior "share" for this topic is a fallback, do not prepend `"Just to confirm:"` or replay the prior text. Treat the new message as a first-time answer.
-- Never re-emit a stored summary that starts with "I want to make sure" / "let me confirm" / "I don't have that on file" — add an explicit deny-list check before replay.
-
-### C. Improve intent classification for lost items and housekeeping reports
-File: `supabase/functions/sms-conversation-service/intentRecognitionService.ts` (and `enhancedIntentRouter.ts` if it does a second pass)
-
-- Add a `report_lost_item` / `report_housekeeping_issue` intent with keyword+regex triggers: `found`, `left behind`, `under the bed`, `missing`, `sock`, `earring`, `charger`, `wallet`, `passport`, `stain`, `broken`, `leak`, `not working`.
-- Route these intents through the host handoff path (same as restricted intents), never through the FAQ/KB lookup.
-- Response template: "Thanks for letting us know — I've flagged this for your host and housekeeping so they can take care of it."
-- Include the item text verbatim in the outbound host SMS.
-
-### D. Make host handoffs transparent to the guest
-File: `hostContactService.ts` + orchestrator
-
-- Whenever a host SMS is sent, the guest reply for that turn must include a short acknowledgement: "I've looped in your host — they'll follow up shortly." Never emit "let me confirm" alone when a handoff fires.
-- Add a single helper `buildHandoffAckMessage(intent, propertyName)` and use it in every handoff site so wording stays consistent.
-- Keep the de-duplication window (don't re-alert host on the same intent within N minutes), but *do* still acknowledge to the guest each time.
-
-### E. Prevent the "Just to confirm: i want to make sure…" cascade
-File: `conversationalResponseGenerator.ts` (the `Just to confirm:` prefixer)
-
-- Skip the prefix entirely when the base message already contains a hedging phrase (`want to make sure`, `let me confirm`, `don't have that on file`, `looped in your host`).
-- Skip the prefix when the prior turn was a `handoff_ack` or `fallback`.
-
-### F. Admin log visibility
-File: `src/pages/SmsConversationsAdmin.jsx`
-
-- Add a new detection flag `hasUnhelpfulFallback` = response matches `/want to make sure|let me confirm that for you/i` and no KB/FAQ source recorded. Show as a "Fallback loop" badge next to the existing "Cross-property" / "Auto-approved" flags and include in CSV export. This makes future regressions visible in the admin panel.
-
-## Files touched
-
-- `supabase/functions/sms-conversation-service/confirmedMessageOrchestrator.ts`
-- `supabase/functions/sms-conversation-service/conversationMemoryManager.ts`
-- `supabase/functions/sms-conversation-service/conversationalResponseGenerator.ts`
-- `supabase/functions/sms-conversation-service/intentRecognitionService.ts`
-- `supabase/functions/sms-conversation-service/enhancedIntentRouter.ts`
-- `supabase/functions/sms-conversation-service/hostContactService.ts`
-- `src/pages/SmsConversationsAdmin.jsx`
-
-No database migrations, no new secrets.
+### D. Admin visibility
+- Add a "Hallucinated amenity" flag in `SmsConversationsAdmin.jsx` when a response mentions pool/hot tub/grill but the property record doesn't list it. Surface as a badge and CSV column, similar to the fallback‑loop flag.
 
 ## Out of scope
+- Real geocoding integration (LocationService still returns null; that's a separate project).
+- Rewriting Perplexity provider selection.
+- Any DB migrations — this is all edge‑function + admin UI code.
 
-- Rewriting the whole intent classifier (only adding the lost-item / housekeeping intents).
-- Changing OpenPhone webhook or handoff routing numbers.
-- Recommendation grounding work (already shipped in Wave 2).
+## Files to edit
+- `supabase/functions/sms-conversation-service/recommendationService.ts`
+- `supabase/functions/sms-conversation-service/perplexityRecommendationService.ts`
+- `supabase/functions/sms-conversation-service/confirmedMessageOrchestrator.ts`
+- `supabase/functions/sms-conversation-service/amenityService.ts`
+- `supabase/functions/sms-conversation-service/enhancedConversationService.ts`
+- `supabase/functions/sms-conversation-service/conversationalResponseGenerator.ts`
+- `supabase/functions/sms-conversation-service/conversationMemoryManager.ts`
+- `src/pages/SmsConversationsAdmin.jsx`
