@@ -120,6 +120,26 @@ function hasUnhelpfulFallback(conv) {
   return !HANDOFF_ACK.test(conv.last_response);
 }
 
+// Hallucinated amenity: response affirms an amenity that the property record
+// doesn't list. We only flag positive claims ("yes...pool", "there's a pool")
+// so honest negatives ("no pool at this property") don't trigger it.
+const AMENITY_POSITIVE = /(?:yes[^.]{0,40}|there(?:'s| is)[^.]{0,20}|has[^.]{0,20})\b(pool|hot tub|jacuzzi|grill|bbq)\b/i;
+function hasHallucinatedAmenity(conv) {
+  if (!conv.last_response) return false;
+  const m = conv.last_response.match(AMENITY_POSITIVE);
+  if (!m) return false;
+  const claimed = m[1].toLowerCase();
+  const raw = conv.properties?.amenities;
+  const list = Array.isArray(raw)
+    ? raw
+    : typeof raw === "string"
+      ? raw.split(/[,;\n]/).map((s) => s.trim())
+      : [];
+  if (list.length === 0) return false; // unknown — don't flag
+  const key = claimed === "bbq" ? "grill" : claimed === "jacuzzi" ? "hot tub" : claimed;
+  return !list.some((a) => new RegExp(key, "i").test(String(a)));
+}
+
 
 export default function SmsConversationsAdmin() {
   const { currentUser } = useAuth();
