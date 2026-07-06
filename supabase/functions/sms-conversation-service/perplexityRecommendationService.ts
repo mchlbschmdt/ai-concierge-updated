@@ -122,15 +122,17 @@ export class PerplexityRecommendationService {
     prompt += `- Only suggest places that actually exist near that address. Do NOT invent names.\n`;
     prompt += `- Do NOT suggest places from other cities, states, or resorts.\n`;
     prompt += `- Each pick MUST be a real named restaurant/venue with an active Google or Yelp listing — NOT a district, plaza, or neighborhood name.\n`;
+    prompt += `- OPERATING STATUS: verify the place is CURRENTLY OPEN. Exclude anything Google/Yelp/TripAdvisor lists as "Permanently closed", "Temporarily closed", "Closed for renovation", or that has no reviews in the last ~90 days. When in doubt, leave it out.\n`;
     if (wantsQuick) {
       prompt += `- Guest wants FAST service: fast-casual / counter / takeout only. NO sit-down or fine-dining.\n`;
     }
     if (wantsClose) {
-      prompt += `- Guest wants CLOSE: prioritize ≤ 1.0 mi walk or ≤ 5 min drive from the address.\n`;
+      prompt += `- Guest wants CLOSE: prioritize ≤ 1.0 mi walk or ≤ 5 min drive from the address. Exclude anything farther unless nothing closer qualifies.\n`;
     }
-    prompt += `- Do NOT invent walk/drive times. Use conservative approximate distances only.\n`;
-    prompt += `- If you cannot verify at least one nearby real option that matches these rules, reply exactly: NO_VERIFIED_RESULTS.\n`;
-    prompt += `- Include name, approximate distance from the address, and one specific reason to go.\n`;
+    prompt += `- Do NOT invent walk/drive times. Use conservative approximate distances in miles only.\n`;
+    prompt += `- If, after filtering for open + nearby, you have fewer than 1 qualifying pick, reply exactly: NO_VERIFIED_RESULTS.\n`;
+    prompt += `- Include name, approximate distance from the address in miles, and one specific reason to go.\n`;
+
 
     if (rejectedOptions.length > 0) {
       prompt += `- Do NOT suggest: ${rejectedOptions.join(', ')}.\n`;
