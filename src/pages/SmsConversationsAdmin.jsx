@@ -435,7 +435,9 @@ export default function SmsConversationsAdmin() {
                           const dd = isDataDumpy(conv.last_response, conv.last_intent);
                           const leak = hasLeakage(conv);
                           const raa = isRestrictedAutoApproved(conv);
-                          const anyFlag = nr || st || dd || leak || raa;
+                          const fb = hasUnhelpfulFallback(conv);
+                          const anyFlag = nr || st || dd || leak || raa || fb;
+
                           return (
                             <tr
                               key={conv.id}
