@@ -515,6 +515,14 @@ export default function SmsConversationsAdmin() {
                                       Fallback loop
                                     </Badge>
                                   )}
+                                  {ha && (
+                                    <Badge variant="outline" className="bg-destructive/15 text-destructive border-destructive/40 text-xs">
+                                      <AlertTriangle className="mr-1 h-3 w-3" />
+                                      Hallucinated amenity
+                                    </Badge>
+                                  )}
+
+
 
                                   {st && (
                                     <Badge variant="outline" className="bg-warning/15 text-warning border-warning/30 text-xs">
