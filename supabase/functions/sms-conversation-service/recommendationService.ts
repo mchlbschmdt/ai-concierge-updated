@@ -115,6 +115,55 @@ export class RecommendationService {
 
       console.log('🔄 [OPENAI] Enhanced payload being sent:', JSON.stringify(enhancedPayload).substring(0, 200));
 
+      // LIVE LOOKUP FIRST: for real-world places, ask Perplexity (live web search
+      // + operating-status filter) before hitting the generative OpenAI path.
+      // Only fall back to OpenAI when Perplexity throws or returns no verified
+      // results. This is the fix for the "closed / far away" recommendations.
+      const isLiveLookup = LIVE_LOOKUP_CATEGORIES.has((requestType || '').toLowerCase());
+      if (isLiveLookup && Deno.env.get('PERPLEXITY_API_KEY')) {
+        try {
+          console.log('🌐 [RECS] Trying Perplexity first for category:', requestType);
+          const perplexityRaw = await PerplexityRecommendationService.getLocalRecommendations(
+            property,
+            originalMessage,
+            conversation,
+            requestType,
+            rejectedRestaurants
+          );
+          const scrubbed = scrubClosedVenues(perplexityRaw);
+          if (scrubbed && !/NO_VERIFIED_RESULTS/i.test(scrubbed)) {
+            console.log('✅ [RECS] Using Perplexity result');
+            const restaurantNames = this.extractRestaurantNames(scrubbed);
+            const updatedContext: any = {
+              ...context,
+              lastRecommendationType: requestType,
+              lastGuestContext: guestContext,
+              last_food_preferences: foodFilters.length ? foodFilters : (context.last_food_preferences || []),
+              last_request_category: requestType,
+            };
+            if (restaurantNames.length > 0) {
+              updatedContext.last_recommended_restaurant = restaurantNames[0];
+              updatedContext.last_restaurant_context = originalMessage.toLowerCase();
+            }
+            await this.storeTravelRecommendation(propertyAddress, requestType, scrubbed);
+            await this.conversationManager.updateConversationState(conversation.phone_number, {
+              last_recommendations: scrubbed,
+              conversation_context: updatedContext,
+            });
+            return {
+              response: MessageUtils.ensureSmsLimit(scrubbed).join('\n'),
+              shouldUpdateState: false,
+              requestCategory: requestType,
+            };
+          }
+          console.log('⚠️ [RECS] Perplexity had no verified results — falling back to OpenAI');
+        } catch (perplexityErr) {
+          console.log('⚠️ [RECS] Perplexity failed, falling back to OpenAI:', (perplexityErr as Error).message);
+        }
+      }
+
+
+
       const startTime = Date.now();
       const response = await fetch('https://zutwyyepahbbvrcbsbke.supabase.co/functions/v1/openai-recommendations', {
         method: 'POST',
