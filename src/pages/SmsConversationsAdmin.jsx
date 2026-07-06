@@ -140,6 +140,17 @@ function hasHallucinatedAmenity(conv) {
   return !list.some((a) => new RegExp(key, "i").test(String(a)));
 }
 
+// Closed venue: response mentions a business the model flagged as closed.
+// These slip through when the LLM cites an outdated listing. Any hit is a red
+// flag — guests should never be sent to a place that's shut down.
+const CLOSED_VENUE = /\b(permanently closed|temporarily closed|closed for renovation|closed down|out of business|no longer (open|operating|in business))\b/i;
+function hasClosedVenueMention(conv) {
+  if (!conv.last_response) return false;
+  return CLOSED_VENUE.test(conv.last_response);
+}
+
+
+
 
 export default function SmsConversationsAdmin() {
   const { currentUser } = useAuth();
