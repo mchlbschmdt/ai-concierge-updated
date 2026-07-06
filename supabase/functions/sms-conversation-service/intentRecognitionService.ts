@@ -40,6 +40,17 @@ export class IntentRecognitionService {
       console.log('🛎️ Service request detected:', serviceIntent);
       return { intent: serviceIntent, confidence: 0.95, isMultiPart: false };
     }
+
+    // HIGH PRIORITY: Lost items / housekeeping reports — always go to host handoff
+    if (this.isLostItemReport(lowerMessage)) {
+      console.log('🧺 Lost item / housekeeping report detected:', message);
+      return { intent: 'report_lost_item', confidence: 0.95, isMultiPart: false };
+    }
+    if (this.isHousekeepingReport(lowerMessage)) {
+      console.log('🧹 Housekeeping report detected:', message);
+      return { intent: 'report_housekeeping_issue', confidence: 0.92, isMultiPart: false };
+    }
+    
     
     // HIGH PRIORITY: General knowledge queries (external to property)
     if (this.detectGeneralKnowledgeIntent(lowerMessage)) {
