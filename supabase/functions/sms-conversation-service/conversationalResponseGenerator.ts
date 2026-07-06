@@ -182,12 +182,9 @@ export class ConversationalResponseGenerator {
         }
       });
       
-      // Fallback response while distance calculation happens
-      if (propertyAddress.toLowerCase().includes('reunion')) {
-        return `${namePrefix}${restaurantName} is close by! Most restaurants in the area are 5-15 minutes drive from Reunion Resort. Would you like specific directions? 📍`;
-      } else {
-        return `${namePrefix}${restaurantName} is in the local area, typically 5-20 minutes drive. Would you like me to help with directions? 🗺️`;
-      }
+      // Fallback response while distance calculation happens — kept neutral
+      // so it doesn't reference an unrelated resort.
+      return `${namePrefix}I can look up how far ${restaurantName} is from you — want me to check, or would you prefer directions instead? 🗺️`;
     }
     
     return `${namePrefix}Which restaurant are you asking about? I can give you distance and direction info! 📍`;

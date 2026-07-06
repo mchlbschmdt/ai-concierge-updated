@@ -9,11 +9,14 @@ export class PropertyDataExtractorEnhanced {
     let response = '';
     let hasData = false;
     
-    // Check if we've already shared TV info recently
+    // Only skip re-answering when the guest asked the SAME topic recently.
+    // Previously we returned a canned "As I mentioned…" reply here, which
+    // caused unrelated intents to receive stale summaries. Falling through
+    // lets the fresh answer generate below.
     const recentShare = ConversationMemoryManager.wasTopicRecentlyShared(conversationContext, 'tv_info');
-    if (recentShare.shared) {
+    if (recentShare.shared && (lowerMessage.includes('tv') || lowerMessage.includes('television'))) {
       return {
-        response: `As I mentioned, ${recentShare.summary}. Is there something specific about the TV you'd like to know more about?`,
+        response: `Just a heads-up — I shared the TV info a moment ago. Anything specific about the TV you still need help with?`,
         hasData: true
       };
     }
@@ -57,11 +60,12 @@ export class PropertyDataExtractorEnhanced {
     let response = '';
     let hasData = false;
     
-    // Check if we've already provided troubleshooting for this equipment
+    // Only replay troubleshooting steps if the guest is still on the same
+    // equipment topic. Otherwise fall through and answer the new question.
     const recentShare = ConversationMemoryManager.wasTopicRecentlyShared(conversationContext, `troubleshoot_${equipmentType}`);
-    if (recentShare.shared) {
+    if (recentShare.shared && message.toLowerCase().includes(equipmentType.toLowerCase())) {
       return {
-        response: `I shared troubleshooting steps earlier. ${recentShare.summary}. Is it still not working?`,
+        response: `I shared some troubleshooting steps for the ${equipmentType} a moment ago. Is it still not working?`,
         hasData: true
       };
     }
@@ -94,11 +98,12 @@ export class PropertyDataExtractorEnhanced {
     let response = '';
     let hasData = false;
     
-    // Check if we've already shared services info
+    // Only replay services info if the guest is still asking about services.
     const recentShare = ConversationMemoryManager.wasTopicRecentlyShared(conversationContext, 'additional_services');
-    if (recentShare.shared) {
+    const servicesKeywords = ['service', 'laundry', 'housekeeping', 'cleaning', 'towel', 'concierge'];
+    if (recentShare.shared && servicesKeywords.some(k => lowerMessage.includes(k))) {
       return {
-        response: `As I mentioned, ${recentShare.summary}. Would you like more details?`,
+        response: `I covered the property's services a moment ago — want more detail on any specific one (housekeeping, towels, laundry)?`,
         hasData: true
       };
     }
@@ -136,11 +141,12 @@ export class PropertyDataExtractorEnhanced {
     let response = '';
     let hasData = false;
     
-    // Check if we've already shared resort info
+    // Only replay resort-amenity info if the guest is still on that topic.
     const recentShare = ConversationMemoryManager.wasTopicRecentlyShared(conversationContext, 'resort_amenities');
-    if (recentShare.shared) {
+    const amenityKeywords = ['amenity', 'amenities', 'pool', 'gym', 'resort', 'facility'];
+    if (recentShare.shared && amenityKeywords.some(k => lowerMessage.includes(k))) {
       return {
-        response: `As I mentioned, ${recentShare.summary}. Would you like details about a specific amenity?`,
+        response: `I shared the resort/amenity info a moment ago — want details on a specific amenity?`,
         hasData: true
       };
     }
@@ -196,11 +202,12 @@ export class PropertyDataExtractorEnhanced {
     let response = '';
     let hasData = false;
     
-    // Check if we've already shared weather info recently
+    // Only replay weather info if the guest is still asking about weather.
     const recentShare = ConversationMemoryManager.wasTopicRecentlyShared(conversationContext, 'weather_info');
-    if (recentShare.shared) {
+    const weatherKeywords = ['weather', 'temperature', 'rain', 'forecast', 'climate', 'hot', 'humid', 'cold'];
+    if (recentShare.shared && weatherKeywords.some(k => lowerMessage.includes(k))) {
       return {
-        response: `As I mentioned earlier, ${recentShare.summary}. Is there something specific about the weather you'd like to know?`,
+        response: `I shared the weather notes a moment ago — anything specific you still want to know?`,
         hasData: true
       };
     }
@@ -429,11 +436,12 @@ export class PropertyDataExtractorEnhanced {
     let response = '';
     let hasData = false;
     
-    // Check for recent shares
+    // Only replay park-timing info if the guest is still asking about parks.
     const recentShare = ConversationMemoryManager.wasTopicRecentlyShared(conversationContext, 'best_time_visit');
-    if (recentShare.shared) {
+    const parkKeywords = ['park', 'disney', 'universal', 'magic kingdom', 'epcot', 'hollywood', 'animal kingdom', 'crowd', 'busy'];
+    if (recentShare.shared && parkKeywords.some(k => lowerMessage.includes(k))) {
       return {
-        response: `As I mentioned, ${recentShare.summary}. Need details about a specific park?`,
+        response: `I shared park-timing tips a moment ago — want details for a specific park?`,
         hasData: true
       };
     }
@@ -528,39 +536,13 @@ export class PropertyDataExtractorEnhanced {
     // Get location context
     const locationContext = PropertyLocationAnalyzer.analyzePropertyLocation(property.address);
     
-    // Waterpark detection
+    // Waterpark detection — property-agnostic (no hardcoded Reunion strings).
     if (lowerMessage.includes('water park') || lowerMessage.includes('waterpark')) {
-      if (locationContext.resort === 'reunion') {
-        response += '🏊 Reunion Resort Waterpark:\n';
-        response += '• 5-acre water park with lazy river\n';
-        response += '• Multiple pools & water slides\n';
-        response += '• Splash zone for kids\n';
-        response += '• Access included with your stay\n\n';
-        response += '📍 Location: Near the main clubhouse\n';
-        response += '💡 Tip: Bring towels and sunscreen!';
-        hasData = true;
-      } else {
-        response += '🏊 Your property is located at ' + (locationContext.resort || locationContext.neighborhood || 'an Orlando-area resort') + '.\n\n';
-        response += 'For water park access details, I recommend contacting the resort front desk or checking your welcome materials. Would you like me to provide the property contact info?';
-        hasData = true;
-      }
+      response += '🏊 I don\'t have confirmed water-park details for this property in the guide. Want me to check with your host, or find nearby public options?';
+      hasData = true;
     }
-    
-    // Resort pool (different from property pool)
-    if ((lowerMessage.includes('resort pool') || lowerMessage.includes('main pool')) && 
-        !lowerMessage.includes('property pool')) {
-      if (locationContext.resort === 'reunion') {
-        response += '🏊 Seven Eagles Pool (Main Resort Pool):\n';
-        response += '• Infinity-edge pool with stunning views\n';
-        response += '• 2 hot tubs/spas\n';
-        response += '• Pool bar & food service\n';
-        response += '• Gym located nearby\n\n';
-        response += '💡 Highly recommended for the best pool experience!';
-        hasData = true;
-      }
-    }
-    
-    // Resort gym/fitness
+
+    // Resort gym/fitness — only use info actually written for this property.
     if (lowerMessage.includes('gym') || lowerMessage.includes('fitness') || lowerMessage.includes('workout')) {
       if (property.local_recommendations && property.local_recommendations.toLowerCase().includes('gym')) {
         const gymMatch = property.local_recommendations.match(/gym[^.\n]{0,150}[.\n]/gi);
@@ -568,17 +550,11 @@ export class PropertyDataExtractorEnhanced {
           response += '💪 ' + gymMatch[0].trim();
           hasData = true;
         }
-      } else if (locationContext.resort === 'reunion') {
-        response += '💪 Fitness Center:\n';
-        response += '• Located near Seven Eagles pool\n';
-        response += '• Full cardio & weight equipment\n';
-        response += '• Open to all resort guests';
-        hasData = true;
       }
     }
-    
-    // Resort restaurants
-    if ((lowerMessage.includes('resort restaurant') || lowerMessage.includes('on property') && lowerMessage.includes('eat')) &&
+
+    // Resort restaurants — only use info actually written for this property.
+    if ((lowerMessage.includes('resort restaurant') || (lowerMessage.includes('on property') && lowerMessage.includes('eat'))) &&
         !lowerMessage.includes('off property')) {
       if (property.local_recommendations && property.local_recommendations.toLowerCase().includes('dining on property')) {
         const diningMatch = property.local_recommendations.match(/\*\*\*Dining On Property\*\*\*[^*]+/i);
@@ -588,7 +564,7 @@ export class PropertyDataExtractorEnhanced {
         }
       }
     }
-    
+
     return { response: response.trim(), hasData };
   }
 }

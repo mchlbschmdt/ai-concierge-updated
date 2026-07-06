@@ -54,7 +54,24 @@ const FALLBACK_MARKERS = [
   "check with the host",
   "I'll check on that",
   "I don't have that information",
+  "let me confirm that for you",
+  "I still don't have specific information",
 ];
+
+// Content that must never appear for properties outside Reunion Resort. If any
+// last_response contains these tokens for a non-1434 property, the assistant
+// leaked cross-property data and the row needs review.
+const LEAKAGE_TOKENS = /reunion|titian|seven eagles|magic kingdom|epcot|disney springs|kissimmee/i;
+
+// Phrasing that would imply the AI auto-approved a restricted request. These
+// intents (early check-in / late checkout / bag drop) always require the host.
+const RESTRICTED_INTENTS = new Set([
+  "ask_early_checkin",
+  "ask_late_checkout",
+  "ask_bag_drop",
+  "ask_baggage_hold",
+]);
+const APPROVAL_PHRASES = /\b(done|approved|confirmed|you'?re all set|all set)\b/i;
 
 function isDataDumpy(response, intent) {
   if (!response) return false;
@@ -74,6 +91,22 @@ function isStale(conv) {
   if (conv.conversation_state !== "awaiting_property_id") return false;
   if (!conv.last_interaction_timestamp) return false;
   return Date.now() - new Date(conv.last_interaction_timestamp).getTime() > STALE_THRESHOLD_MS;
+}
+
+function hasLeakage(conv) {
+  if (!conv.last_response) return false;
+  // The one property that actually has this content is code '1434'. If the
+  // property_id or code isn't 1434 and the response contains those tokens,
+  // it's cross-property contamination.
+  const isReunion = conv.property_id === "1434" || conv.properties?.code === "1434";
+  if (isReunion) return false;
+  return LEAKAGE_TOKENS.test(conv.last_response);
+}
+
+function isRestrictedAutoApproved(conv) {
+  if (!conv.last_intent || !conv.last_response) return false;
+  if (!RESTRICTED_INTENTS.has(conv.last_intent)) return false;
+  return APPROVAL_PHRASES.test(conv.last_response);
 }
 
 export default function SmsConversationsAdmin() {
@@ -227,6 +260,8 @@ export default function SmsConversationsAdmin() {
           needsReview(conv) ? "needs_review" : null,
           isStale(conv) ? "stale" : null,
           isDataDumpy(conv.last_response, conv.last_intent) ? "data_dumpy" : null,
+          hasLeakage(conv) ? "cross_property_leak" : null,
+          isRestrictedAutoApproved(conv) ? "restricted_auto_approved" : null,
         ]
           .filter(Boolean)
           .join("|") || "ok",
@@ -257,7 +292,15 @@ export default function SmsConversationsAdmin() {
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
   const flaggedCount = useMemo(
-    () => conversations.filter((c) => needsReview(c) || isStale(c) || isDataDumpy(c.last_response, c.last_intent)).length,
+    () =>
+      conversations.filter(
+        (c) =>
+          needsReview(c) ||
+          isStale(c) ||
+          isDataDumpy(c.last_response, c.last_intent) ||
+          hasLeakage(c) ||
+          isRestrictedAutoApproved(c)
+      ).length,
     [conversations]
   );
 
@@ -374,6 +417,9 @@ export default function SmsConversationsAdmin() {
                           const nr = needsReview(conv);
                           const st = isStale(conv);
                           const dd = isDataDumpy(conv.last_response, conv.last_intent);
+                          const leak = hasLeakage(conv);
+                          const raa = isRestrictedAutoApproved(conv);
+                          const anyFlag = nr || st || dd || leak || raa;
                           return (
                             <tr
                               key={conv.id}
@@ -410,6 +456,18 @@ export default function SmsConversationsAdmin() {
                                       Review
                                     </Badge>
                                   )}
+                                  {leak && (
+                                    <Badge variant="outline" className="bg-destructive/15 text-destructive border-destructive/40 text-xs">
+                                      <AlertTriangle className="mr-1 h-3 w-3" />
+                                      Cross-property
+                                    </Badge>
+                                  )}
+                                  {raa && (
+                                    <Badge variant="outline" className="bg-destructive/15 text-destructive border-destructive/40 text-xs">
+                                      <AlertTriangle className="mr-1 h-3 w-3" />
+                                      Auto-approved
+                                    </Badge>
+                                  )}
                                   {st && (
                                     <Badge variant="outline" className="bg-warning/15 text-warning border-warning/30 text-xs">
                                       Stale
@@ -421,7 +479,7 @@ export default function SmsConversationsAdmin() {
                                       Verbose
                                     </Badge>
                                   )}
-                                  {!nr && !st && !dd && (
+                                  {!anyFlag && (
                                     <span className="text-xs text-muted-foreground">—</span>
                                   )}
                                 </div>

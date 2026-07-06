@@ -120,11 +120,13 @@ export class ConciergeStyleService {
   }
 
   static getHandoffConfirmation(): string {
+    // Neutral wording — never imply the request has been approved. Restricted
+    // items like early check-in and late checkout require the host's OK.
     const confirmations = [
-      "Perfect — I've passed that along and your host will be in the loop.",
-      "Done! Your host has been alerted and will follow up with you.",
-      "All set — I've reached out to your host with the details.",
-      "Got it — your host has been notified. They'll be in touch!",
+      "I've passed the request along to your host so they can review it.",
+      "I've flagged this for your host — they'll reach out once they can confirm.",
+      "Your host has been notified with the details. They'll get back to you.",
+      "I've looped in your host on this — they'll follow up with a decision.",
     ];
     return confirmations[Math.floor(Math.random() * confirmations.length)];
   }

@@ -463,18 +463,19 @@ export class ConversationMemoryManager {
     };
     
     const phrase = topicPhrases[topic] || 'that information';
-    
-    // If we have a previous summary, reference it
+
+    // Do NOT replay the previous summary verbatim — that caused unrelated
+    // intents to receive stale answers. Just acknowledge and prompt.
     if (previousSummary) {
-      return `As I mentioned earlier, ${previousSummary.toLowerCase()}. Is there something specific you'd like to know more about?`;
+      return `I already shared ${phrase} — is there something specific you'd like to know more about?`;
     }
-    
+
     // Extract key info from full response for brief reminder
     const firstSentence = fullResponse.split(/[.!?]\s/)[0];
     if (firstSentence && firstSentence.length < 150) {
       return `Just to remind you: ${firstSentence}. Need anything else?`;
     }
-    
+
     return `I shared ${phrase} just a moment ago. What else can I help with?`;
   }
   
