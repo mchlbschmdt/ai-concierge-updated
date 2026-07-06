@@ -21,26 +21,10 @@ export class ContextualResponseService {
       return `${namePrefix}want more activity ideas, restaurant recommendations, or property info?`;
     }
     
-    // Property-specific helpful suggestions
-    if (propertyType === 'reunion_resort') {
-      return `${namePrefix}I can help with:
-• Restaurant recommendations near Reunion
-• Water park hours and shuttle times  
-• WiFi, parking, or checkout details
-• Local activities and attractions
-
-What would be most helpful?`;
-    }
+    // Note: property-type–specific suggestions (Reunion / Disney area) were
+    // removed — they leaked into unrelated properties. Fall through to the
+    // generic helpful fallback below, which stays neutral.
     
-    if (propertyType === 'disney_area') {
-      return `${namePrefix}I can help with:
-• Disney dining and park recommendations
-• Shuttle schedules and transportation
-• WiFi, parking, or property details
-• Local activities beyond the parks
-
-What can I help you with?`;
-    }
     
     // General helpful fallback - more conversational and specific
     return `${namePrefix}I'm here to help! I can assist with:
