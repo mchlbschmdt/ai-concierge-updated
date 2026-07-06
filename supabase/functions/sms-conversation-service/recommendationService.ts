@@ -6,6 +6,7 @@ import { LocationService } from './locationService.ts';
 import { ConversationMemoryManager } from './conversationMemoryManager.ts';
 import { PropertyLocationAnalyzer } from './propertyLocationAnalyzer.ts';
 import { PerplexityRecommendationService } from './perplexityRecommendationService.ts';
+import { findVerifiedNearbyPlaces, formatPlacesForPrompt, VerifiedPlace } from './googlePlacesService.ts';
 
 // Categories that must be resolved against live, real-world listings. For
 // these we call Perplexity first (live web search + open-status guardrails)
