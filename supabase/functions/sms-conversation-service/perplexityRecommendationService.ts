@@ -72,16 +72,22 @@ export class PerplexityRecommendationService {
 
       const data = await response.json();
       const recommendation = data.choices?.[0]?.message?.content;
-      
+
       if (!recommendation) {
         console.log('❌ [PERPLEXITY] No recommendation in response');
         throw new Error('Empty recommendation from Perplexity');
       }
 
+      // Grounding guard: model told us it could not verify any real result.
+      if (/NO_VERIFIED_RESULTS/i.test(recommendation)) {
+        console.log('⚠️ [PERPLEXITY] No verified results — refusing to hallucinate.');
+        throw new Error('No verified nearby results');
+      }
+
       console.log('✅ [PERPLEXITY] Raw recommendation received:', recommendation.substring(0, 150) + '...');
       const formatted = this.formatRecommendation(recommendation);
       console.log('✅ [PERPLEXITY] Formatted recommendation:', formatted.substring(0, 150) + '...');
-      
+
       return formatted;
       
     } catch (error) {
