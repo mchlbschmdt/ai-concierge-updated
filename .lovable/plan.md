@@ -1,42 +1,54 @@
-## Problem
+## Goal
+Replace prompt-only "close & open" guardrails with authoritative Google Maps Platform lookups so recommendations returned by the SMS concierge are (a) verified `OPERATIONAL` and (b) ranked by real distance from the property.
 
-Restaurant recommendations for 0404 still miss on two dimensions:
-1. **Distance** — model recommends places that aren't actually close, despite the "quick/close" guardrails already added.
-2. **Operating status** — one recommendation was permanently closed. Nothing in the pipeline verifies a venue is still open.
+## Approach
+Use the existing **Google Maps Platform connector** (gateway-backed, already supported in Lovable). This gives us Places API (New) for search + business status, Geocoding for property coordinates, and Routes API for real driving/walking distance — all through `https://connector-gateway.lovable.dev/google_maps` with `LOVABLE_API_KEY` + `GOOGLE_MAPS_API_KEY`. No user-managed API key needed.
 
-Root cause: the current path relies on `openai-recommendations` (GPT with no live web/search grounding) as the primary generator. Perplexity (which does have live search) is only a fallback and uses an outdated model (`llama-3.1-sonar-small-128k-online`). GPT invents plausible-sounding names/distances and has no way to know a business closed.
+The connector must be linked to the project before the edge function can read `GOOGLE_MAPS_API_KEY`. That link step is the only user action.
 
-## Fixes
+## Steps
 
-### A. Flip the provider priority for local recs — Perplexity first, GPT only as narrative wrapper
-- **`recommendationService.ts`** — In `getEnhancedRecommendations`, when `requestType` is a local-place category (`dinner`, `restaurant`, `food`, `coffee`, `cafe`, `attractions`, `activities`, `things to do`, `bar`, `nightlife`), call `PerplexityRecommendationService.getLocalRecommendations` FIRST. Only fall back to the `openai-recommendations` edge function if Perplexity throws or returns `NO_VERIFIED_RESULTS`.
-- Keep all existing rejection/memory/validation logic wrapping the result.
+### 1. Link the Google Maps Platform connector
+Call `standard_connectors--connect` with `connector_id: google_maps`. User picks/creates the connection; secrets `LOVABLE_API_KEY` and `GOOGLE_MAPS_API_KEY` become available to edge functions.
 
-### B. Upgrade Perplexity model + add "currently operating" + real-distance guardrails
-- **`perplexityRecommendationService.ts`**
-  - Switch model from `llama-3.1-sonar-small-128k-online` (deprecated) to `sonar` (or `sonar-pro` for the recs call — better multi-source grounding).
-  - Add to the system prompt: "Only return businesses that are CURRENTLY OPERATING. Do not return any place marked 'Permanently closed', 'Temporarily closed', or without a recent (last 90 days) review/activity signal. If uncertain, exclude it."
-  - Require each pick to include an approximate distance in miles AND the source domain used to verify it's open (Google Maps/Yelp/TripAdvisor listing). Reject picks the model can't cite.
-  - Tighten `NO_VERIFIED_RESULTS` trigger: also emit it when fewer than 1 pick survives the open-status filter.
-  - Add `search_recency_filter: 'month'` and `search_domain_filter: ['google.com','yelp.com','tripadvisor.com','opentable.com','maps.google.com']` to the request body so citations come from listing sites, not blog posts.
+### 2. New helper: `googlePlacesService.ts`
+Create `supabase/functions/sms-conversation-service/googlePlacesService.ts` with three functions, all going through the gateway:
 
-### C. Post-response scrub for closure/distance red flags
-- **`recommendationService.ts`** — After the final recommendation string is assembled (both Perplexity and GPT paths), run a light regex scrub:
-  - If response contains `permanently closed`, `temporarily closed`, `closed for renovation`, drop that pick or replace the whole response with a graceful "I couldn't verify open options nearby right now — want me to text your host?"
-  - Strip any absolute distance claim (`\d+\s?(min|minute)s?\s?(walk|drive)`) when the response also contains area/district language without a specific street name — replaces with `approx` phrasing already used in section A of the previous plan.
+- `geocodeProperty(address)` → `{lat, lng}` via `/maps/api/geocode/json`. Cache in-memory per invocation.
+- `searchNearby({lat, lng, query, category, radiusMeters})` → calls Places API (New) `POST /places/v1/places:searchText` with `locationBias.circle`, `X-Goog-FieldMask: places.id,places.displayName,places.formattedAddress,places.location,places.businessStatus,places.rating,places.userRatingCount,places.priceLevel,places.primaryType,places.currentOpeningHours.openNow`. Filter out any place where `businessStatus !== 'OPERATIONAL'`.
+- `computeDistances({origin, destinations, mode})` → `POST /routes/distanceMatrix/v2:computeRouteMatrix` with `travelMode: DRIVE` (and a second pass with `WALK` when the top pick is under ~1500 m). Returns `{distanceMeters, durationSeconds}` per destination.
 
-### D. Admin visibility
-- **`src/pages/SmsConversationsAdmin.jsx`** — Add a `hasClosedVenueMention` flag (regex: `permanently closed|temp(orarily)? closed|closed for renovation`). Surface as a red "Closed venue" badge and CSV column, alongside the existing fallback/hallucinated-amenity badges.
+All calls use `Authorization: Bearer ${LOVABLE_API_KEY}` + `X-Connection-Api-Key: ${GOOGLE_MAPS_API_KEY}`. Every non-ok response surfaces `{status, body}` (per gateway error-handling rules) and the caller degrades gracefully rather than throwing.
+
+### 3. Wire into `recommendationService.ts`
+Inside `getEnhancedRecommendations`, when the request category is in `LIVE_LOOKUP_CATEGORIES`:
+
+1. Geocode the property once.
+2. Call `searchNearby` with the guest's query mapped to a Places category (`restaurant`, `cafe`, `bar`, `tourist_attraction`, …), radius derived from intent: **1500 m for "quick/close", 8000 m otherwise**.
+3. Keep only `OPERATIONAL` results, then call `computeDistances` and sort ascending by `durationSeconds`. Drop anything above the intent's max (5 min drive / 1 mi walk for quick, 15 min drive otherwise).
+4. Take top 3, hand them to the existing OpenAI narrative wrapper as **verified facts** (name, address, real distance string like "0.6 mi · 3 min drive", rating). Prompt instructs GPT to use only these venues and the provided distances — no invention.
+5. If zero verified results survive, skip Perplexity and return the existing graceful "I couldn't verify open options nearby — want me to text your host?" fallback.
+
+Perplexity stays as a secondary fallback only if the Google Maps call itself fails (network / gateway error), not when it simply returns nothing.
+
+### 4. Post-processing
+The existing `scrubClosedVenues()` stays as a defense-in-depth guard on the final string. The regex-based distance-stripping added last turn becomes unnecessary for the Google path (real distances are always present) but stays active for the Perplexity fallback path.
+
+### 5. Admin visibility
+Add a `google_verified` boolean to the response metadata stored on the SMS conversation turn, and surface it as a green "Google-verified" badge (plus CSV column) in `src/pages/SmsConversationsAdmin.jsx`, alongside the existing "Closed venue" and "Hallucinated amenity" badges.
+
+### 6. Config
+No new secrets to request from the user — the connector provides them. No DB migration. `supabase/config.toml` unchanged (function already exists).
+
+## Files to touch
+- **New:** `supabase/functions/sms-conversation-service/googlePlacesService.ts`
+- **Edit:** `supabase/functions/sms-conversation-service/recommendationService.ts`
+- **Edit:** `src/pages/SmsConversationsAdmin.jsx`
 
 ## Out of scope
-- Adding a Google Places / Yelp Fusion connector for authoritative open-status lookups (would be a real fix but requires the user to link a new connector — call it out in the follow-up).
-- Real geocoding for accurate distances (still deferred).
-- Any DB migrations.
+- Replacing the older `contextual-recommendations` edge function (uses a separate `GOOGLE_PLACES_API_KEY` secret and legacy Places Text Search; not on the SMS concierge hot path).
+- Persisting geocoded coordinates to `properties` table (in-memory cache per invocation is enough for now; can be a follow-up if latency shows up in logs).
+- Per-user OAuth for Google (workspace-level connector is correct for a server-side concierge).
 
-## Files to edit
-- `supabase/functions/sms-conversation-service/recommendationService.ts`
-- `supabase/functions/sms-conversation-service/perplexityRecommendationService.ts`
-- `src/pages/SmsConversationsAdmin.jsx`
-
-## Follow-up to raise with user after implementation
-Recommend linking a **Google Places** (or Yelp) connector so the AI can verify `business_status = OPERATIONAL` and pull real driving/walking distance from the property's coordinates — that's the only durable fix for both complaints. Perplexity + prompt guardrails reduce the failure rate but can't eliminate it.
+## User action required
+Approve the plan, then approve the Google Maps Platform connection prompt when it appears. After that, everything runs server-side.
