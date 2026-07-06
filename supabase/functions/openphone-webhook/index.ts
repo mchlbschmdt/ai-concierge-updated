@@ -281,8 +281,16 @@ serve(async (req) => {
           }
         );
       } else {
-        console.warn('⚠️ OPENPHONE_WEBHOOK_SECRET not configured - skipping signature verification');
+        console.error('❌ OPENPHONE_WEBHOOK_SECRET not configured - rejecting request');
+        return new Response(
+          JSON.stringify({ error: 'Webhook signature verification not configured' }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 500
+          }
+        );
       }
+
       
       let payload;
       try {
