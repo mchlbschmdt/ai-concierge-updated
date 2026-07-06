@@ -149,6 +149,12 @@ function hasClosedVenueMention(conv) {
   return CLOSED_VENUE.test(conv.last_response);
 }
 
+// Positive signal: last recommendation was verified against Google Maps
+// (business_status = OPERATIONAL + real travel distance from the property).
+function isGoogleVerified(conv) {
+  return !!conv?.conversation_context?.last_google_verified;
+}
+
 
 
 
