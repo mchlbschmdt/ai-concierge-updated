@@ -216,7 +216,7 @@ export class ConfirmedMessageOrchestrator {
 
     const classification: UnifiedClassification = {
       intent: isIssue ? `troubleshoot_${troubleshootingResult.category || "general"}` : intentResult.intent,
-      requestType: requestClassification.type,
+      requestType: isReport ? "REQUEST" : requestClassification.type,
       isPropertySpecific,
       isGeneralKnowledge,
       isRecommendation,
@@ -224,12 +224,13 @@ export class ConfirmedMessageOrchestrator {
       isRequest,
       isTroubleshooting: isIssue,
       troubleshootingResult: isIssue ? troubleshootingResult : null,
-      requiresHostContact: requestClassification.requiresHostContact,
+      requiresHostContact: isReport ? true : requestClassification.requiresHostContact,
       shouldUseAI,
       confidence: Math.max(intentResult.confidence, requestClassification.confidence),
       subIntents: intentResult.subIntents,
       hasKids: intentResult.hasKids,
     };
+
 
     console.log("📋 [Orchestrator] Classification:", {
       intent: classification.intent,
