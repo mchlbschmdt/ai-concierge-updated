@@ -223,7 +223,10 @@ export class PerplexityRecommendationService {
   }
 
   private static buildOpenAIPrompt(property: Property, query: string, requestType: string, rejectedOptions: string[]): string {
-    const location = property.address || 'San Juan, Puerto Rico';
+    if (!property.address || property.address.trim().length < 5) {
+      throw new Error('Missing property address — refusing to generate ungrounded recommendations.');
+    }
+    const location = property.address;
     let specificRequest = '';
     
     switch (requestType.toLowerCase()) {
