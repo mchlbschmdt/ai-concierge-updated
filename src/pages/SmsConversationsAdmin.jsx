@@ -458,7 +458,8 @@ export default function SmsConversationsAdmin() {
                           const leak = hasLeakage(conv);
                           const raa = isRestrictedAutoApproved(conv);
                           const fb = hasUnhelpfulFallback(conv);
-                          const anyFlag = nr || st || dd || leak || raa || fb;
+                          const ha = hasHallucinatedAmenity(conv);
+                          const anyFlag = nr || st || dd || leak || raa || fb || ha;
 
                           return (
                             <tr
