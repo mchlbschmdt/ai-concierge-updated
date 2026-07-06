@@ -1,79 +1,77 @@
+# Fix issues found in unit 0404 test log
 
-# Fix SMS Concierge issues surfaced by unit 0404
+## What went wrong
 
-Unit 0404 = Plentiful Views Atlantis, 404 Ave De La Constitucion, Unit 803, San Juan, PR. Reviewing 40+ turns from that thread found six categories of bugs — none of which are prompt tuning; they are all logic/data-scope leaks in `sms-conversation-service`.
+From `sms-conversation-service` logs (guest +15555555555 at Plentiful Views Atlantis):
 
-## Bugs confirmed from the transcript
+1. **"is there any more laundry detergent?"** → responded with `"I want to make sure I give you the right info — let me confirm that for you."`
+   - Log: `⚠️ [KB Lock] No KB data for property-specific question — using safe confirmation fallback`
+   - Host handoff SMS was sent to the property manager, but the guest was never told. The reply implies the AI is about to answer, then never does.
 
-1. **Reunion/Disney data leaked into a San Juan condo.** Parking questions returned "GATED COMMUNITY ACCESS… 1434 Titian Ct" (that string only exists on property 1434 in the DB). Coffee returned "Starbucks just outside the main gate" and "lobby café", waterpark responses assumed Reunion Resort hours, brunch answer referenced Reunion. Root cause: `amenityService.ts`, `locationService.ts`, `contextualResponseService.ts`, `conversationalResponseGenerator.ts`, and `propertyDataExtractorEnhanced.ts` all contain Reunion-specific literals returned with no property gating.
-2. **Hallucinated restaurants.** "Café de la Calle", "Bistro Café", "Café Puerto Rico", "Pinky's in Condado" — recommendation service invented venues instead of grounding on `curated_links` or the property address.
-3. **Anti-repetition replays wrong prior message.** Guest asked "something more upscale" (brunch follow-up) and got "As I mentioned: oh no — sorry about the sink trouble…". Same pattern for "yes please" replaying an unrelated apology. The replay path in `propertyDataExtractorEnhanced.ts` and `conversationMemoryManager.ts` uses `recentShare.summary` without checking that the recent share matches the current intent.
-4. **Restricted intent auto-approved.** Early check-in returned "Done! Your host has been alerted and will follow up" — violates the core rule that early check-in / late checkout / bag drop must escalate to the manager, not be confirmed by the AI.
-5. **FAQ regression on garbage.** "where is the garbage?" returned the correct trash chute answer; "where do I take the garbage?" / "where do I throw trash" returned the generic "I still don't have specific information about garbage_info" placeholder. Latest response on record ("I want to make sure I give you the right info — let me confirm that for you.") is a further regression on `ask_garbage`. Synonym/alias coverage is inconsistent.
-6. **Duplicate/verbatim replies to distinct questions.** "Where should I park?", "where can you park at Disney?", "where can you park at Magic Kingdom?" all returned the same (wrong) parking dump. No intent differentiation between property-parking vs off-site parking.
+2. **"I found a sock under the bed"** → responded with `"Just to confirm: i want to make sure i give you the right info — let me confirm that for you. — anything else I can help with?"`
+   - Log: `♻️ [Orchestrator] Repetition for "general_info" (0m ago)`
+   - Two failures compounded: (a) the previous fallback got stored as "shared information" and (b) the anti-repetition engine replayed it verbatim with a "Just to confirm:" prefix. Result: garbled, useless response.
+   - Also: a lost item report was classified as `general_inquiry` with `intent: general_inquiry, confidence: 0.5`. It should be routed as a housekeeping/lost-and-found report, not a KB lookup.
 
-## What we'll change
+3. **Handoff opacity**: whenever the orchestrator escalates to the host it should tell the guest, not stay silent behind a "let me confirm" line.
 
-### A. Remove cross-property leakage (highest priority)
-- Delete `property1434Data.ts` and every `Property1434Handler.*` call site in `propertyDataExtractor.ts`. This dataset only helps one property and pollutes the shared code paths; property 1434's real facts live in the `properties` row and `knowledge_base`.
-- In `amenityService.ts`, `locationService.ts`, `contextualResponseService.ts`, `conversationalResponseGenerator.ts`, `propertyDataExtractorEnhanced.ts`: replace every Reunion / Disney / waterpark / shuttle literal with a lookup from the current `property` object (address, amenities, `knowledge_base`, `curated_links`). If the property has no relevant data, return a neutral "let me check with the host" — never a Reunion string.
-- Add a lint-style unit test that greps the built bundle for banned literals (`Reunion`, `Titian`, `1434`, `Magic Kingdom`, `Seven Eagles`) outside of comments.
+## Fixes
 
-### B. Ground recommendations, kill hallucinations
-- `openai-recommendations` and `perplexityRecommendationService.ts`: require `property.address` + city + `curated_links` in the prompt, and instruct the model to only return venues from the curated set or clearly-real chains. If curated links are empty for the category, respond "I don't have a vetted list for that yet — want me to ask the host?" instead of inventing names.
-- Add a post-generation sanity filter: strip any restaurant name that doesn't appear in curated_links AND isn't a known chain, replacing with the curated-fallback message.
+### A. Rewrite the KB-empty fallback so it is honest and actionable
+File: `supabase/functions/sms-conversation-service/confirmedMessageOrchestrator.ts` (the `[KB Lock] … safe confirmation fallback` branch)
 
-### C. Fix the "As I mentioned…" replay
-- In `propertyDataExtractorEnhanced.ts` and `conversationMemoryManager.ts`, only trigger a replay when `recentShare.intent === currentIntent`. Otherwise fall through to fresh generation.
-- Remove blanket "As I mentioned" strings; keep only the neutral rephrasings already implemented in `confirmedMessageOrchestrator.ts`.
+- Replace the current text with something like:
+  > "I don't have that on file for {property_name} — I just messaged your host to double-check and they'll follow up shortly. Anything else I can help with in the meantime?"
+- Only send this when we are *actually* triggering the host handoff for the same turn, so the guest's message matches the SMS the manager receives.
+- Mark this response internally as `response_type: 'handoff_ack'` so downstream logic knows it is not real data.
 
-### D. Enforce restricted intents (early check-in / late checkout / bag drop)
-- In `enhancedIntentRouter.ts` / `confirmedMessageOrchestrator.ts`, when intent ∈ {`ask_early_checkin`, `ask_late_checkout`, `ask_bag_drop`}: always return the host-handoff response ("I'll check with the host — what time works?") and trigger the manager SMS. Never emit "Done!" or "your host has been alerted and will follow up" from the AI path.
-- Add a guard test: feed each restricted phrasing and assert the response does not contain "Done", "confirmed", "approved", "you're all set".
+### B. Stop anti-repetition from replaying fallback / handoff responses
+Files: `conversationMemoryManager.ts`, `confirmedMessageOrchestrator.ts`
 
-### E. FAQ / knowledge base consistency
-- Expand alias map in `faqMatchingService.ts` so garbage/trash/rubbish/dumpster/chute all resolve to the same entry; parking/park/garage/valet resolve together; wifi/internet/network together. Add regression tests for the 0404 phrasings that failed.
-- When property `knowledge_base` contains a matching passage (as it does for the trash chute), it must always win over the generic "I still don't have specific information about X" fallback. Fix the ordering in `confirmedMessageOrchestrator.ts` so KB search runs before the generic placeholder.
+- When storing `shared_information` / `last_response_summary`, skip entries whose `response_type` is `handoff_ack`, `fallback`, or `clarify`. Only real data-bearing answers become "shared".
+- In the repetition guard, if the only prior "share" for this topic is a fallback, do not prepend `"Just to confirm:"` or replay the prior text. Treat the new message as a first-time answer.
+- Never re-emit a stored summary that starts with "I want to make sure" / "let me confirm" / "I don't have that on file" — add an explicit deny-list check before replay.
 
-### F. Distinguish on-site parking vs off-site parking
-- In `intentRecognitionService.ts`, classify "where do I park at {Disney/Magic Kingdom/park/beach/venue}" as `ask_offsite_parking`, not `ask_parking`. `ask_offsite_parking` routes to recommendations (or "I don't have parking info for that venue — check their site") instead of dumping the property's parking instructions.
+### C. Improve intent classification for lost items and housekeeping reports
+File: `supabase/functions/sms-conversation-service/intentRecognitionService.ts` (and `enhancedIntentRouter.ts` if it does a second pass)
 
-### G. Admin visibility
-- Add a "Reunion leakage" flag in `SmsConversationsAdmin.jsx` (regex on `last_response` for banned literals) so we can spot any residual contamination in-app.
-- Add a "Restricted-intent auto-approved" flag (regex on `last_response` for approval language when `last_intent` is restricted).
+- Add a `report_lost_item` / `report_housekeeping_issue` intent with keyword+regex triggers: `found`, `left behind`, `under the bed`, `missing`, `sock`, `earring`, `charger`, `wallet`, `passport`, `stain`, `broken`, `leak`, `not working`.
+- Route these intents through the host handoff path (same as restricted intents), never through the FAQ/KB lookup.
+- Response template: "Thanks for letting us know — I've flagged this for your host and housekeeping so they can take care of it."
+- Include the item text verbatim in the outbound host SMS.
 
-## Files to touch
+### D. Make host handoffs transparent to the guest
+File: `hostContactService.ts` + orchestrator
 
-```text
-supabase/functions/sms-conversation-service/
-  amenityService.ts
-  locationService.ts
-  contextualResponseService.ts
-  conversationalResponseGenerator.ts
-  conversationMemoryManager.ts
-  confirmedMessageOrchestrator.ts
-  propertyDataExtractor.ts
-  propertyDataExtractorEnhanced.ts
-  intentRecognitionService.ts
-  enhancedIntentRouter.ts
-  faqMatchingService.ts
-  property1434Data.ts             (DELETE)
-supabase/functions/openai-recommendations/
-  enhancedPromptBuilders.ts
-  openaiService.ts
-src/components/conversations/
-  ConversationDetailModal.jsx     (surface new flags)
-src/pages/SmsConversationsAdmin.jsx (compute new flags)
-```
+- Whenever a host SMS is sent, the guest reply for that turn must include a short acknowledgement: "I've looped in your host — they'll follow up shortly." Never emit "let me confirm" alone when a handoff fires.
+- Add a single helper `buildHandoffAckMessage(intent, propertyName)` and use it in every handoff site so wording stays consistent.
+- Keep the de-duplication window (don't re-alert host on the same intent within N minutes), but *do* still acknowledge to the guest each time.
 
-No DB migration needed. No new secrets.
+### E. Prevent the "Just to confirm: i want to make sure…" cascade
+File: `conversationalResponseGenerator.ts` (the `Just to confirm:` prefixer)
+
+- Skip the prefix entirely when the base message already contains a hedging phrase (`want to make sure`, `let me confirm`, `don't have that on file`, `looped in your host`).
+- Skip the prefix when the prior turn was a `handoff_ack` or `fallback`.
+
+### F. Admin log visibility
+File: `src/pages/SmsConversationsAdmin.jsx`
+
+- Add a new detection flag `hasUnhelpfulFallback` = response matches `/want to make sure|let me confirm that for you/i` and no KB/FAQ source recorded. Show as a "Fallback loop" badge next to the existing "Cross-property" / "Auto-approved" flags and include in CSV export. This makes future regressions visible in the admin panel.
+
+## Files touched
+
+- `supabase/functions/sms-conversation-service/confirmedMessageOrchestrator.ts`
+- `supabase/functions/sms-conversation-service/conversationMemoryManager.ts`
+- `supabase/functions/sms-conversation-service/conversationalResponseGenerator.ts`
+- `supabase/functions/sms-conversation-service/intentRecognitionService.ts`
+- `supabase/functions/sms-conversation-service/enhancedIntentRouter.ts`
+- `supabase/functions/sms-conversation-service/hostContactService.ts`
+- `src/pages/SmsConversationsAdmin.jsx`
+
+No database migrations, no new secrets.
 
 ## Out of scope
-- Prompt/persona rewrites (the persona is fine; the data plumbing is the problem).
-- Backfilling old conversation rows.
-- Fixing zero live traffic (app not public yet).
-- SnapPro / Academy / Analytics.
 
-## Verification
-- Re-run the exact 0404 transcript against the updated service in a test harness; assert no "Reunion/Titian/Magic Kingdom" tokens, no "Done!/approved" on restricted intents, garbage synonyms all return the trash-chute answer, and brunch follow-up doesn't replay the sink apology.
-- Add the flag columns to the admin table and confirm 0404's row shows clean once fixes deploy.
+- Rewriting the whole intent classifier (only adding the lost-item / housekeeping intents).
+- Changing OpenPhone webhook or handoff routing numbers.
+- Recommendation grounding work (already shipped in Wave 2).
