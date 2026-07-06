@@ -140,6 +140,17 @@ function hasHallucinatedAmenity(conv) {
   return !list.some((a) => new RegExp(key, "i").test(String(a)));
 }
 
+// Closed venue: response mentions a business the model flagged as closed.
+// These slip through when the LLM cites an outdated listing. Any hit is a red
+// flag — guests should never be sent to a place that's shut down.
+const CLOSED_VENUE = /\b(permanently closed|temporarily closed|closed for renovation|closed down|out of business|no longer (open|operating|in business))\b/i;
+function hasClosedVenueMention(conv) {
+  if (!conv.last_response) return false;
+  return CLOSED_VENUE.test(conv.last_response);
+}
+
+
+
 
 export default function SmsConversationsAdmin() {
   const { currentUser } = useAuth();
@@ -296,6 +307,8 @@ export default function SmsConversationsAdmin() {
           isRestrictedAutoApproved(conv) ? "restricted_auto_approved" : null,
           hasUnhelpfulFallback(conv) ? "fallback_loop" : null,
           hasHallucinatedAmenity(conv) ? "hallucinated_amenity" : null,
+          hasClosedVenueMention(conv) ? "closed_venue" : null,
+
         ]
           .filter(Boolean)
           .join("|") || "ok",
@@ -336,10 +349,12 @@ export default function SmsConversationsAdmin() {
           hasLeakage(c) ||
           isRestrictedAutoApproved(c) ||
           hasUnhelpfulFallback(c) ||
-          hasHallucinatedAmenity(c)
+          hasHallucinatedAmenity(c) ||
+          hasClosedVenueMention(c)
       ).length,
     [conversations]
   );
+
 
 
   return (
@@ -459,7 +474,9 @@ export default function SmsConversationsAdmin() {
                           const raa = isRestrictedAutoApproved(conv);
                           const fb = hasUnhelpfulFallback(conv);
                           const ha = hasHallucinatedAmenity(conv);
-                          const anyFlag = nr || st || dd || leak || raa || fb || ha;
+                          const cv = hasClosedVenueMention(conv);
+                          const anyFlag = nr || st || dd || leak || raa || fb || ha || cv;
+
 
                           return (
                             <tr
@@ -521,6 +538,13 @@ export default function SmsConversationsAdmin() {
                                       Hallucinated amenity
                                     </Badge>
                                   )}
+                                  {cv && (
+                                    <Badge variant="outline" className="bg-destructive/20 text-destructive border-destructive/50 text-xs">
+                                      <AlertTriangle className="mr-1 h-3 w-3" />
+                                      Closed venue
+                                    </Badge>
+                                  )}
+
 
 
 
