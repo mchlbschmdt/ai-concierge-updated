@@ -487,16 +487,23 @@ export class ConversationMemoryManager {
     }
     
     const contentHash = this.hashContent(sharedContent.content);
-    
+
+    // Drop any prior entry for the same topic to prevent stale content bleeding
+    // into new answers when the guest revisits a topic.
+    updatedContext.shared_information = updatedContext.shared_information.filter(
+      (info: any) => info.topic !== sharedContent.topic
+    );
+
     updatedContext.shared_information.unshift({
       topic: sharedContent.topic,
       content_hash: contentHash,
       timestamp: new Date().toISOString(),
       response_summary: sharedContent.summary
     });
-    
-    // Keep last 10 shared information items
-    updatedContext.shared_information = updatedContext.shared_information.slice(0, 10);
+
+    // Keep last 6 shared information items (was 10) — smaller window prevents
+    // old, unrelated topics from being re-surfaced mid-conversation.
+    updatedContext.shared_information = updatedContext.shared_information.slice(0, 6);
     
     return updatedContext;
   }
